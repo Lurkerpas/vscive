@@ -1,0 +1,39 @@
+ID; Requirement; Notes
+REQ-0010; Software shall be named VSCIVE.
+REQ-0020; Software shall be an extension for Visual Studio Code.
+REQ-0030; Software shall be implemented using Open Source libraries, compabile with Visual Studio Code licensing.; MIT License is recommended.
+REQ-0040; Software shall allow to edit Interface View diagrams.
+REQ-0050; Interface View diagrams shall be compatible with Space Creator Interfacce View XML format.; Examples are provides in references folder, in files named interfaceview.xml
+REQ-0060; It shall be possible to create new Functions;
+REQ-0070; It shall be possible to create new Interfaces, Provided and Required; Eeach Interface belongs to a Function;
+REQ-0080; It shall be possible to connect Provided and Required Interfaces together, in an N:M relationship;
+REQ-0081; When connecting Interfaces, the Required one shall, by default, inherit the properties of the Provided one.
+REQ-0008; It shall be possible to create connected interfaces in one step, by pressing a shorcut key and dragging from source Function to target Function.
+REQ-0090; Functions shall have name, description and implementation language as basic properties.;
+REQ-01000Implementation language shall be selectable from a list, defined in Attributes file.; Example attributes file is provided in referenes folder, named default_attributes.xml. 
+REQ-0110; Interfaces shall have name, type (provided or required), kind (cyclic, sporadic, protected or unprotected) and Interface Parameters.;
+REQ-0111; Sporadic, Protected and Unprotected Interfaces shall be connectable only to Interfaces of the same kind.
+REQ-0112; Cyclic Interfaces shall not be connectable; Cyclic Interfaces are used to model periodic stimuli without a specific source.
+REQ-0120; Interface Parameters shall have name, type (string referring to ASN.1 name) and direction (input or output).
+REQ-0130; It shall be possible to nest Functions inside other Functions.; 
+REQ-0140; It shall be possible to connect interfaces of nested and non-nested Functions.; Connection from within a nested Function to an external Function shall be through first connecting the nested Function to its hosting Function.; Examples are provided in references folder, in interfaceview.xml files.
+REQ-0150; It shall be possible to manually position Functions, Interfaces and Connections on the diagram. 
+REQ-0160; Interfaces shall be located on an edge of the hosting Function.
+REQ-0170; When a function is moved, its Interfaces and Connections shall move together with it.
+REQ-0180; It shall be possible to select and move or delete multiple Functions or Interfaces together.
+REQ-0190; It shall be possible to resize Functions.
+REQ-0200; It shall be possible to edit the color of Functions, Interfaces and Connections.
+REQ-0210; It shall be possible to edit attributes of Function, Interfaces, Interface Parameters and Connections.
+REQ-0220; It shall be possible to reoder Interface Parameters within an Interface.
+REQ-0230; Functions and Interfaces shall support additional attributes defined in Attributes file.; Example attributes file is provided in referenes folder, named default_attributes.xml.
+REQ-0240; It shall be possible to configure path to the Attributes file.
+REQ-0250; Default path to the Attributes file shall be $$HOME/.local/default_attributes.xml.
+REQ-0260; It shall be possible to delete Functions.
+REQ-0270; It shall be possible to delete Interfaces.
+REQ-0280; It shall be possible to delete Interface Parameters.
+REQ-0290; It shall be possible to delete Connections.
+REQ-0300; Software shall retain all attrtibutes of entities. When an Interface View is read from file, all attributes of entities shall be loaded. When an Interface View is written to file, all attributes of entities shall be saved, even if unknown to the Software.
+REQ-0310; It shall be possible to zoom in and out smoothly on the diagram.
+REQ-0311; It shall be possible to fit the diagram to the available space.
+REQ-0312; It shall be possible to pan the diagram by dragging the background.
+REQ-0320; It shall be possible to export the diagram as an image file. PNG and SVG formats shall be supported. Target file name shall be selectable by the user.
