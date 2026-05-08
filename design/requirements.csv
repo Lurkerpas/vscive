@@ -2,6 +2,8 @@ ID; Requirement; Notes
 REQ-0010; Software shall be named VSCIVE.
 REQ-0020; Software shall be an extension for Visual Studio Code.
 REQ-0030; Software shall be implemented using Open Source libraries, compatible with Visual Studio Code licensing.; MIT License is recommended.
+REQ-0031; Software libraries requiring the least amount of boilerplate shall be preferred.
+REQ-0032; Software libraries with minimum dependencies shall be preferred (second priority).
 REQ-0040; Software shall allow to edit Interface View diagrams.; Interface View represents a logical architecture of a TASTE system, as is defined in Space Creator. No schema exists, reference implementation is provided here: https://gitlab.esa.int/taste/spacecreator/-/tree/master/src/libs/ivcore?ref_type=heads
 REQ-0050; Interface View diagrams shall be compatible with Space Creator Interface View XML format. Compatibility means the capability to edit files interchangeably with SpaceCreator, and thus being able to read, retain and save all entities and attributes; Examples are provided in references folder, in files named interfaceview.xml
 REQ-0060; It shall be possible to create new Functions.
