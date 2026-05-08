@@ -1,0 +1,6 @@
+[submodule "references/TASTE-SAMV71-RTEMS-Tests"]
+	path = references/TASTE-SAMV71-RTEMS-Tests
+	url = https://github.com/n7space/TASTE-SAMV71-RTEMS-Tests.git
+[submodule "references/kazoo"]
+	path = references/kazoo
+	url = https://gitlab.esa.int/taste/kazoo/

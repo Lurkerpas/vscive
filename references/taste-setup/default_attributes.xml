@@ -1,0 +1,321 @@
+<Attrs>
+    <Attr label="Language" name="language" visible="false">
+        <Scopes>
+            <Function>
+                <AttrValidator name="is_type" value="NO"/>
+            </Function>
+        </Scopes>
+        <Type>
+            <Enumeration defaultValue="SDL">
+                <Entry value="Ada"/>
+                <Entry value="CPP"/>
+                <Entry value="C"/>
+                <Entry value="GUI"/>
+                <Entry value="SDL"/>
+                <Entry value="Slim"/>
+                <Entry value="SEDS"/>
+                <Entry value="Simulink" folder_name="SIMULINK"/>
+                <Entry value="RTDS"/>
+                <Entry value="Blackbox_C"/>
+                <Entry value="VHDL"/>
+                <Entry value="Pseudo function"/>
+            </Enumeration>
+        </Type>
+    </Attr>
+    <Attr label="FPGA Configuration" name="FPGA_Configurations" visible="true">
+        <Scopes>
+            <Function/>
+        </Scopes>
+        <Type>
+            <String defaultValue=""/>
+        </Type>
+    </Attr>
+    <Attr label="Comment" name="Comment" visible="true">
+        <Scopes>
+            <Function/>
+            <Provided_Interface/>
+            <Required_Interface/>
+        </Scopes>
+        <Type>
+            <String/>
+        </Type>
+    </Attr>
+    <Attr label="Implementation" name="default_implementation" visible="false">
+        <Scopes>
+            <Function>
+                <AttrValidator name="is_type" value="NO"/>
+            </Function>
+        </Scopes>
+        <Type>
+            <String validator="[a-zA-Z0-9_]+"/>
+        </Type>
+    </Attr>
+    <Attr label="Function Type" name="is_type">
+        <Type>
+            <Enumeration defaultValue="NO">
+                <Entry value="YES"/>
+                <Entry value="NO"/>
+            </Enumeration>
+        </Type>
+        <Scopes>
+            <Function/>
+        </Scopes>
+    </Attr>
+    <Attr label="Fixed System Element" name="fixed_system_element" visible="true">
+        <Type>
+            <Enumeration defaultValue="NO">
+                <Entry value="YES"/>
+                <Entry value="NO"/>
+            </Enumeration>
+        </Type>
+        <Scopes>
+            <Function/>
+        </Scopes>
+    </Attr>
+    <Attr label="Required System Element" name="required_system_element" visible="true">
+        <Type>
+            <Enumeration defaultValue="NO">
+                <Entry value="YES"/>
+                <Entry value="NO"/>
+            </Enumeration>
+        </Type>
+        <Scopes>
+            <ProvidedInterface/>
+            <RequiredInterface/>
+        </Scopes>
+    </Attr>
+    <Attr label="Language" name="type_language">
+        <Scopes>
+            <Function>
+                <AttrValidator name="is_type" value="YES"/>
+            </Function>
+        </Scopes>
+        <Type>
+            <Enumeration defaultValue="SDL">
+                <Entry value="Ada"/>
+                <Entry value="CPP"/>
+                <Entry value="SDL"/>
+                <Entry value="Slim"/>
+            </Enumeration>
+        </Type>
+    </Attr>
+    <Attr label="Instance of" name="instance_of">
+        <Type>
+            <String validator="[a-zA-Z0-9_]+"/>
+        </Type>
+        <Scopes>
+            <Function>
+                <AttrValidator name="is_type" value="NO"/>
+            </Function>
+        </Scopes>
+    </Attr>
+    <Attr label="Instances (Min)" name="instances_min">
+        <Type>
+            <String defaultValue="1" validator="^([1-9][0-9]*)|([0])$"/>
+        </Type>
+        <Scopes>
+            <Function/>
+        </Scopes>
+    </Attr>
+    <Attr label="Instances (Max)" name="instances_max">
+        <Type>
+            <String defaultValue="1" validator="^([1-9][0-9]*)|([0])$"/>
+        </Type>
+        <Scopes>
+            <Function/>
+        </Scopes>
+    </Attr>
+    <Attr label="Startup priority" name="startup_priority">
+        <Type>
+            <String defaultValue="1" validator="^([1-9][0-9]*)|([0])$"/>
+        </Type>
+        <Scopes>
+            <Function/>
+        </Scopes>
+    </Attr>
+    <Attr label="Period (in ms)" name="period">
+        <Type>
+            <String defaultValue="1000" validator="\d+"/>
+        </Type>
+        <Scopes>
+            <Provided_Interface>
+                <AttrValidator name="kind" value="Cyclic"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Minimal inter-arrival time (in ms)" name="miat">
+        <Type>
+            <String defaultValue="0" validator="\d+"/>
+        </Type>
+        <Scopes>
+            <Provided_Interface>
+                <AttrValidator name="kind" value="Sporadic"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Worst case execution time (in ms)" name="wcet">
+        <Type>
+            <String defaultValue="0" validator="\d+"/>
+        </Type>
+        <Scopes>
+             <Provided_Interface>
+                <AttrValidator name="kind" value="Cyclic"/>
+                <AttrValidator name="kind" value="Sporadic"/>
+                <AttrValidator name="kind" value="Protected"/>
+                <AttrValidator name="kind" value="Unprotected"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Message queue size" name="queue_size">
+        <Type>
+            <String defaultValue="1" validator="\d+"/>
+        </Type>
+        <Scopes>
+            <Provided_Interface>
+                <AttrValidator name="kind" value="Sporadic"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Priority" name="priority">
+        <Type>
+            <String defaultValue="1" validator="\d+"/>
+        </Type>
+        <Scopes>
+             <Provided_Interface>
+                <AttrValidator name="kind" value="Cyclic"/>
+                <AttrValidator name="kind" value="Sporadic"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Offset (ms)" name="dispatch_offset">
+        <Type>
+            <String defaultValue="0" validator="\d+"/>
+        </Type>
+        <Scopes>
+             <Provided_Interface>
+                <AttrValidator name="kind" value="Cyclic"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Stack size in BYTES (ignored for Linux targets)" name="stack_size">
+        <Type>
+            <String defaultValue="1024" validator="\d+"/>
+        </Type>
+        <Scopes>
+             <Provided_Interface>
+                <AttrValidator name="kind" value="Cyclic"/>
+                <AttrValidator name="kind" value="Sporadic"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Layer" name="layer" visible="true" editable="true">
+        <Type>
+            <Enumeration defaultValue="default">
+                <Entry value="default"/>
+            </Enumeration>
+        </Type>
+        <Scopes>
+            <Provided_Interface/>
+            <Required_Interface/>
+        </Scopes>
+    </Attr>
+    <Attr name="Taste::InheritPI" type="property">
+        <Type>
+            <Boolean/>
+        </Type>
+        <Scopes>
+            <Required_Interface/>
+        </Scopes>
+    </Attr>
+    <Attr name="Taste::Autonamed" type="property">
+        <Type>
+            <Boolean defaultValue="True"/>
+        </Type>
+        <Scopes>
+            <Required_Interface/>
+        </Scopes>
+    </Attr>
+    <Attr label="Observable" name="is_observable">
+        <Type>
+            <Boolean defaultValue="False"/>
+        </Type>
+        <Scopes>
+            <Provided_Interface>
+                <AttrValidator name="kind" value="Unprotected"/>
+            </Provided_Interface>
+            <Required_Interface>
+                <AttrValidator name="kind" value="Unprotected"/>
+            </Required_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Alarm" name="is_alarm">
+        <Type>
+            <Boolean defaultValue="False"/>
+        </Type>
+        <Scopes>
+            <Provided_Interface>
+                <AttrValidator name="kind" value="Unprotected"/>
+            </Provided_Interface>
+            <Required_Interface>
+                <AttrValidator name="kind" value="Unprotected"/>
+            </Required_Interface>
+        </Scopes>
+    </Attr>
+    <Attr name="enable_multicast" visible="false">
+        <Type>
+            <Boolean defaultValue="True"/>
+        </Type>
+        <Scopes>
+            <Required_Interface/>
+            <Provided_Interface/>
+        </Scopes>
+    </Attr>
+    <Attr name="is_simulink_interface" visible="false">
+        <Type>
+            <Boolean defaultValue="false"/>
+        </Type>
+        <Scopes>
+            <Required_Interface/>
+            <Provided_Interface/>
+        </Scopes>
+    </Attr>
+    <Attr label="Simulink interface type" name="simulink_interface_type" visible="true">
+        <Type>
+            <Enumeration defaultValue="Full">
+                <Entry value="Full"/>
+                <Entry value="Step"/>
+                <Entry value="Partial_in"/>
+                <Entry value="Partial_out"/>
+            </Enumeration>
+        </Type>
+        <Scopes>
+            <Provided_Interface>
+                <AttrValidator name="is_simulink_interface" value="true"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Simulink full interface ref" name="simulink_full_interface_ref" visible="true" editable="true">
+        <Type>
+            <Enumeration>
+            </Enumeration>
+        </Type>
+        <Scopes>
+            <Provided_Interface>
+                <AttrValidator name="simulink_interface_type" value="Partial_in"/>
+                <AttrValidator name="simulink_interface_type" value="Partial_out"/>
+                <AttrValidator name="simulink_interface_type" value="Step"/>
+            </Provided_Interface>
+        </Scopes>
+    </Attr>
+    <Attr label="Default Code Generator (SDL)" type="property" name="TASTE_IV_Properties::Default_Codegen">
+      <Type>
+       <Enumeration defaultValue="Ada">>
+        <Entry value="Ada"/>
+        <Entry value="C"/>
+       </Enumeration>
+      </Type>
+      <Scopes>
+       <Function/>
+      </Scopes>
+     </Attr>
+</Attrs>
