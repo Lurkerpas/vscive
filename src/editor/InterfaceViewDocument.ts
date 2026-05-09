@@ -8,12 +8,43 @@ import { parseAttrXml, EMPTY_SCHEMA } from '../parsers/AttrXmlParser';
 import { serializeIvXml } from '../serializers/IvXmlSerializer';
 import { serializeUiXml } from '../serializers/UiXmlSerializer';
 import {
-    IvModel, UiModel, AttributeSchema, FunctionModel, InterfaceModel,
-    ConnectionModel, InterfaceKind, NodeMove,
+    IvModel, UiModel, EntityLayout, AttributeSchema, FunctionModel, InterfaceModel,
+    ConnectionModel, InterfaceKind, NodeMove, PropertyModel,
 } from '../model/types';
 import { log } from '../logger';
 
 const SC_INV = 1 / SC_SCALE; // pixels → SC coords (= 20)
+
+/**
+ * Legacy IV files embed coordinates as <Property name="Taste::coordinates"> on each entity
+ * instead of using a separate UI XML file. Build a UiModel from those properties so the
+ * rest of the code can treat legacy and modern files identically.
+ */
+function buildUiFromIv(iv: IvModel): UiModel {
+    const entities: Record<string, EntityLayout> = {};
+
+    function extract(id: string, properties: PropertyModel[]) {
+        const p = properties.find(prop => prop.name === 'Taste::coordinates');
+        if (p) {
+            const coords = p.value.trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+            if (coords.length > 0) { entities[id] = { coordinates: coords }; }
+        }
+    }
+
+    function walkFn(fn: FunctionModel) {
+        extract(fn.id, fn.properties);
+        fn.providedInterfaces.forEach(iface => extract(iface.id, iface.properties));
+        fn.requiredInterfaces.forEach(iface => extract(iface.id, iface.properties));
+        fn.nestedFunctions.forEach(walkFn);
+    }
+
+    iv.functions.forEach(walkFn);
+
+    // Also extract connection routing coordinates
+    iv.connections.forEach(conn => extract(conn.id, conn.properties));
+
+    return { version: '1.0', entities };
+}
 
 export class InterfaceViewDocument implements vscode.CustomDocument {
     readonly uri: vscode.Uri;
@@ -41,6 +72,15 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         log(`reload: parsing IV XML (${xmlStr.length} bytes)`);
         this.iv = parseIvXml(xmlStr);
         log(`reload: IV parsed — uiFile=${this.iv.uiFile}`);
+
+        if (!this.iv.uiFile) {
+            // Legacy format: no separate UI file, coordinates are embedded as Taste::coordinates properties
+            const baseName = path.basename(this.uri.fsPath, path.extname(this.uri.fsPath));
+            this.iv.uiFile = `${baseName}_ui.xml`;
+            this.ui = buildUiFromIv(this.iv);
+            log(`reload: legacy format — extracted ${Object.keys(this.ui.entities).length} entities, generated uiFile=${this.iv.uiFile}`);
+            return;
+        }
 
         const uiPath = path.join(path.dirname(this.uri.fsPath), this.iv.uiFile);
         log(`reload: reading UI XML from ${uiPath}`);

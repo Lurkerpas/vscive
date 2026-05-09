@@ -82,7 +82,7 @@ function parseInterface(el: XmlElement, type: 'provided' | 'required'): Interfac
         ...parseParams(el, 'output', 'Output_Parameter'),
     ];
     return {
-        id: attr(el, 'id'),
+        id: attr(el, 'id') || attr(el, 'name'),
         name: attr(el, 'name'),
         type,
         kind: attr(el, 'kind', 'Sporadic') as InterfaceModel['kind'],
@@ -101,7 +101,7 @@ function parseFunction(el: XmlElement): FunctionModel {
         .map(i => ({ name: attr(i, 'name'), language: attr(i, 'language') }));
 
     return {
-        id: attr(el, 'id'),
+        id: attr(el, 'id') || attr(el, 'name'),
         name: attr(el, 'name'),
         language: attr(el, 'language', ''),
         defaultImplementation: attr(el, 'default_implementation', ''),
@@ -122,19 +122,59 @@ export function parseIvXml(xml: string): IvModel {
     const root = doc.documentElement;
     if (!root) { throw new Error('Invalid XML: no root element'); }
 
+    // Parse functions first so legacy connections can resolve iface IDs from them.
+    const functions = childElements(root, 'Function').map(parseFunction);
+
+    function findFunctionByName(fns: FunctionModel[], name: string): FunctionModel | undefined {
+        for (const fn of fns) {
+            if (fn.name === name) { return fn; }
+            const found = findFunctionByName(fn.nestedFunctions, name);
+            if (found) { return found; }
+        }
+        return undefined;
+    }
+
+    function resolveIfaceId(funcName: string, ifaceName: string): string {
+        const fn = findFunctionByName(functions, funcName);
+        if (!fn) { return ''; }
+        const iface = [...fn.providedInterfaces, ...fn.requiredInterfaces].find(i => i.name === ifaceName);
+        return iface?.id ?? '';
+    }
+
     const connections: ConnectionModel[] = childElements(root, 'Connection').map(c => {
         const src = childElements(c, 'Source')[0] as XmlElement | undefined;
         const tgt = childElements(c, 'Target')[0] as XmlElement | undefined;
         const { properties } = parseProperties(c);
+
+        const sourceFuncName = src ? attr(src, 'func_name') : '';
+        const sourceRiName   = src ? (attr(src, 'ri_name') || '') : '';
+        const targetFuncName = tgt ? attr(tgt, 'func_name') : '';
+        const targetPiName   = tgt ? (attr(tgt, 'pi_name') || '') : '';
+
+        let sourceIfaceId = src ? attr(src, 'iface_id') : '';
+        let targetIfaceId = tgt ? attr(tgt, 'iface_id') : '';
+
+        // Legacy format: no iface_id — resolve by func_name + ri/pi_name
+        if (!sourceIfaceId && sourceFuncName && sourceRiName) {
+            sourceIfaceId = resolveIfaceId(sourceFuncName, sourceRiName);
+        }
+        if (!targetIfaceId && targetFuncName && targetPiName) {
+            targetIfaceId = resolveIfaceId(targetFuncName, targetPiName);
+        }
+
+        // Legacy format: no id or name — generate stable ones from endpoint names
+        const fallbackId   = `${sourceFuncName}_${sourceRiName}__${targetFuncName}_${targetPiName}`;
+        const fallbackName = sourceRiName || targetPiName;
+
         return {
-            id: attr(c, 'id'),
-            name: attr(c, 'name'),
-            sourceIfaceId: src ? attr(src, 'iface_id') : '',
-            sourceFuncName: src ? attr(src, 'func_name') : '',
-            sourceRiName: src ? (attr(src, 'ri_name') || '') : '',
-            targetIfaceId: tgt ? attr(tgt, 'iface_id') : '',
-            targetFuncName: tgt ? attr(tgt, 'func_name') : '',
-            targetPiName: tgt ? (attr(tgt, 'pi_name') || '') : '',
+            id:   attr(c, 'id')   || fallbackId,
+            name: attr(c, 'name') || fallbackName,
+            sourceIfaceId,
+            sourceFuncName,
+            sourceRiName,
+            targetIfaceId,
+            targetFuncName,
+            targetPiName,
             properties,
             extraAttrs: unknownAttrs(c, new Set(['id', 'name'])),
         };
@@ -150,7 +190,7 @@ export function parseIvXml(xml: string): IvModel {
         asn1file: attr(root, 'asn1file'),
         uiFile: attr(root, 'UiFile'),
         modifierHash: attr(root, 'modifierHash'),
-        functions: childElements(root, 'Function').map(parseFunction),
+        functions,
         connections,
         layers,
         unknownXmlAttrs: unknownAttrs(root, KNOWN_IV_ATTRS),
