@@ -36,6 +36,25 @@ export function computeIfaceEdge(x: number, y: number, parentW: number, parentH:
     return 'bottom';
 }
 
+/** Snap an interface (IFACE_W × IFACE_H) to the nearest edge of its parent (pw × ph). */
+export function snapIfaceToEdge(
+    x: number, y: number, pw: number, ph: number,
+): { x: number; y: number; edge: IfaceEdge } {
+    const cx = x + IFACE_W / 2;
+    const cy = y + IFACE_H / 2;
+    const dLeft   = Math.abs(cx);
+    const dRight  = Math.abs(pw - cx);
+    const dTop    = Math.abs(cy);
+    const dBottom = Math.abs(ph - cy);
+    const min = Math.min(dLeft, dRight, dTop, dBottom);
+    const clampY = (v: number) => Math.max(-IFACE_H / 2, Math.min(ph - IFACE_H / 2, v));
+    const clampX = (v: number) => Math.max(-IFACE_W / 2, Math.min(pw - IFACE_W / 2, v));
+    if (min === dLeft)   { return { x: -IFACE_W, y: clampY(cy - IFACE_H / 2), edge: 'left' }; }
+    if (min === dRight)  { return { x: pw,        y: clampY(cy - IFACE_H / 2), edge: 'right' }; }
+    if (min === dTop)    { return { x: clampX(cx - IFACE_W / 2), y: -IFACE_H,  edge: 'top' }; }
+    return                        { x: clampX(cx - IFACE_W / 2), y: ph,         edge: 'bottom' };
+}
+
 function functionToNode(
     fn: FunctionModel,
     ui: UiModel,
@@ -96,20 +115,21 @@ function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, pa
     const makeNode = (iface: InterfaceModel, idx: number, total: number, isProvided: boolean): Node => {
         const layout = layoutOf(ui, iface.id);
         const fromLayout = ifacePositionFromLayout(layout, parentLayout);
-        let pos: { x: number; y: number };
+        let raw: { x: number; y: number };
         if (fromLayout) {
-            pos = fromLayout;
+            raw = fromLayout;
         } else {
             // Fallback: PI stack on right edge, RI stack on left edge
             const spacing = parentH / (total + 1);
             const y = spacing * (idx + 1) - IFACE_H / 2;
-            pos = isProvided ? { x: parentW, y } : { x: -IFACE_W, y };
+            raw = isProvided ? { x: parentW, y } : { x: -IFACE_W, y };
         }
-        const edge = computeIfaceEdge(pos.x, pos.y, parentW, parentH);
+        // Always snap to nearest edge so loaded positions stay on the border
+        const { x: posX, y: posY, edge } = snapIfaceToEdge(raw.x, raw.y, parentW, parentH);
         return {
             id: iface.id,
             type: 'interfaceNode',
-            position: pos,
+            position: { x: posX, y: posY },
             data: { label: iface.name, iface, edge },
             parentId: fn.id,
             // No extent:'parent' — interfaces live just outside the function border

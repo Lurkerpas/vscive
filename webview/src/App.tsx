@@ -9,9 +9,9 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import {
-    DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind, WebviewMessage,
+    DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind, WebviewMessage, NodeMove,
 } from '../../src/model/types';
-import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge } from './transform';
+import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToEdge } from './transform';
 import { FunctionNode } from './components/FunctionNode';
 import { InterfaceNode } from './components/InterfaceNode';
 import { AttributePanel } from './components/AttributePanel';
@@ -60,25 +60,6 @@ function findEntity(iv: { functions: FunctionModel[] }, id: string): FunctionMod
 
 function isInterface(e: FunctionModel | InterfaceModel | null): e is InterfaceModel {
     return e !== null && 'kind' in e;
-}
-
-/** Snap an interface node (width IFACE_W × IFACE_H) to the nearest edge of its parent. */
-function snapIfaceToEdge(
-    x: number, y: number, pw: number, ph: number,
-): { x: number; y: number; edge: IfaceEdge } {
-    const cx = x + IFACE_W / 2;
-    const cy = y + IFACE_H / 2;
-    const dLeft   = Math.abs(cx);
-    const dRight  = Math.abs(pw - cx);
-    const dTop    = Math.abs(cy);
-    const dBottom = Math.abs(ph - cy);
-    const min = Math.min(dLeft, dRight, dTop, dBottom);
-    const clampY = (v: number) => Math.max(-IFACE_H / 2, Math.min(ph - IFACE_H / 2, v));
-    const clampX = (v: number) => Math.max(-IFACE_W / 2, Math.min(pw - IFACE_W / 2, v));
-    if (min === dLeft)   { return { x: -IFACE_W, y: clampY(cy - IFACE_H / 2), edge: 'left' }; }
-    if (min === dRight)  { return { x: pw,        y: clampY(cy - IFACE_H / 2), edge: 'right' }; }
-    if (min === dTop)    { return { x: clampX(cx - IFACE_W / 2), y: -IFACE_H,  edge: 'top' }; }
-    return                        { x: clampX(cx - IFACE_W / 2), y: ph,         edge: 'bottom' };
 }
 
 // ─── Inner component (needs ReactFlow context for screenToFlowPosition) ─────
@@ -180,25 +161,47 @@ function DiagramEditor() {
         onNodesChange(changes);
         for (const change of changes) {
             if (change.type === 'dimensions' && change.resizing === false) {
-                const node = nodes.find(n => n.id === change.id);
-                if (!node) { continue; }
-                const w = change.dimensions?.width ?? (node.style?.width as number | undefined) ?? 800;
-                const h = change.dimensions?.height ?? (node.style?.height as number | undefined) ?? 560;
-                post({
-                    type: 'nodesMoved',
-                    moves: [{
-                        id: node.id,
-                        kind: 'function',
-                        x: node.position.x,
-                        y: node.position.y,
-                        w,
-                        h,
-                        parentId: node.parentId,
-                    }],
+                const w = (change as { dimensions?: { width: number; height: number } }).dimensions?.width ?? 800;
+                const h = (change as { dimensions?: { width: number; height: number } }).dimensions?.height ?? 560;
+
+                setNodes(nds => {
+                    const fnNode = nds.find(n => n.id === change.id);
+                    if (!fnNode) { return nds; }
+
+                    // Post function resize to backend
+                    post({
+                        type: 'nodesMoved',
+                        moves: [{
+                            id: fnNode.id,
+                            kind: 'function',
+                            x: fnNode.position.x,
+                            y: fnNode.position.y,
+                            w,
+                            h,
+                            parentId: fnNode.parentId,
+                        }],
+                    });
+
+                    // Re-snap all child interfaces to the new edges
+                    const ifaceMoves: NodeMove[] = [];
+                    const updated = nds.map(n => {
+                        if (n.parentId !== change.id || n.type !== 'interfaceNode') { return n; }
+                        const snapped = snapIfaceToEdge(n.position.x, n.position.y, w, h);
+                        ifaceMoves.push({
+                            id: n.id, kind: 'interface',
+                            x: snapped.x, y: snapped.y, w: IFACE_W, h: IFACE_H,
+                            parentId: change.id,
+                        });
+                        return { ...n, position: { x: snapped.x, y: snapped.y }, data: { ...n.data, edge: snapped.edge } };
+                    });
+                    if (ifaceMoves.length > 0) {
+                        post({ type: 'nodesMoved', moves: ifaceMoves });
+                    }
+                    return updated;
                 });
             }
         }
-    }, [onNodesChange, nodes]);
+    }, [onNodesChange, setNodes]);
 
     // ── Connect ──────────────────────────────────────────────────────────────
     const onConnect = useCallback((params: Connection) => {
