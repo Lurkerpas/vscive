@@ -4,3 +4,6 @@
 [submodule "references/kazoo"]
 	path = references/kazoo
 	url = https://gitlab.esa.int/taste/kazoo/
+[submodule "references/opus2"]
+	path = references/opus2
+	url = https://gitlab.esa.int/PUS-C/opus2.git
