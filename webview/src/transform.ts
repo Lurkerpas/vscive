@@ -12,9 +12,12 @@ function layoutOf(ui: UiModel, id: string): EntityLayout | undefined {
 }
 
 /** Default size when no UI layout is present */
-const DEFAULT_FUNC_W = 160;
-const DEFAULT_FUNC_H = 120;
-const DEFAULT_IFACE_SIZE = 16;
+const DEFAULT_FUNC_W = 200;
+const DEFAULT_FUNC_H = 140;
+const IFACE_H = 28;
+const IFACE_CHAR_W = 9; // approx px per character at 13px sans-serif
+const IFACE_MIN_W = 120;
+const IFACE_PADDING = 30; // icon + padding
 
 function functionToNode(
     fn: FunctionModel,
@@ -58,22 +61,27 @@ function functionToNode(
     return [node, ...ifaceNodes, ...nested];
 }
 
+function ifaceSize(name: string): { w: number; h: number } {
+    const w = Math.max(IFACE_MIN_W, name.length * IFACE_CHAR_W + IFACE_PADDING);
+    return { w, h: IFACE_H };
+}
+
 function ifacePosition(
     layout: EntityLayout | undefined,
     parentLayout: EntityLayout | undefined,
-    parentW: number,
     parentH: number,
+    ifaceW: number,
     idx: number,
     total: number,
 ): { x: number; y: number } {
     if (layout && parentLayout && layout.coordinates.length >= 2 && parentLayout.coordinates.length >= 4) {
         const [px1, py1] = parentLayout.coordinates;
         const [ix, iy] = layout.coordinates;
-        return { x: px(ix - px1) - DEFAULT_IFACE_SIZE / 2, y: px(iy - py1) - DEFAULT_IFACE_SIZE / 2 };
+        return { x: px(ix - px1) - ifaceW / 2, y: px(iy - py1) - IFACE_H / 2 };
     }
     // Fallback: stack on left edge
     const spacing = parentH / (total + 1);
-    return { x: -DEFAULT_IFACE_SIZE / 2, y: spacing * (idx + 1) - DEFAULT_IFACE_SIZE / 2 };
+    return { x: -ifaceW / 2, y: spacing * (idx + 1) - IFACE_H / 2 };
 }
 
 function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, parentH: number): Node[] {
@@ -81,7 +89,8 @@ function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, pa
     const all: InterfaceModel[] = [...fn.providedInterfaces, ...fn.requiredInterfaces];
     return all.map((iface, idx) => {
         const layout = layoutOf(ui, iface.id);
-        const pos = ifacePosition(layout, parentLayout, parentW, parentH, idx, all.length);
+        const { w, h } = ifaceSize(iface.name);
+        const pos = ifacePosition(layout, parentLayout, parentH, w, idx, all.length);
         return {
             id: iface.id,
             type: 'interfaceNode',
@@ -89,7 +98,7 @@ function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, pa
             data: { label: iface.name, iface },
             parentId: fn.id,
             extent: 'parent' as const,
-            style: { width: DEFAULT_IFACE_SIZE, height: DEFAULT_IFACE_SIZE },
+            style: { width: w, height: h },
         };
     });
 }

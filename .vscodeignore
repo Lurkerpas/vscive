@@ -1,9 +1,14 @@
 node_modules
 .vscode-test
 src
+webview
+references
+design
 .gitignore
 .eslintrc*
 tsconfig.json
+vite.config.ts
+Makefile
 **/*.ts
 **/*.map
 **/.DS_Store

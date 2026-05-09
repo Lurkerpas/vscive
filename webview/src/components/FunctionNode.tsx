@@ -15,12 +15,11 @@ export function FunctionNode({ data, selected }: NodeProps) {
         <div style={{
             width: '100%',
             height: '100%',
-            border: `2px solid ${selected ? '#0078d4' : '#555'}`,
-            borderRadius: 4,
+            border: `2px solid ${selected ? '#89b4fa' : '#6c7086'}`,
+            borderRadius: 6,
             background: '#1e1e2e',
             color: '#cdd6f4',
-            fontFamily: 'monospace',
-            fontSize: 11,
+            fontFamily: 'sans-serif',
             boxSizing: 'border-box',
             display: 'flex',
             flexDirection: 'column',
@@ -28,18 +27,20 @@ export function FunctionNode({ data, selected }: NodeProps) {
             {/* Header */}
             <div style={{
                 background: '#313244',
-                padding: '2px 6px',
-                borderBottom: '1px solid #555',
-                fontWeight: 'bold',
-                fontSize: 12,
+                padding: '6px 10px',
+                borderBottom: '1px solid #6c7086',
+                borderRadius: '4px 4px 0 0',
+                fontWeight: 700,
+                fontSize: 15,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
+                letterSpacing: 0.3,
             }}>
                 {d.label}
             </div>
             {/* Language badge */}
-            <div style={{ padding: '2px 6px', color: '#a6adc8', fontSize: 10 }}>
+            <div style={{ padding: '4px 10px', color: '#a6adc8', fontSize: 13 }}>
                 {d.language || '—'}
             </div>
             {/* React Flow connection handles (hidden, connections go through interface nodes) */}

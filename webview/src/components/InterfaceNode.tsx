@@ -20,6 +20,7 @@ export function InterfaceNode({ data, selected }: NodeProps) {
     const { iface } = d;
     const color = KIND_COLORS[iface.kind] ?? '#cdd6f4';
     const isProvided = iface.type === 'provided';
+    const icon = isProvided ? '●' : '■';
 
     return (
         <div
@@ -27,32 +28,33 @@ export function InterfaceNode({ data, selected }: NodeProps) {
             style={{
                 width: '100%',
                 height: '100%',
-                background: color,
-                border: `2px solid ${selected ? '#0078d4' : '#333'}`,
-                borderRadius: isProvided ? '50%' : 2,
+                background: '#181825',
+                border: `2px solid ${selected ? '#89b4fa' : color}`,
+                borderRadius: isProvided ? 20 : 4,
                 boxSizing: 'border-box',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 8,
-                color: '#1e1e2e',
-                fontWeight: 'bold',
-                overflow: 'hidden',
+                gap: 5,
+                padding: '0 8px',
                 cursor: 'pointer',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
             }}
         >
-            {/* Source handle (for provided interfaces — they initiate connections) */}
             <Handle
                 type="source"
                 position={isProvided ? Position.Right : Position.Left}
-                style={{ width: 6, height: 6, background: '#555' }}
+                style={{ width: 8, height: 8, background: color, border: 'none' }}
             />
             <Handle
                 type="target"
                 position={isProvided ? Position.Left : Position.Right}
-                style={{ width: 6, height: 6, background: '#555' }}
+                style={{ width: 8, height: 8, background: color, border: 'none' }}
             />
-            {iface.name.charAt(0).toUpperCase()}
+            <span style={{ color, fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{icon}</span>
+            <span style={{ color: '#cdd6f4', fontSize: 13, fontFamily: 'sans-serif', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {iface.name}
+            </span>
         </div>
     );
 }

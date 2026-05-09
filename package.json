@@ -10,7 +10,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onCustomEditor:vscive.interfaceViewEditor"],
+  "activationEvents": [
+    "onCustomEditor:vscive.interfaceViewEditor"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "customEditors": [
@@ -37,9 +39,11 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "compile": "npm run bundle-ext",
+    "bundle-ext": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --target=node18 --sourcemap",
+    "typecheck": "tsc -p ./ --noEmit",
     "compile-webview": "vite build",
-    "watch": "tsc -watch -p ./",
+    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --target=node18 --sourcemap --watch",
     "package": "vsce package",
     "lint": "eslint src"
   },
@@ -57,6 +61,7 @@
     "@typescript-eslint/parser": "^8.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.28.0",
     "eslint": "^9.0.0",
     "typescript": "^5.4.0",
     "vite": "^5.4.21"

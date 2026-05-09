@@ -112,6 +112,7 @@ export default function App() {
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 fitView
+                fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
                 minZoom={0.05}
                 maxZoom={4}
                 style={{ background: '#1e1e2e' }}

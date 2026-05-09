@@ -7,9 +7,13 @@ all: build
 # Compile both targets
 build: build-ext build-webview
 
-# Compile TypeScript extension host → out/
+# Bundle extension host → out/extension.js (with all deps inlined)
 build-ext: node_modules
-	npm run compile
+	npm run bundle-ext
+
+# Type-check only (no emit) — run separately for CI
+typecheck: node_modules
+	npm run typecheck
 
 # Build React webview → out/webview/
 build-webview: node_modules
