@@ -139,8 +139,10 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
                 let absScX: number, absScY: number;
                 if (move.parentId) {
                     const pl = this.ui.entities[move.parentId];
-                    absScX = Math.round((pl?.coordinates[0] ?? 0) + move.x * SC_INV);
-                    absScY = Math.round((pl?.coordinates[1] ?? 0) + move.y * SC_INV);
+                    const originX = pl?.rootCoordinates?.[0] ?? pl?.coordinates[0] ?? 0;
+                    const originY = pl?.rootCoordinates?.[1] ?? pl?.coordinates[1] ?? 0;
+                    absScX = Math.round(originX + move.x * SC_INV);
+                    absScY = Math.round(originY + move.y * SC_INV);
                 } else {
                     absScX = Math.round(move.x * SC_INV);
                     absScY = Math.round(move.y * SC_INV);
@@ -153,7 +155,16 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
                 const dX = oldLayout ? absScX - oldLayout.coordinates[0] : 0;
                 const dY = oldLayout ? absScY - oldLayout.coordinates[1] : 0;
 
-                this.ui.entities[move.id] = { coordinates: [absScX, absScY, absScX2, absScY2] };
+                // Preserve rootCoordinates and shift them by the same delta
+                const oldRc = this.ui.entities[move.id]?.rootCoordinates;
+                const newLayout: typeof this.ui.entities[string] = { coordinates: [absScX, absScY, absScX2, absScY2] };
+                if (oldRc?.length === 4) {
+                    newLayout.rootCoordinates = [
+                        Math.round(oldRc[0] + dX), Math.round(oldRc[1] + dY),
+                        Math.round(oldRc[2] + dX), Math.round(oldRc[3] + dY),
+                    ];
+                }
+                this.ui.entities[move.id] = newLayout;
 
                 if (dX !== 0 || dY !== 0) {
                     const fn = this.findFn(this.iv.functions, move.id);
@@ -162,8 +173,8 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             } else if (move.kind === 'interface' && move.parentId) {
                 // Interface position is the SC absolute center of the pill
                 const pl = this.ui.entities[move.parentId];
-                const pX1 = pl?.coordinates[0] ?? 0;
-                const pY1 = pl?.coordinates[1] ?? 0;
+                const pX1 = pl?.rootCoordinates?.[0] ?? pl?.coordinates[0] ?? 0;
+                const pY1 = pl?.rootCoordinates?.[1] ?? pl?.coordinates[1] ?? 0;
                 const scX = Math.round(pX1 + (move.x + move.w / 2) * SC_INV);
                 const scY = Math.round(pY1 + (move.y + move.h / 2) * SC_INV);
                 this.ui.entities[move.id] = { coordinates: [scX, scY] };
@@ -400,6 +411,10 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             if (l?.coordinates.length >= 4) {
                 l.coordinates = [Math.round(l.coordinates[0] + dX), Math.round(l.coordinates[1] + dY),
                     Math.round(l.coordinates[2] + dX), Math.round(l.coordinates[3] + dY)];
+            }
+            if (l?.rootCoordinates?.length === 4) {
+                l.rootCoordinates = [Math.round(l.rootCoordinates[0] + dX), Math.round(l.rootCoordinates[1] + dY),
+                    Math.round(l.rootCoordinates[2] + dX), Math.round(l.rootCoordinates[3] + dY)];
             }
             this.shiftDescendants(child, dX, dY);
         }

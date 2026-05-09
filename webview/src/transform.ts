@@ -55,6 +55,48 @@ export function snapIfaceToEdge(
     return                        { x: clampX(cx - IFACE_W / 2), y: ph,         edge: 'bottom' };
 }
 
+/**
+ * Compute the bounding box of a container's children (nested functions + their interfaces)
+ * in the container's inner-canvas space (relative to originX/Y from rootCoordinates).
+ */
+function computeChildrenBBox(
+    fn: FunctionModel, ui: UiModel, originX: number, originY: number,
+): { w: number; h: number } | null {
+    const PAD = 60;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    const expandFn = (coords: number[]) => {
+        if (coords.length < 4) { return; }
+        maxX = Math.max(maxX, px(coords[2] - originX) + PAD);
+        maxY = Math.max(maxY, px(coords[3] - originY) + PAD);
+    };
+    const expandIface = (coords: number[]) => {
+        if (coords.length < 2) { return; }
+        maxX = Math.max(maxX, px(coords[0] - originX) + IFACE_W + PAD);
+        maxY = Math.max(maxY, px(coords[1] - originY) + IFACE_H + PAD);
+    };
+
+    // Own interfaces: 2-value rootCoordinates = position in inner canvas when present
+    for (const iface of [...fn.providedInterfaces, ...fn.requiredInterfaces]) {
+        const il = layoutOf(ui, iface.id);
+        const ic = (il?.rootCoordinates?.length ?? 0) >= 2 ? il!.rootCoordinates! : il?.coordinates ?? [];
+        expandIface(ic);
+    }
+    // Direct nested function extents and their interfaces (coordinates already in inner canvas space)
+    for (const child of fn.nestedFunctions) {
+        const cl = layoutOf(ui, child.id);
+        if (cl) { expandFn(cl.coordinates); }
+        for (const iface of [...child.providedInterfaces, ...child.requiredInterfaces]) {
+            const il = layoutOf(ui, iface.id);
+            if (il?.coordinates.length) { expandIface(il.coordinates); }
+        }
+    }
+
+    if (maxX === -Infinity) { return null; }
+    return { w: Math.max(maxX, DEFAULT_FUNC_W), h: Math.max(maxY, DEFAULT_FUNC_H) };
+}
+
 function functionToNode(
     fn: FunctionModel,
     ui: UiModel,
@@ -66,7 +108,24 @@ function functionToNode(
     let y = depth * 30;
     let w = DEFAULT_FUNC_W;
     let h = DEFAULT_FUNC_H;
-    if (layout && layout.coordinates.length >= 4) {
+
+    // Containers (modern format) have rootCoordinates describing their expanded canvas.
+    // Containers have rootCoordinates (inner canvas) and coordinates (outer canvas position).
+    // Position the node using outer coordinates; size from the children bounding box.
+    if (layout?.rootCoordinates?.length === 4) {
+        const [rc_x1, rc_y1, rc_x2, rc_y2] = layout.rootCoordinates;
+        // Outer-canvas position: where this function appears alongside its siblings
+        if (layout.coordinates.length >= 2) {
+            x = px(layout.coordinates[0]);
+            y = px(layout.coordinates[1]);
+        } else {
+            x = px(rc_x1);
+            y = px(rc_y1);
+        }
+        const bbox = computeChildrenBBox(fn, ui, rc_x1, rc_y1);
+        w = bbox ? bbox.w : Math.max(px(rc_x2 - rc_x1), DEFAULT_FUNC_W);
+        h = bbox ? bbox.h : Math.max(px(rc_y2 - rc_y1), DEFAULT_FUNC_H);
+    } else if (layout && layout.coordinates.length >= 4) {
         const [x1, y1, x2, y2] = layout.coordinates;
         x = px(x1);
         y = px(y1);
@@ -74,9 +133,18 @@ function functionToNode(
         h = Math.max(px(y2 - y1), DEFAULT_FUNC_H);
     }
 
-    // React Flow child nodes use positions relative to parent
-    const posX = parentId ? x - (layoutOf(ui, parentId)?.coordinates[0] ?? 0) * SC_SCALE : x;
-    const posY = parentId ? y - (layoutOf(ui, parentId)?.coordinates[1] ?? 0) * SC_SCALE : y;
+    // React Flow child nodes use positions relative to parent.
+    // For the modern UI XML format the parent's rootCoordinates define the canvas origin;
+    // for legacy (no rootCoordinates) fall back to the first two values of coordinates.
+    let posX = x;
+    let posY = y;
+    if (parentId) {
+        const parentLayout = layoutOf(ui, parentId);
+        const originX = parentLayout?.rootCoordinates?.[0] ?? parentLayout?.coordinates?.[0] ?? 0;
+        const originY = parentLayout?.rootCoordinates?.[1] ?? parentLayout?.coordinates?.[1] ?? 0;
+        posX = x - px(originX);
+        posY = y - px(originY);
+    }
 
     const node: Node = {
         id: fn.id,
@@ -101,12 +169,18 @@ function ifacePositionFromLayout(
     layout: EntityLayout | undefined,
     parentLayout: EntityLayout | undefined,
 ): { x: number; y: number } | null {
-    if (layout && parentLayout && layout.coordinates.length >= 2 && parentLayout.coordinates.length >= 4) {
-        const [px1, py1] = parentLayout.coordinates;
-        const [ix, iy] = layout.coordinates;
-        return { x: px(ix - px1) - IFACE_W / 2, y: px(iy - py1) - IFACE_H / 2 };
-    }
-    return null;
+    if (!layout || !parentLayout) { return null; }
+    // Origin: parent's rootCoordinates[0,1] when the parent is a container (inner canvas);
+    // otherwise parent's coordinates[0,1] (absolute position in the same canvas).
+    const originX = parentLayout.rootCoordinates?.[0] ?? parentLayout.coordinates[0];
+    const originY = parentLayout.rootCoordinates?.[1] ?? parentLayout.coordinates[1];
+    if (originX === undefined || originY === undefined) { return null; }
+    // Position: 2-value rootCoordinates = position in the parent's inner canvas (modern containers).
+    // Fall back to coordinates for non-container parents or legacy format.
+    const posCoords = (layout.rootCoordinates?.length ?? 0) >= 2 ? layout.rootCoordinates! : layout.coordinates;
+    if (posCoords.length < 2) { return null; }
+    const [ix, iy] = posCoords;
+    return { x: px(ix - originX) - IFACE_W / 2, y: px(iy - originY) - IFACE_H / 2 };
 }
 
 function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, parentH: number): Node[] {

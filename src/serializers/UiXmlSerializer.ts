@@ -7,8 +7,11 @@ export function serializeUiXml(ui: UiModel): string {
     ];
     for (const [id, layout] of Object.entries(ui.entities)) {
         const coords = layout.coordinates.join(' ');
+        const rcAttr = (layout.rootCoordinates?.length ?? 0) >= 2
+            ? ` RootCoordinates="${layout.rootCoordinates!.join(' ')}"`
+            : '';
         lines.push(`  <Entity id="${id}">`);
-        lines.push(`    <Taste coordinates="${coords}"/>`);
+        lines.push(`    <Taste${rcAttr} coordinates="${coords}"/>`);
         lines.push(`  </Entity>`);
     }
     lines.push('</UI>');

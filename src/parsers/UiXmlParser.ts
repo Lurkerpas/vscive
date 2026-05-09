@@ -25,7 +25,11 @@ export function parseUiXml(xml: string): UiModel {
         if (!tastEl) { continue; }
         const raw = tastEl.getAttribute('coordinates') ?? '';
         const coordinates = raw.trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
-        entities[id] = { coordinates };
+        const rawRc = tastEl.getAttribute('RootCoordinates') ?? '';
+        const rcNums = rawRc.trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+        const layout: EntityLayout = { coordinates };
+        if (rcNums.length >= 2) { layout.rootCoordinates = rcNums; }
+        entities[id] = layout;
     }
 
     return { version: root.getAttribute('version') ?? '1.0', entities };

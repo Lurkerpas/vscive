@@ -92,6 +92,13 @@ export interface IvModel {
 export interface EntityLayout {
     /** Function: [x1,y1,x2,y2]; Interface: [x,y]; Connection: [x1,y1,...xn,yn] */
     coordinates: number[];
+    /**
+     * Modern UI XML only. Present on container functions that have nested children.
+     * Stores the absolute canvas extent [x1,y1,x2,y2] of the expanded view.
+     * Children's `coordinates` are absolute within this space.
+     * When absent (leaf functions, interfaces, legacy format) children use `coordinates` directly.
+     */
+    rootCoordinates?: number[];
 }
 
 export interface UiModel {

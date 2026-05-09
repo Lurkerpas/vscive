@@ -141,7 +141,18 @@ export function parseIvXml(xml: string): IvModel {
         return iface?.id ?? '';
     }
 
-    const connections: ConnectionModel[] = childElements(root, 'Connection').map(c => {
+    // Collect all Connection elements from root AND from any nested Function elements
+    // (e.g. SpaceCreator stores ASW's 500+ internal connections inside the ASW Function element)
+    function collectConnectionElements(el: XmlElement | XmlDocument): XmlElement[] {
+        const out: XmlElement[] = [];
+        for (const c of childElements(el as XmlElement, 'Connection')) { out.push(c); }
+        for (const fn of childElements(el as XmlElement, 'Function')) {
+            out.push(...collectConnectionElements(fn));
+        }
+        return out;
+    }
+
+    const connections: ConnectionModel[] = collectConnectionElements(root).map(c => {
         const src = childElements(c, 'Source')[0] as XmlElement | undefined;
         const tgt = childElements(c, 'Target')[0] as XmlElement | undefined;
         const { properties } = parseProperties(c);
