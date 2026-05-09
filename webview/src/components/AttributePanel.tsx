@@ -7,7 +7,7 @@ interface Props {
     selected: SelectedEntity;
     schema: AttributeSchema;
     onUpdateFunction: (id: string, patch: { name?: string; language?: string }) => void;
-    onUpdateInterface: (id: string, patch: { name?: string; kind?: InterfaceKind }) => void;
+    onUpdateInterface: (id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean }) => void;
 }
 
 function isInterface(e: SelectedEntity): e is InterfaceModel {
@@ -82,6 +82,12 @@ export function AttributePanel({ selected, schema, onUpdateFunction, onUpdateInt
         }
     }, [selected, onUpdateInterface]);
 
+    const handleIfaceInheritPIChange = useCallback((inheritPI: boolean) => {
+        if (selected && isInterface(selected)) {
+            onUpdateInterface(selected.id, { inheritPI });
+        }
+    }, [selected, onUpdateInterface]);
+
     if (!selected) {
         return <div style={{ ...PANEL_STYLE, display: 'none' }} />;
     }
@@ -121,8 +127,21 @@ export function AttributePanel({ selected, schema, onUpdateFunction, onUpdateInt
                     </select>
                 </div>
 
-                <Row label="InheritPI" value={iface.inheritPI} />
                 <Row label="Autonamed" value={iface.autonamed} />
+
+                <div style={ROW}>
+                    <span style={LABEL}>InheritPI</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#cdd6f4', fontSize: 11 }}>
+                        <input
+                            type="checkbox"
+                            checked={iface.inheritPI}
+                            key={iface.id + ':inheritPI'}
+                            onChange={e => handleIfaceInheritPIChange(e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                        />
+                        {iface.inheritPI ? 'Yes' : 'No'}
+                    </label>
+                </div>
 
                 {iface.parameters.length > 0 && (
                     <>

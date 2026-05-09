@@ -7,6 +7,7 @@ interface InterfaceNodeData {
     label: string;
     iface: InterfaceModel;
     edge?: IfaceEdge;
+    fontSizeIface?: number;
     [key: string]: unknown;
 }
 
@@ -95,7 +96,7 @@ export function InterfaceNode({ data, selected }: NodeProps) {
     // Label sits just inside the function border, next to the triangle.
     // The node container is positioned outside the function, so "inside" is
     // in the direction away from the edge.
-    const FONT = 45;
+    const FONT = d.fontSizeIface ?? 45;
     const GAP = 8; // px between function border and label
     const labelStyle: React.CSSProperties = (() => {
         const base: React.CSSProperties = {

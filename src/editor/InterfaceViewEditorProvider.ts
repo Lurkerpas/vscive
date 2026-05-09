@@ -101,7 +101,7 @@ export class InterfaceViewEditorProvider
                 }
                 case 'updateInterface': {
                     const before = document.snapshot();
-                    document.updateInterface(msg.id, { name: msg.name, kind: msg.kind });
+                    document.updateInterface(msg.id, { name: msg.name, kind: msg.kind, inheritPI: msg.inheritPI });
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
@@ -128,6 +128,13 @@ export class InterfaceViewEditorProvider
                 case 'connectFunctions': {
                     const before = document.snapshot();
                     document.connectFunctions(msg.riId, msg.piId, msg.riFuncId, msg.piFuncId, msg.riRelX, msg.riRelY, msg.piRelX, msg.piRelY);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'connectToFunction': {
+                    const before = document.snapshot();
+                    document.connectToFunction(msg.id, msg.connId, msg.existingIfaceId, msg.targetFuncId, msg.relRfX, msg.relRfY);
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;

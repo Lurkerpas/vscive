@@ -4,6 +4,8 @@ interface PaletteProps {
     onZoomIn: () => void;
     onZoomOut: () => void;
     onFitView: () => void;
+    onToggleSnap: () => void;
+    snapEnabled: boolean;
     onShowOptions: () => void;
     onAddFunction: () => void;
     onAddConnection: () => void;
@@ -74,6 +76,8 @@ export function Palette({
     onZoomIn,
     onZoomOut,
     onFitView,
+    onToggleSnap,
+    snapEnabled,
     onShowOptions,
     onAddFunction,
     onAddConnection,
@@ -87,6 +91,7 @@ export function Palette({
             <PaletteBtn title="Zoom In" onClick={onZoomIn}>＋</PaletteBtn>
             <PaletteBtn title="Zoom Out" onClick={onZoomOut}>－</PaletteBtn>
             <PaletteBtn title="Zoom to Fit" onClick={onFitView}>⊡</PaletteBtn>
+            <PaletteBtn title={snapEnabled ? 'Snap to Grid: ON' : 'Snap to Grid: OFF'} onClick={onToggleSnap} active={snapEnabled}>⊞</PaletteBtn>
             <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
             <PaletteBtn title="Show Options" onClick={onShowOptions} active={optionsVisible}>⚙</PaletteBtn>
             <PaletteBtn title="Add Function" onClick={onAddFunction}>＋▭</PaletteBtn>

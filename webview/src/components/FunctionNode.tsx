@@ -9,6 +9,7 @@ interface FunctionNodeData {
     locked?: boolean;
     isConnSrc?: boolean;
     isConnTarget?: boolean;
+    fontSizeFn?: number;
     [key: string]: unknown;
 }
 
@@ -43,7 +44,7 @@ export function FunctionNode({ data, selected }: NodeProps) {
                 borderBottom: '1px solid #6c7086',
                 borderRadius: '4px 4px 0 0',
                 fontWeight: 700,
-                fontSize: 90,
+                fontSize: d.fontSizeFn ?? 90,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',

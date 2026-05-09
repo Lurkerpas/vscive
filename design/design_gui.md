@@ -8,8 +8,10 @@ The pallete shall have the following buttons:
 - Zoom In,
 - Zoom Out,
 - Zoom to Fit,
+- Snap to Grid,
 - Show Options,
 - Add Function,
+- Add Connection,
 - Lock Diagram from Modification.
 
 The buttons shall be illustrated using only an icon, with name shown as a tooltip on mouse hover.
@@ -28,8 +30,13 @@ There should be only a single point on the interface for making connections, on 
 
 It shall be possible to move an interface by dragging it. Its position shall be contrained to the edge of the hosting function.
 
+Add Connection shall invoke a mode in which clicking two functions will connected them using a pair of interfaces: first function will get a required interface, the second a provided one. Clicking on canvas before selecting two functions will cancel the operation. The locations of the interfaces shall be on function borders, closest to the point of original selection clicks.
+
+If there is an interface, sporadic, protected or unprotected, once its connection point is clicked, dragged and dropped onto another interface, they shall be connected. If the connection is dragged and dropped onto a function, not interface, a corresponding compatible interface shall be created and connected. It's location should be the closest to the drop point.
+
 Right clicking on the canvas shall present a menu with the following options:
 - Add Function,
+- Add Connection,
 - Build Skeletons (invoking make skeletons in the folder of the interfaceview.xml),
 - Build (invoking make in the folder of the interfaceview.xml).
 
@@ -39,4 +46,28 @@ Right clicking on a function shall present a menu with the following options:
 - Edit Function (launching editor for its source, logic to be implemented later),
 - Delete Function.
 
-Pressing "C" and dragging from one function to another shall created a pair of connected Required and Provided Interfaces, as described in the requirements.
+Snap to Grid shall be toggleable. When on, all positions of interfaces and function borders (so it applies also to resizing), shall be aligned to the grid.
+Lock Diagram from Modification shall be toggleable. When on, all positions and sizes shall be locked.
+
+Color picker shall allow to select a color, using:
+- RGB hex color notation,
+- color wheel,
+- one of predefined colors (red, green, blue, cyan, magenta, yellow, grey), each in 3 variants (light, dark, normal).
+
+When Show Options is clicked, the properties panel shall show the following settings:
+- Path to the attributes file,
+- Canvas color,
+- Snap grid size,
+- Function name font size,
+- Interface name font size,
+- Connection name font size.
+
+When Function is selected, the properties panel shall show, and allow to edit, all function properties, as well as its color.
+
+When Interface is selected, the properties panel shall show, and allow to edit, all interface properties, as well as its color, and arguments.
+Arguments shall be shown for both provided and required interfaces, however, when connected, the arguments of provided interfaces shall be editable, while the arguments of required interfaces shall be locked and inherited from the connected provided interface.
+Arguments shall be presented in a grid, with columns for name, type, encoding and direction, as well as buttons to move the given argument up and down in order.
+
+InheritPI property shall be editable via a checkbox.
+
+

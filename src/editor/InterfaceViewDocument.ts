@@ -371,11 +371,50 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         if (patch.language !== undefined) { fn.language = patch.language; }
     }
 
-    updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind }): void {
+    updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean }): void {
         const result = this.findIface(id);
         if (!result) { return; }
         if (patch.name !== undefined) { result.iface.name = patch.name; }
         if (patch.kind !== undefined) { result.iface.kind = patch.kind; }
+        if (patch.inheritPI !== undefined) { result.iface.inheritPI = patch.inheritPI; }
+    }
+
+    connectToFunction(newIfaceId: string, connId: string, existingIfaceId: string, targetFuncId: string, relRfX: number, relRfY: number): void {
+        const existingResult = this.findIface(existingIfaceId);
+        const targetFn = this.findFn(this.iv.functions, targetFuncId);
+        if (!existingResult || !targetFn) { return; }
+        const { iface: existing } = existingResult;
+
+        const newType: 'provided' | 'required' = existing.type === 'required' ? 'provided' : 'required';
+        const newIface: InterfaceModel = {
+            id: newIfaceId,
+            name: existing.name,
+            type: newType,
+            kind: existing.kind,
+            parameters: JSON.parse(JSON.stringify(existing.parameters)) as typeof existing.parameters,
+            inheritPI: newType === 'required',
+            autonamed: true,
+            properties: [],
+            extraAttrs: { layer: 'default', enable_multicast: 'true', required_system_element: 'NO' },
+        };
+
+        if (newType === 'provided') {
+            targetFn.providedInterfaces.push(newIface);
+        } else {
+            targetFn.requiredInterfaces.push(newIface);
+        }
+
+        const targetLayout = this.ui.entities[targetFuncId];
+        const originX = targetLayout?.rootCoordinates?.[0] ?? targetLayout?.coordinates[0] ?? 0;
+        const originY = targetLayout?.rootCoordinates?.[1] ?? targetLayout?.coordinates[1] ?? 0;
+        this.ui.entities[newIfaceId] = { coordinates: [
+            Math.round(originX + (relRfX + IFACE_W / 2) * SC_INV),
+            Math.round(originY + (relRfY + IFACE_H / 2) * SC_INV),
+        ] };
+
+        const riId = newType === 'required' ? newIfaceId : existingIfaceId;
+        const piId = newType === 'provided' ? newIfaceId : existingIfaceId;
+        this.connect(connId, riId, piId);
     }
 
     // ── Private helpers ────────────────────────────────────────────────────

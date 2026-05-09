@@ -4,7 +4,7 @@ import {
     Node, Edge, NodeMouseHandler, NodeDragHandler, Connection,
     useNodesState, useEdgesState,
     BackgroundVariant, ConnectionMode, useReactFlow, ReactFlowProvider,
-    NodeChange, OnNodesChange,
+    NodeChange, OnNodesChange, OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -15,6 +15,7 @@ import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToE
 import { FunctionNode } from './components/FunctionNode';
 import { InterfaceNode } from './components/InterfaceNode';
 import { AttributePanel } from './components/AttributePanel';
+import { OptionsPanel, EditorOptions, DEFAULT_OPTIONS } from './components/OptionsPanel';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
 import { Palette } from './components/Palette';
@@ -77,12 +78,13 @@ function DiagramEditor() {
     const [dialog, setDialog] = useState<DialogState>(null);
     const [locked, setLocked] = useState(false);
     const [optionsVisible, setOptionsVisible] = useState(false);
+    const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
 
     // ── Connect mode: click first function → select as source, click second → create RI+PI+connection
     const [connectMode, setConnectMode] = useState(false);
     const [connectSrc, setConnectSrc] = useState<{ id: string; relX: number; relY: number } | null>(null);
 
-    const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow();
+    const { screenToFlowPosition, zoomIn, zoomOut, fitView, getIntersectingNodes } = useReactFlow();
 
     // ── Receive messages from extension ─────────────────────────────────────
     useEffect(() => {
@@ -302,6 +304,47 @@ function DiagramEditor() {
         if (ids.length > 0) { post({ type: 'delete', ids }); }
     }, []);
 
+    // ── Drag interface handle → function node: create compatible interface + connect ──
+    const onConnectEnd: OnConnectEnd = useCallback((event, connectionState) => {
+        // If connection was valid, onConnect already handled it
+        if (connectionState.isValid || !diagramData) { return; }
+        const fromNodeId = (connectionState.fromNode as Node | null)?.id;
+        if (!fromNodeId) { return; }
+        const fromNode = nodes.find(n => n.id === fromNodeId);
+        if (!fromNode || fromNode.type !== 'interfaceNode') { return; }
+
+        const ev = event as MouseEvent | Touch;
+        const clientX = 'clientX' in ev ? ev.clientX : (event as TouchEvent).touches[0].clientX;
+        const clientY = 'clientY' in ev ? ev.clientY : (event as TouchEvent).touches[0].clientY;
+        const flowPos = screenToFlowPosition({ x: clientX, y: clientY });
+
+        // Find function node under drop point (excluding parent function)
+        const hits = getIntersectingNodes(
+            { x: flowPos.x - 1, y: flowPos.y - 1, width: 2, height: 2 },
+            true,
+        ) as Node[];
+        const targetFnNode = hits.find(n => n.type === 'functionNode' && n.id !== fromNode.parentId);
+        if (!targetFnNode) { return; }
+
+        // Compute interface drop position on target function's border
+        const absPos = getAbsolutePos(targetFnNode.id);
+        const relX_raw = flowPos.x - absPos.x;
+        const relY_raw = flowPos.y - absPos.y;
+        const pw = targetFnNode.measured?.width ?? (targetFnNode.style?.width as number | undefined) ?? 800;
+        const ph = targetFnNode.measured?.height ?? (targetFnNode.style?.height as number | undefined) ?? 560;
+        const { x: relX, y: relY } = snapIfaceToEdge(relX_raw - IFACE_W / 2, relY_raw - IFACE_H / 2, pw, ph);
+
+        post({
+            type: 'connectToFunction',
+            id: uuid(),
+            connId: uuid(),
+            existingIfaceId: fromNodeId,
+            targetFuncId: targetFnNode.id,
+            relRfX: relX,
+            relRfY: relY,
+        });
+    }, [diagramData, nodes, screenToFlowPosition, getIntersectingNodes, getAbsolutePos]);
+
     // ── Context menus ────────────────────────────────────────────────────────
     const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => {
         e.preventDefault();
@@ -375,7 +418,7 @@ function DiagramEditor() {
         post({ type: 'updateFunction', id, ...patch });
     }, []);
 
-    const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind }) => {
+    const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean }) => {
         post({ type: 'updateInterface', id, ...patch });
     }, []);
 
@@ -421,11 +464,13 @@ function DiagramEditor() {
     }
 
     return (
-        <div style={{ width: '100vw', height: '100vh', background: '#1e1e2e', position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
+        <div style={{ width: '100vw', height: '100vh', background: options.canvasColor, position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
             <Palette
                 onZoomIn={() => zoomIn()}
                 onZoomOut={() => zoomOut()}
                 onFitView={() => fitView({ padding: 0.1, maxZoom: 1 })}
+                onToggleSnap={() => setOptions(o => ({ ...o, snapEnabled: !o.snapEnabled }))}
+                snapEnabled={options.snapEnabled}
                 onShowOptions={() => setOptionsVisible(v => !v)}
                 onAddFunction={onPaletteAddFunction}
                 onAddConnection={() => { setConnectMode(v => !v); setConnectSrc(null); }}
@@ -436,10 +481,15 @@ function DiagramEditor() {
             />
             <ReactFlow
                 nodes={nodes.map(n => {
-                    if (n.type !== 'functionNode') { return n; }
+                    if (n.type !== 'functionNode') {
+                        // Pass font size option into interface nodes too
+                        return n.type === 'interfaceNode'
+                            ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface } }
+                            : n;
+                    }
                     const isConnSrc = n.id === connectSrc?.id;
                     const isConnTarget = connectMode && !connectSrc;
-                    return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget } };
+                    return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget, fontSizeFn: options.fontSizeFn } };
                 })}
                 edges={edges}
                 onNodesChange={onNodesChangeWithResize}
@@ -449,6 +499,7 @@ function DiagramEditor() {
                 onPaneClick={onPaneClick}
                 onNodeDragStop={onNodeDragStop}
                 onConnect={onConnect}
+                onConnectEnd={onConnectEnd}
                 onNodesDelete={locked ? undefined : onNodesDelete}
                 onEdgesDelete={locked ? undefined : onEdgesDelete}
                 onPaneContextMenu={onPaneContextMenu}
@@ -456,11 +507,13 @@ function DiagramEditor() {
                 connectionMode={ConnectionMode.Loose}
                 nodesDraggable={!locked && !connectMode}
                 nodesConnectable={!locked}
+                snapToGrid={options.snapEnabled}
+                snapGrid={[options.snapGridSize, options.snapGridSize]}
                 fitView
                 fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
                 minZoom={0.005}
                 maxZoom={4}
-                style={{ background: '#1e1e2e', marginLeft: 44 }}
+                style={{ background: options.canvasColor, marginLeft: 44 }}
             >
                 <Background color="#313244" variant={BackgroundVariant.Dots} />
                 <Controls style={{ display: 'none' }} />
@@ -471,7 +524,14 @@ function DiagramEditor() {
                 />
             </ReactFlow>
 
-            {(selected || optionsVisible) && (
+            {optionsVisible && !selected && (
+                <OptionsPanel
+                    options={options}
+                    onChange={patch => setOptions(o => ({ ...o, ...patch }))}
+                />
+            )}
+
+            {selected && (
                 <AttributePanel
                     selected={selected}
                     schema={diagramData?.schema ?? { attrs: [] }}
