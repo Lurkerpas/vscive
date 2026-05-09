@@ -44,16 +44,13 @@ function unknownAttrs(el: XmlElement, known: Set<string>): Record<string, string
 }
 
 const KNOWN_IV_ATTRS = new Set(['version', 'asn1file', 'UiFile', 'modifierHash']);
+// Only attrs that are explicitly parsed into typed model fields go here;
+// everything else falls through to extraAttrs for lossless round-trip.
 const KNOWN_FUNC_ATTRS = new Set([
     'id', 'name', 'language', 'default_implementation', 'is_type',
-    'fixed_system_element', 'required_system_element', 'startup_priority',
-    'instances_min', 'instances_max',
+    'fixed_system_element', 'required_system_element',
 ]);
-const KNOWN_IFACE_ATTRS = new Set([
-    'id', 'name', 'kind', 'enable_multicast', 'layer',
-    'required_system_element', 'is_simulink_interface',
-    'wcet', 'miat', 'queue_size', 'priority', 'stack_size', 'period', 'dispatch_offset',
-]);
+const KNOWN_IFACE_ATTRS = new Set(['id', 'name', 'kind']);
 
 function parseProperties(el: XmlElement): { properties: PropertyModel[]; inheritPI: boolean; autonamed: boolean } {
     const properties: PropertyModel[] = [];
@@ -139,7 +136,7 @@ export function parseIvXml(xml: string): IvModel {
             targetFuncName: tgt ? attr(tgt, 'func_name') : '',
             targetPiName: tgt ? (attr(tgt, 'pi_name') || '') : '',
             properties,
-            extraAttrs: unknownAttrs(c, new Set(['id', 'name', 'required_system_element'])),
+            extraAttrs: unknownAttrs(c, new Set(['id', 'name'])),
         };
     });
 

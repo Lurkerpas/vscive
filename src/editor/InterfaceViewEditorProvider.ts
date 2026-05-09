@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { InterfaceViewDocument } from './InterfaceViewDocument';
-import { DiagramData, ExtensionMessage, WebviewMessage } from '../model/types';
+import { DiagramData, ExtensionMessage, IvModel, UiModel, WebviewMessage } from '../model/types';
 import { log } from '../logger';
 
 export class InterfaceViewEditorProvider
@@ -12,6 +12,9 @@ export class InterfaceViewEditorProvider
     private readonly _onDidChangeCustomDocument =
         new vscode.EventEmitter<vscode.CustomDocumentEditEvent<InterfaceViewDocument>>();
     readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
+
+    /** Map document URI → active webview, used for undo/redo repaint. */
+    private readonly _webviews = new Map<string, vscode.Webview>();
 
     constructor(private readonly extensionUri: vscode.Uri) { }
 
@@ -38,16 +41,93 @@ export class InterfaceViewEditorProvider
         };
         webviewPanel.webview.html = this.getHtml(webviewPanel.webview);
 
-        webviewPanel.webview.onDidReceiveMessage((msg: WebviewMessage) => {
+        const key = document.uri.toString();
+        this._webviews.set(key, webviewPanel.webview);
+        webviewPanel.onDidDispose(() => this._webviews.delete(key));
+
+        webviewPanel.webview.onDidReceiveMessage(async (msg: WebviewMessage) => {
             log(`webview message: ${msg.type}`);
-            if (msg.type === 'ready') {
-                try {
+            switch (msg.type) {
+                case 'ready': {
+                    try {
+                        this.sendDiagram(webviewPanel.webview, document);
+                        log('sendDiagram: posted load message');
+                    } catch (err) {
+                        log(`sendDiagram FAILED: ${err}`);
+                    }
+                    break;
+                }
+                case 'nodesMoved': {
+                    // Position-only change — no structural reload needed; just persist to model
+                    const before = document.snapshot();
+                    document.moveNodes(msg.moves);
+                    this.fireEdit(document, before);
+                    break;
+                }
+                case 'addFunction': {
+                    const before = document.snapshot();
+                    document.addFunction(msg.id, msg.name, msg.language, msg.rfX, msg.rfY, msg.parentId);
+                    this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
-                    log('sendDiagram: posted load message');
-                } catch (err) {
-                    log(`sendDiagram FAILED: ${err}`);
+                    break;
+                }
+                case 'addInterface': {
+                    const before = document.snapshot();
+                    document.addInterface(msg.id, msg.funcId, msg.name, msg.kind, msg.ifaceType, msg.relRfX, msg.relRfY);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'connect': {
+                    const before = document.snapshot();
+                    document.connect(msg.id, msg.sourceIfaceId, msg.targetIfaceId);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'delete': {
+                    const before = document.snapshot();
+                    document.deleteEntities(msg.ids);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'updateFunction': {
+                    const before = document.snapshot();
+                    document.updateFunction(msg.id, { name: msg.name, language: msg.language });
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'updateInterface': {
+                    const before = document.snapshot();
+                    document.updateInterface(msg.id, { name: msg.name, kind: msg.kind });
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
                 }
             }
+        });
+    }
+
+    private fireEdit(
+        document: InterfaceViewDocument,
+        before: { iv: IvModel; ui: UiModel },
+    ): void {
+        const after = document.snapshot();
+        const key = document.uri.toString();
+        this._onDidChangeCustomDocument.fire({
+            document,
+            undo: async () => {
+                document.restore(before);
+                const wv = this._webviews.get(key);
+                if (wv) { this.sendDiagram(wv, document); }
+            },
+            redo: async () => {
+                document.restore(after);
+                const wv = this._webviews.get(key);
+                if (wv) { this.sendDiagram(wv, document); }
+            },
         });
     }
 
@@ -61,15 +141,51 @@ export class InterfaceViewEditorProvider
         webview.postMessage(msg);
     }
 
-    // ── CustomEditorProvider stubs (read-only MVP) ─────────────────────────
+    // ── CustomEditorProvider save / revert ─────────────────────────────────
 
-    async saveCustomDocument(): Promise<void> { }
-    async saveCustomDocumentAs(): Promise<void> { }
-    async revertCustomDocument(): Promise<void> { }
+    async saveCustomDocument(
+        document: InterfaceViewDocument,
+        _cancellation: vscode.CancellationToken,
+    ): Promise<void> {
+        log(`saveCustomDocument: ${document.uri.fsPath}`);
+        const { ivXml, uiXml } = document.serializeToXml();
+        await vscode.workspace.fs.writeFile(document.uri, Buffer.from(ivXml, 'utf8'));
+        const uiUri = vscode.Uri.file(
+            path.join(path.dirname(document.uri.fsPath), document.iv.uiFile),
+        );
+        await vscode.workspace.fs.writeFile(uiUri, Buffer.from(uiXml, 'utf8'));
+        log('saveCustomDocument: done');
+    }
+
+    async saveCustomDocumentAs(
+        document: InterfaceViewDocument,
+        destination: vscode.Uri,
+        _cancellation: vscode.CancellationToken,
+    ): Promise<void> {
+        log(`saveCustomDocumentAs: ${destination.fsPath}`);
+        const { ivXml, uiXml } = document.serializeToXml();
+        await vscode.workspace.fs.writeFile(destination, Buffer.from(ivXml, 'utf8'));
+        // Write UI file alongside the destination
+        const uiUri = vscode.Uri.file(
+            path.join(path.dirname(destination.fsPath), document.iv.uiFile),
+        );
+        await vscode.workspace.fs.writeFile(uiUri, Buffer.from(uiXml, 'utf8'));
+        log('saveCustomDocumentAs: done');
+    }
+
+    async revertCustomDocument(document: InterfaceViewDocument): Promise<void> {
+        log(`revertCustomDocument: ${document.uri.fsPath}`);
+        await document.reload();
+        const wv = this._webviews.get(document.uri.toString());
+        if (wv) { this.sendDiagram(wv, document); }
+    }
+
     async backupCustomDocument(
         document: InterfaceViewDocument,
         context: vscode.CustomDocumentBackupContext,
     ): Promise<vscode.CustomDocumentBackup> {
+        const { ivXml } = document.serializeToXml();
+        await vscode.workspace.fs.writeFile(context.destination, Buffer.from(ivXml, 'utf8'));
         return { id: context.destination.toString(), delete: () => undefined };
     }
 
@@ -77,7 +193,6 @@ export class InterfaceViewEditorProvider
 
     private getHtml(webview: vscode.Webview): string {
         const base = vscode.Uri.joinPath(this.extensionUri, 'out', 'webview');
-        // Vite produces assets/index-*.js and assets/index-*.css — glob them
         const jsFiles = (() => {
             try {
                 const fs = require('fs') as typeof import('fs');
@@ -117,3 +232,4 @@ export class InterfaceViewEditorProvider
 </html>`;
     }
 }
+

@@ -2,10 +2,17 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { parseIvXml } from '../parsers/IvXmlParser';
-import { parseUiXml } from '../parsers/UiXmlParser';
+import { parseUiXml, SC_SCALE } from '../parsers/UiXmlParser';
 import { parseAttrXml, EMPTY_SCHEMA } from '../parsers/AttrXmlParser';
-import { IvModel, UiModel, AttributeSchema } from '../model/types';
+import { serializeIvXml } from '../serializers/IvXmlSerializer';
+import { serializeUiXml } from '../serializers/UiXmlSerializer';
+import {
+    IvModel, UiModel, AttributeSchema, FunctionModel, InterfaceModel,
+    ConnectionModel, InterfaceKind, NodeMove,
+} from '../model/types';
 import { log } from '../logger';
+
+const SC_INV = 1 / SC_SCALE; // pixels → SC coords (= 20)
 
 export class InterfaceViewDocument implements vscode.CustomDocument {
     readonly uri: vscode.Uri;
@@ -60,7 +67,255 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         }
     }
 
+    // ── Serialization ──────────────────────────────────────────────────────
+
+    serializeToXml(): { ivXml: string; uiXml: string } {
+        return {
+            ivXml: serializeIvXml(this.iv),
+            uiXml: serializeUiXml(this.ui),
+        };
+    }
+
+    // ── Snapshot / Restore for undo-redo ──────────────────────────────────
+
+    snapshot(): { iv: IvModel; ui: UiModel } {
+        return {
+            iv: JSON.parse(JSON.stringify(this.iv)) as IvModel,
+            ui: JSON.parse(JSON.stringify(this.ui)) as UiModel,
+        };
+    }
+
+    restore(snap: { iv: IvModel; ui: UiModel }): void {
+        this.iv = JSON.parse(JSON.stringify(snap.iv)) as IvModel;
+        this.ui = JSON.parse(JSON.stringify(snap.ui)) as UiModel;
+    }
+
+    // ── Mutations ──────────────────────────────────────────────────────────
+
+    moveNodes(moves: NodeMove[]): void {
+        for (const move of moves) {
+            if (move.kind === 'function') {
+                let absScX: number, absScY: number;
+                if (move.parentId) {
+                    const pl = this.ui.entities[move.parentId];
+                    absScX = (pl?.coordinates[0] ?? 0) + move.x * SC_INV;
+                    absScY = (pl?.coordinates[1] ?? 0) + move.y * SC_INV;
+                } else {
+                    absScX = move.x * SC_INV;
+                    absScY = move.y * SC_INV;
+                }
+                const absScX2 = absScX + move.w * SC_INV;
+                const absScY2 = absScY + move.h * SC_INV;
+
+                // Compute delta to propagate to child interfaces and nested functions
+                const oldLayout = this.ui.entities[move.id];
+                const dX = oldLayout ? absScX - oldLayout.coordinates[0] : 0;
+                const dY = oldLayout ? absScY - oldLayout.coordinates[1] : 0;
+
+                this.ui.entities[move.id] = { coordinates: [absScX, absScY, absScX2, absScY2] };
+
+                if (dX !== 0 || dY !== 0) {
+                    const fn = this.findFn(this.iv.functions, move.id);
+                    if (fn) { this.shiftDescendants(fn, dX, dY); }
+                }
+            } else if (move.kind === 'interface' && move.parentId) {
+                // Interface position is the SC absolute center of the pill
+                const pl = this.ui.entities[move.parentId];
+                const pX1 = pl?.coordinates[0] ?? 0;
+                const pY1 = pl?.coordinates[1] ?? 0;
+                const scX = pX1 + (move.x + move.w / 2) * SC_INV;
+                const scY = pY1 + (move.y + move.h / 2) * SC_INV;
+                this.ui.entities[move.id] = { coordinates: [scX, scY] };
+            }
+        }
+    }
+
+    addFunction(id: string, name: string, language: string, rfX: number, rfY: number, parentId?: string): void {
+        const scX1 = rfX * SC_INV;
+        const scY1 = rfY * SC_INV;
+        const scX2 = scX1 + 200 * SC_INV; // 200px default width → 4000 SC units
+        const scY2 = scY1 + 140 * SC_INV;
+
+        const newFn: FunctionModel = {
+            id,
+            name,
+            language,
+            defaultImplementation: 'default',
+            isType: false,
+            fixedSystemElement: false,
+            requiredSystemElement: false,
+            providedInterfaces: [],
+            requiredInterfaces: [],
+            nestedFunctions: [],
+            implementations: [{ name: 'default', language }],
+            properties: [],
+            extraAttrs: { startup_priority: '1', instances_min: '1', instances_max: '1' },
+        };
+
+        if (parentId) {
+            const parent = this.findFn(this.iv.functions, parentId);
+            if (parent) { parent.nestedFunctions.push(newFn); }
+        } else {
+            this.iv.functions.push(newFn);
+        }
+        this.ui.entities[id] = { coordinates: [scX1, scY1, scX2, scY2] };
+    }
+
+    addInterface(id: string, funcId: string, name: string, kind: InterfaceKind, ifaceType: 'provided' | 'required', relRfX: number, relRfY: number): void {
+        const pl = this.ui.entities[funcId];
+        const pX1 = pl?.coordinates[0] ?? 0;
+        const pY1 = pl?.coordinates[1] ?? 0;
+        // The relRf coords are the TOP-LEFT of the pill; SC stores the center
+        const IFACE_H = 28;
+        const IFACE_MIN_W = 120;
+        const IFACE_CHAR_W = 9;
+        const IFACE_PADDING = 30;
+        const ifaceW = Math.max(IFACE_MIN_W, name.length * IFACE_CHAR_W + IFACE_PADDING);
+        const scX = pX1 + (relRfX + ifaceW / 2) * SC_INV;
+        const scY = pY1 + (relRfY + IFACE_H / 2) * SC_INV;
+
+        const newIface: InterfaceModel = {
+            id,
+            name,
+            type: ifaceType,
+            kind,
+            parameters: [],
+            inheritPI: false,
+            autonamed: false,
+            properties: [],
+            extraAttrs: { layer: 'default', enable_multicast: 'true', required_system_element: 'NO' },
+        };
+
+        const fn = this.findFn(this.iv.functions, funcId);
+        if (!fn) { return; }
+        if (ifaceType === 'provided') {
+            fn.providedInterfaces.push(newIface);
+        } else {
+            fn.requiredInterfaces.push(newIface);
+        }
+        this.ui.entities[id] = { coordinates: [scX, scY] };
+    }
+
+    connect(id: string, sourceIfaceId: string, targetIfaceId: string): void {
+        const src = this.findIface(sourceIfaceId);
+        const tgt = this.findIface(targetIfaceId);
+        if (!src || !tgt) { return; }
+        if (src.iface.type !== 'required' || tgt.iface.type !== 'provided') { return; }
+
+        const conn: ConnectionModel = {
+            id,
+            name: `${src.iface.name}_to_${tgt.iface.name}`,
+            sourceIfaceId,
+            sourceFuncName: src.func.name,
+            sourceRiName: src.iface.name,
+            targetIfaceId,
+            targetFuncName: tgt.func.name,
+            targetPiName: tgt.iface.name,
+            properties: [],
+            extraAttrs: {},
+        };
+        this.iv.connections.push(conn);
+    }
+
+    deleteEntities(ids: string[]): void {
+        const toRemove = new Set(ids);
+
+        // Expand: if a function is deleted, also delete all its descendants
+        const collectDescendants = (fn: FunctionModel) => {
+            toRemove.add(fn.id);
+            for (const iface of [...fn.providedInterfaces, ...fn.requiredInterfaces]) {
+                toRemove.add(iface.id);
+            }
+            for (const child of fn.nestedFunctions) { collectDescendants(child); }
+        };
+        for (const id of [...ids]) {
+            const fn = this.findFn(this.iv.functions, id);
+            if (fn) { collectDescendants(fn); }
+        }
+
+        // Remove functions (and nested) from tree
+        const pruneFunctions = (fns: FunctionModel[]): FunctionModel[] =>
+            fns
+                .filter(fn => !toRemove.has(fn.id))
+                .map(fn => ({
+                    ...fn,
+                    providedInterfaces: fn.providedInterfaces.filter(i => !toRemove.has(i.id)),
+                    requiredInterfaces: fn.requiredInterfaces.filter(i => !toRemove.has(i.id)),
+                    nestedFunctions: pruneFunctions(fn.nestedFunctions),
+                }));
+
+        this.iv.functions = pruneFunctions(this.iv.functions);
+
+        // Remove connections that reference deleted entities
+        this.iv.connections = this.iv.connections.filter(c =>
+            !toRemove.has(c.id) &&
+            !toRemove.has(c.sourceIfaceId) &&
+            !toRemove.has(c.targetIfaceId),
+        );
+
+        // Remove UI layouts
+        for (const id of toRemove) { delete this.ui.entities[id]; }
+    }
+
+    updateFunction(id: string, patch: { name?: string; language?: string }): void {
+        const fn = this.findFn(this.iv.functions, id);
+        if (!fn) { return; }
+        if (patch.name !== undefined) { fn.name = patch.name; }
+        if (patch.language !== undefined) { fn.language = patch.language; }
+    }
+
+    updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind }): void {
+        const result = this.findIface(id);
+        if (!result) { return; }
+        if (patch.name !== undefined) { result.iface.name = patch.name; }
+        if (patch.kind !== undefined) { result.iface.kind = patch.kind; }
+    }
+
+    // ── Private helpers ────────────────────────────────────────────────────
+
+    private findFn(fns: FunctionModel[], id: string): FunctionModel | undefined {
+        for (const fn of fns) {
+            if (fn.id === id) { return fn; }
+            const found = this.findFn(fn.nestedFunctions, id);
+            if (found) { return found; }
+        }
+        return undefined;
+    }
+
+    private findIface(ifaceId: string): { func: FunctionModel; iface: InterfaceModel } | undefined {
+        const search = (fns: FunctionModel[]): { func: FunctionModel; iface: InterfaceModel } | undefined => {
+            for (const fn of fns) {
+                for (const iface of [...fn.providedInterfaces, ...fn.requiredInterfaces]) {
+                    if (iface.id === ifaceId) { return { func: fn, iface }; }
+                }
+                const found = search(fn.nestedFunctions);
+                if (found) { return found; }
+            }
+            return undefined;
+        };
+        return search(this.iv.functions);
+    }
+
+    /** Shift all SC coordinates of a function's interfaces and nested children by (dX, dY). */
+    private shiftDescendants(fn: FunctionModel, dX: number, dY: number): void {
+        for (const iface of [...fn.providedInterfaces, ...fn.requiredInterfaces]) {
+            const l = this.ui.entities[iface.id];
+            if (l?.coordinates.length >= 2) {
+                l.coordinates = [l.coordinates[0] + dX, l.coordinates[1] + dY];
+            }
+        }
+        for (const child of fn.nestedFunctions) {
+            const l = this.ui.entities[child.id];
+            if (l?.coordinates.length >= 4) {
+                l.coordinates = [l.coordinates[0] + dX, l.coordinates[1] + dY,
+                    l.coordinates[2] + dX, l.coordinates[3] + dY];
+            }
+            this.shiftDescendants(child, dX, dY);
+        }
+    }
+
     dispose(): void {
         // nothing to dispose for MVP
     }
 }
+

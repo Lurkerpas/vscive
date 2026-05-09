@@ -138,5 +138,25 @@ export interface DiagramData {
 export type ExtensionMessage =
     | { type: 'load'; data: DiagramData };
 
+/** A single node-move record sent from the webview after drag-stop. */
+export interface NodeMove {
+    id: string;
+    kind: 'function' | 'interface';
+    /** RF position: absolute for root functions, relative-to-parent for nested functions and interfaces. */
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    /** Parent function id — present for nested functions and all interface nodes. */
+    parentId?: string;
+}
+
 export type WebviewMessage =
-    | { type: 'ready' };
+    | { type: 'ready' }
+    | { type: 'nodesMoved'; moves: NodeMove[] }
+    | { type: 'addFunction'; id: string; name: string; language: string; rfX: number; rfY: number; parentId?: string }
+    | { type: 'addInterface'; id: string; funcId: string; name: string; kind: InterfaceKind; ifaceType: 'provided' | 'required'; relRfX: number; relRfY: number }
+    | { type: 'connect'; id: string; sourceIfaceId: string; targetIfaceId: string }
+    | { type: 'delete'; ids: string[] }
+    | { type: 'updateFunction'; id: string; name?: string; language?: string }
+    | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind };
