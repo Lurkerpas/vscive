@@ -98,14 +98,14 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
                 let absScX: number, absScY: number;
                 if (move.parentId) {
                     const pl = this.ui.entities[move.parentId];
-                    absScX = (pl?.coordinates[0] ?? 0) + move.x * SC_INV;
-                    absScY = (pl?.coordinates[1] ?? 0) + move.y * SC_INV;
+                    absScX = Math.round((pl?.coordinates[0] ?? 0) + move.x * SC_INV);
+                    absScY = Math.round((pl?.coordinates[1] ?? 0) + move.y * SC_INV);
                 } else {
-                    absScX = move.x * SC_INV;
-                    absScY = move.y * SC_INV;
+                    absScX = Math.round(move.x * SC_INV);
+                    absScY = Math.round(move.y * SC_INV);
                 }
-                const absScX2 = absScX + move.w * SC_INV;
-                const absScY2 = absScY + move.h * SC_INV;
+                const absScX2 = Math.round(absScX + move.w * SC_INV);
+                const absScY2 = Math.round(absScY + move.h * SC_INV);
 
                 // Compute delta to propagate to child interfaces and nested functions
                 const oldLayout = this.ui.entities[move.id];
@@ -123,18 +123,18 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
                 const pl = this.ui.entities[move.parentId];
                 const pX1 = pl?.coordinates[0] ?? 0;
                 const pY1 = pl?.coordinates[1] ?? 0;
-                const scX = pX1 + (move.x + move.w / 2) * SC_INV;
-                const scY = pY1 + (move.y + move.h / 2) * SC_INV;
+                const scX = Math.round(pX1 + (move.x + move.w / 2) * SC_INV);
+                const scY = Math.round(pY1 + (move.y + move.h / 2) * SC_INV);
                 this.ui.entities[move.id] = { coordinates: [scX, scY] };
             }
         }
     }
 
     addFunction(id: string, name: string, language: string, rfX: number, rfY: number, parentId?: string): void {
-        const scX1 = rfX * SC_INV;
-        const scY1 = rfY * SC_INV;
-        const scX2 = scX1 + 200 * SC_INV; // 200px default width → 4000 SC units
-        const scY2 = scY1 + 140 * SC_INV;
+        const scX1 = Math.round(rfX * SC_INV);
+        const scY1 = Math.round(rfY * SC_INV);
+        const scX2 = scX1 + 800 * SC_INV; // 800px default width → 16000 SC units
+        const scY2 = scY1 + 560 * SC_INV;
 
         const newFn: FunctionModel = {
             id,
@@ -171,8 +171,8 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         const IFACE_CHAR_W = 9;
         const IFACE_PADDING = 30;
         const ifaceW = Math.max(IFACE_MIN_W, name.length * IFACE_CHAR_W + IFACE_PADDING);
-        const scX = pX1 + (relRfX + ifaceW / 2) * SC_INV;
-        const scY = pY1 + (relRfY + IFACE_H / 2) * SC_INV;
+        const scX = Math.round(pX1 + (relRfX + ifaceW / 2) * SC_INV);
+        const scY = Math.round(pY1 + (relRfY + IFACE_H / 2) * SC_INV);
 
         const newIface: InterfaceModel = {
             id,
@@ -301,14 +301,14 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         for (const iface of [...fn.providedInterfaces, ...fn.requiredInterfaces]) {
             const l = this.ui.entities[iface.id];
             if (l?.coordinates.length >= 2) {
-                l.coordinates = [l.coordinates[0] + dX, l.coordinates[1] + dY];
+                l.coordinates = [Math.round(l.coordinates[0] + dX), Math.round(l.coordinates[1] + dY)];
             }
         }
         for (const child of fn.nestedFunctions) {
             const l = this.ui.entities[child.id];
             if (l?.coordinates.length >= 4) {
-                l.coordinates = [l.coordinates[0] + dX, l.coordinates[1] + dY,
-                    l.coordinates[2] + dX, l.coordinates[3] + dY];
+                l.coordinates = [Math.round(l.coordinates[0] + dX), Math.round(l.coordinates[1] + dY),
+                    Math.round(l.coordinates[2] + dX), Math.round(l.coordinates[3] + dY)];
             }
             this.shiftDescendants(child, dX, dY);
         }

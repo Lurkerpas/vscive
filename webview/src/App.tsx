@@ -208,11 +208,11 @@ function DiagramEditor() {
             items.push(
                 {
                     label: '+ Add Provided Interface',
-                    onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name }),
+                    onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'provided' }),
                 },
                 {
                     label: '+ Add Required Interface',
-                    onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name }),
+                    onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'required' }),
                 },
                 {
                     label: 'Delete Function',

@@ -31,7 +31,7 @@ export function FunctionNode({ data, selected }: NodeProps) {
                 borderBottom: '1px solid #6c7086',
                 borderRadius: '4px 4px 0 0',
                 fontWeight: 700,
-                fontSize: 15,
+                fontSize: 45,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -40,7 +40,7 @@ export function FunctionNode({ data, selected }: NodeProps) {
                 {d.label}
             </div>
             {/* Language badge */}
-            <div style={{ padding: '4px 10px', color: '#a6adc8', fontSize: 13 }}>
+            <div style={{ padding: '4px 10px', color: '#a6adc8', fontSize: 39 }}>
                 {d.language || '—'}
             </div>
             {/* React Flow connection handles (hidden, connections go through interface nodes) */}

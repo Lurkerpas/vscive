@@ -12,8 +12,8 @@ function layoutOf(ui: UiModel, id: string): EntityLayout | undefined {
 }
 
 /** Default size when no UI layout is present */
-const DEFAULT_FUNC_W = 200;
-const DEFAULT_FUNC_H = 140;
+const DEFAULT_FUNC_W = 800;
+const DEFAULT_FUNC_H = 560;
 const IFACE_H = 28;
 const IFACE_CHAR_W = 9; // approx px per character at 13px sans-serif
 const IFACE_MIN_W = 120;

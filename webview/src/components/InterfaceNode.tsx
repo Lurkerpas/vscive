@@ -51,8 +51,8 @@ export function InterfaceNode({ data, selected }: NodeProps) {
                 position={isProvided ? Position.Left : Position.Right}
                 style={{ width: 8, height: 8, background: color, border: 'none' }}
             />
-            <span style={{ color, fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{icon}</span>
-            <span style={{ color: '#cdd6f4', fontSize: 13, fontFamily: 'sans-serif', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ color, fontSize: 39, lineHeight: 1, flexShrink: 0 }}>{icon}</span>
+            <span style={{ color: '#cdd6f4', fontSize: 39, fontFamily: 'sans-serif', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {iface.name}
             </span>
         </div>

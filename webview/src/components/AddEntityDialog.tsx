@@ -12,6 +12,7 @@ interface AddInterfaceState {
     kind: 'addInterface';
     funcId: string;
     funcName: string;
+    presetType?: 'provided' | 'required';
 }
 
 export type DialogState = AddFunctionState | AddInterfaceState | null;
@@ -72,7 +73,7 @@ export function AddEntityDialog({ state, onConfirmFunction, onConfirmInterface, 
         if (state?.kind === 'addFunction') {
             onConfirmFunction(name.trim(), language, state.rfX, state.rfY, state.parentId);
         } else if (state?.kind === 'addInterface') {
-            onConfirmInterface(name.trim(), kind, ifaceType, state.funcId);
+            onConfirmInterface(name.trim(), kind, state.presetType ?? ifaceType, state.funcId);
         }
         setName(''); setLanguage('C'); setKind('Sporadic'); setIfaceType('provided');
     }, [state, name, language, kind, ifaceType, onConfirmFunction, onConfirmInterface]);
@@ -109,11 +110,15 @@ export function AddEntityDialog({ state, onConfirmFunction, onConfirmInterface, 
                             onChange={e => setName(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') { submit(); } if (e.key === 'Escape') { resetAndCancel(); } }}
                         />
-                        <label style={LABEL}>Type</label>
-                        <select style={INPUT} value={ifaceType} onChange={e => setIfaceType(e.target.value as 'provided' | 'required')}>
-                            <option value="provided">Provided</option>
-                            <option value="required">Required</option>
-                        </select>
+                        {!state.presetType && (
+                            <>
+                                <label style={LABEL}>Type</label>
+                                <select style={INPUT} value={ifaceType} onChange={e => setIfaceType(e.target.value as 'provided' | 'required')}>
+                                    <option value="provided">Provided</option>
+                                    <option value="required">Required</option>
+                                </select>
+                            </>
+                        )}
                         <label style={LABEL}>Kind</label>
                         <select style={INPUT} value={kind} onChange={e => setKind(e.target.value as InterfaceKind)}>
                             {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
