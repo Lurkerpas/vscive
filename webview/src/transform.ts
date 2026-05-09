@@ -14,10 +14,11 @@ function layoutOf(ui: UiModel, id: string): EntityLayout | undefined {
 /** Default size when no UI layout is present */
 const DEFAULT_FUNC_W = 800;
 const DEFAULT_FUNC_H = 560;
-const IFACE_H = 28;
-const IFACE_CHAR_W = 9; // approx px per character at 13px sans-serif
-const IFACE_MIN_W = 120;
-const IFACE_PADDING = 30; // icon + padding
+const IFACE_W = 60;  // triangle width (matches InterfaceNode SVG W)
+const IFACE_H = 80;  // triangle height (matches InterfaceNode SVG H)
+const IFACE_CHAR_W = 9; // kept for legacy compat
+const IFACE_MIN_W = IFACE_W;
+const IFACE_PADDING = 0;
 
 function functionToNode(
     fn: FunctionModel,
@@ -61,27 +62,26 @@ function functionToNode(
     return [node, ...ifaceNodes, ...nested];
 }
 
-function ifaceSize(name: string): { w: number; h: number } {
-    const w = Math.max(IFACE_MIN_W, name.length * IFACE_CHAR_W + IFACE_PADDING);
-    return { w, h: IFACE_H };
+function ifaceSize(_name: string): { w: number; h: number } {
+    return { w: IFACE_W, h: IFACE_H };
 }
 
 function ifacePosition(
     layout: EntityLayout | undefined,
     parentLayout: EntityLayout | undefined,
     parentH: number,
-    ifaceW: number,
+    _ifaceW: number,
     idx: number,
     total: number,
 ): { x: number; y: number } {
     if (layout && parentLayout && layout.coordinates.length >= 2 && parentLayout.coordinates.length >= 4) {
         const [px1, py1] = parentLayout.coordinates;
         const [ix, iy] = layout.coordinates;
-        return { x: px(ix - px1) - ifaceW / 2, y: px(iy - py1) - IFACE_H / 2 };
+        return { x: px(ix - px1) - IFACE_W / 2, y: px(iy - py1) - IFACE_H / 2 };
     }
-    // Fallback: stack on left edge
+    // Fallback: stack on left edge, outside the function
     const spacing = parentH / (total + 1);
-    return { x: -ifaceW / 2, y: spacing * (idx + 1) - IFACE_H / 2 };
+    return { x: -IFACE_W, y: spacing * (idx + 1) - IFACE_H / 2 };
 }
 
 function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, parentH: number): Node[] {

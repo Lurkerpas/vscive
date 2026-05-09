@@ -159,4 +159,8 @@ export type WebviewMessage =
     | { type: 'connect'; id: string; sourceIfaceId: string; targetIfaceId: string }
     | { type: 'delete'; ids: string[] }
     | { type: 'updateFunction'; id: string; name?: string; language?: string }
-    | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind };
+    | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind }
+    | { type: 'buildSkeletons' }
+    | { type: 'build' }
+    | { type: 'editFunction'; id: string }
+    | { type: 'connectFunctions'; riId: string; piId: string; riFuncId: string; piFuncId: string };

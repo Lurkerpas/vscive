@@ -106,6 +106,32 @@ export class InterfaceViewEditorProvider
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
                 }
+                case 'buildSkeletons': {
+                    const folder = path.dirname(document.uri.fsPath);
+                    const terminal = vscode.window.createTerminal({ name: 'Build Skeletons', cwd: folder });
+                    terminal.sendText('make skeletons');
+                    terminal.show();
+                    break;
+                }
+                case 'build': {
+                    const folder = path.dirname(document.uri.fsPath);
+                    const terminal = vscode.window.createTerminal({ name: 'Build', cwd: folder });
+                    terminal.sendText('make');
+                    terminal.show();
+                    break;
+                }
+                case 'editFunction': {
+                    // Placeholder — source editing logic to be implemented later
+                    vscode.window.showInformationMessage(`Edit Function: ${msg.id} (not yet implemented)`);
+                    break;
+                }
+                case 'connectFunctions': {
+                    const before = document.snapshot();
+                    document.connectFunctions(msg.riId, msg.piId, msg.riFuncId, msg.piFuncId);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
             }
         });
     }

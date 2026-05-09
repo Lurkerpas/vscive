@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ReactFlow, Background, Controls, MiniMap,
     Node, Edge, NodeMouseHandler, NodeDragHandler, Connection,
     useNodesState, useEdgesState,
     BackgroundVariant, ConnectionMode, useReactFlow, ReactFlowProvider,
+    NodeChange, OnNodesChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -16,6 +17,7 @@ import { InterfaceNode } from './components/InterfaceNode';
 import { AttributePanel } from './components/AttributePanel';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
+import { Palette } from './components/Palette';
 
 const nodeTypes = {
     functionNode: FunctionNode,
@@ -73,8 +75,13 @@ function DiagramEditor() {
         x: number; y: number; items: ContextMenuItem[];
     } | null>(null);
     const [dialog, setDialog] = useState<DialogState>(null);
+    const [locked, setLocked] = useState(false);
+    const [optionsVisible, setOptionsVisible] = useState(false);
 
-    const { screenToFlowPosition } = useReactFlow();
+    // Track ctrl-drag: source function node id
+    const ctrlDragSource = useRef<string | null>(null);
+
+    const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow();
 
     // ── Receive messages from extension ─────────────────────────────────────
     useEffect(() => {
@@ -121,9 +128,10 @@ function DiagramEditor() {
 
     // ── Drag stop → persist positions to extension ───────────────────────────
     const onNodeDragStop: NodeDragHandler = useCallback((_evt, node) => {
+        if (locked) { return; }
         const kind = node.type === 'functionNode' ? 'function' : 'interface';
-        const w = (node.measured?.width ?? (node.style?.width as number | undefined) ?? 200);
-        const h = (node.measured?.height ?? (node.style?.height as number | undefined) ?? 140);
+        const w = (node.measured?.width ?? (node.style?.width as number | undefined) ?? 800);
+        const h = (node.measured?.height ?? (node.style?.height as number | undefined) ?? 560);
         post({
             type: 'nodesMoved',
             moves: [{
@@ -136,7 +144,32 @@ function DiagramEditor() {
                 parentId: node.parentId,
             }],
         });
-    }, []);
+    }, [locked]);
+
+    // ── Node resize → persist new size ──────────────────────────────────────
+    const onNodesChangeWithResize: OnNodesChange = useCallback((changes: NodeChange[]) => {
+        onNodesChange(changes);
+        for (const change of changes) {
+            if (change.type === 'dimensions' && change.resizing === false) {
+                const node = nodes.find(n => n.id === change.id);
+                if (!node) { continue; }
+                const w = change.dimensions?.width ?? (node.style?.width as number | undefined) ?? 800;
+                const h = change.dimensions?.height ?? (node.style?.height as number | undefined) ?? 560;
+                post({
+                    type: 'nodesMoved',
+                    moves: [{
+                        id: node.id,
+                        kind: 'function',
+                        x: node.position.x,
+                        y: node.position.y,
+                        w,
+                        h,
+                        parentId: node.parentId,
+                    }],
+                });
+            }
+        }
+    }, [onNodesChange, nodes]);
 
     // ── Connect ──────────────────────────────────────────────────────────────
     const onConnect = useCallback((params: Connection) => {
@@ -193,6 +226,14 @@ function DiagramEditor() {
                     label: '+ Add Function',
                     onClick: () => setDialog({ kind: 'addFunction', rfX: rfPos.x, rfY: rfPos.y }),
                 },
+                {
+                    label: 'Build Skeletons',
+                    onClick: () => post({ type: 'buildSkeletons' }),
+                },
+                {
+                    label: 'Build',
+                    onClick: () => post({ type: 'build' }),
+                },
             ],
         });
     }, [screenToFlowPosition]);
@@ -213,6 +254,10 @@ function DiagramEditor() {
                 {
                     label: '+ Add Required Interface',
                     onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'required' }),
+                },
+                {
+                    label: 'Edit Function',
+                    onClick: () => post({ type: 'editFunction', id: fn.id }),
                 },
                 {
                     label: 'Delete Function',
@@ -241,6 +286,34 @@ function DiagramEditor() {
     const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind }) => {
         post({ type: 'updateInterface', id, ...patch });
     }, []);
+
+    // ── Ctrl+drag: create connected PI+RI between two functions ─────────────
+    const onNodeMouseDown: NodeMouseHandler = useCallback((evt, node) => {
+        if (evt.ctrlKey && node.type === 'functionNode') {
+            ctrlDragSource.current = node.id;
+        }
+    }, []);
+
+    const onNodeMouseUp: NodeMouseHandler = useCallback((_evt, node) => {
+        const srcId = ctrlDragSource.current;
+        ctrlDragSource.current = null;
+        if (!srcId || node.type !== 'functionNode' || node.id === srcId) { return; }
+        // Create matched RI on src, PI on target, and connect
+        post({
+            type: 'connectFunctions',
+            riId: uuid(),
+            piId: uuid(),
+            riFuncId: srcId,
+            piFuncId: node.id,
+        });
+    }, []);
+
+    // ── Palette actions ──────────────────────────────────────────────────────
+    const onPaletteAddFunction = useCallback(() => {
+        // Add at viewport center
+        const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+        setDialog({ kind: 'addFunction', rfX: center.x, rfY: center.y });
+    }, [screenToFlowPosition]);
 
     // ── Dialog confirm ───────────────────────────────────────────────────────
     const onConfirmFunction = useCallback((name: string, language: string, rfX: number, rfY: number, parentId?: string) => {
@@ -278,41 +351,58 @@ function DiagramEditor() {
 
     return (
         <div style={{ width: '100vw', height: '100vh', background: '#1e1e2e', position: 'relative' }}>
+            <Palette
+                onZoomIn={() => zoomIn()}
+                onZoomOut={() => zoomOut()}
+                onFitView={() => fitView({ padding: 0.1, maxZoom: 1 })}
+                onShowOptions={() => setOptionsVisible(v => !v)}
+                onAddFunction={onPaletteAddFunction}
+                locked={locked}
+                onToggleLock={() => setLocked(v => !v)}
+                optionsVisible={optionsVisible}
+            />
             <ReactFlow
-                nodes={nodes}
+                nodes={nodes.map(n => n.type === 'functionNode' ? { ...n, data: { ...n.data, locked } } : n)}
                 edges={edges}
-                onNodesChange={onNodesChange}
+                onNodesChange={onNodesChangeWithResize}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 onNodeDragStop={onNodeDragStop}
                 onConnect={onConnect}
-                onNodesDelete={onNodesDelete}
-                onEdgesDelete={onEdgesDelete}
+                onNodesDelete={locked ? undefined : onNodesDelete}
+                onEdgesDelete={locked ? undefined : onEdgesDelete}
                 onPaneContextMenu={onPaneContextMenu}
                 onNodeContextMenu={onNodeContextMenu}
+                onNodeMouseDown={onNodeMouseDown}
+                onNodeMouseUp={onNodeMouseUp}
                 connectionMode={ConnectionMode.Loose}
+                nodesDraggable={!locked}
+                nodesConnectable={!locked}
                 fitView
                 fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
                 minZoom={0.05}
                 maxZoom={4}
-                style={{ background: '#1e1e2e' }}
+                style={{ background: '#1e1e2e', marginLeft: 44 }}
             >
                 <Background color="#313244" variant={BackgroundVariant.Dots} />
-                <Controls />
+                <Controls style={{ display: 'none' }} />
                 <MiniMap
                     nodeColor={(n) => n.type === 'interfaceNode' ? '#89b4fa' : '#313244'}
                     style={{ background: '#181825' }}
+                    position="top-right"
                 />
             </ReactFlow>
 
-            <AttributePanel
-                selected={selected}
-                schema={diagramData?.schema ?? { attrs: [] }}
-                onUpdateFunction={onUpdateFunction}
-                onUpdateInterface={onUpdateInterface}
-            />
+            {(selected || optionsVisible) && (
+                <AttributePanel
+                    selected={selected}
+                    schema={diagramData?.schema ?? { attrs: [] }}
+                    onUpdateFunction={onUpdateFunction}
+                    onUpdateInterface={onUpdateInterface}
+                />
+            )}
 
             {contextMenu && (
                 <ContextMenu

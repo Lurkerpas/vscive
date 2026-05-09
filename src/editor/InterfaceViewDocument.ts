@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 import { parseIvXml } from '../parsers/IvXmlParser';
 import { parseUiXml, SC_SCALE } from '../parsers/UiXmlParser';
 import { parseAttrXml, EMPTY_SCHEMA } from '../parsers/AttrXmlParser';
@@ -215,6 +216,59 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             extraAttrs: {},
         };
         this.iv.connections.push(conn);
+    }
+
+    /**
+     * Create a matched RI on riFuncId and PI on piFuncId, then connect them.
+     * Used when the user Ctrl+drags between two functions.
+     */
+    connectFunctions(riId: string, piId: string, riFuncId: string, piFuncId: string): void {
+        const riFn = this.findFn(this.iv.functions, riFuncId);
+        const piFn = this.findFn(this.iv.functions, piFuncId);
+        if (!riFn || !piFn) { return; }
+
+        const ifaceName = `${riFn.name}_to_${piFn.name}`;
+
+        const riIface: InterfaceModel = {
+            id: riId,
+            name: ifaceName,
+            type: 'required',
+            kind: 'Sporadic',
+            parameters: [],
+            inheritPI: false,
+            autonamed: true,
+            properties: [],
+            extraAttrs: { layer: 'default', enable_multicast: 'true', required_system_element: 'NO' },
+        };
+        const piIface: InterfaceModel = {
+            id: piId,
+            name: ifaceName,
+            type: 'provided',
+            kind: 'Sporadic',
+            parameters: [],
+            inheritPI: false,
+            autonamed: true,
+            properties: [],
+            extraAttrs: { layer: 'default', enable_multicast: 'true', required_system_element: 'NO' },
+        };
+
+        riFn.requiredInterfaces.push(riIface);
+        piFn.providedInterfaces.push(piIface);
+
+        // Place interfaces on the appropriate edges
+        const riLayout = this.ui.entities[riFuncId];
+        const piLayout = this.ui.entities[piFuncId];
+        if (riLayout && riLayout.coordinates.length >= 4) {
+            const [x1, y1, , y2] = riLayout.coordinates;
+            this.ui.entities[riId] = { coordinates: [Math.round(x1), Math.round((y1 + y2) / 2)] };
+        }
+        if (piLayout && piLayout.coordinates.length >= 4) {
+            const [x1, y1, x2, y2] = piLayout.coordinates;
+            this.ui.entities[piId] = { coordinates: [Math.round(x2), Math.round((y1 + y2) / 2)] };
+        }
+
+        const connId = randomUUID();
+        this.connect(connId, riId, piId);
     }
 
     deleteEntities(ids: string[]): void {
