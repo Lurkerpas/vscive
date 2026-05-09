@@ -10,7 +10,7 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": ["onCustomEditor:vscive.interfaceViewEditor"],
   "main": "./out/extension.js",
   "contributes": {
     "customEditors": [
@@ -43,6 +43,10 @@
     "package": "vsce package",
     "lint": "eslint src"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vscive/vscive"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^19.2.14",
@@ -52,7 +56,7 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@vitejs/plugin-react": "^4.7.0",
-    "@vscode/vsce": "^3.0.0",
+    "@vscode/vsce": "^2.32.0",
     "eslint": "^9.0.0",
     "typescript": "^5.4.0",
     "vite": "^5.4.21"
@@ -62,5 +66,8 @@
     "@xyflow/react": "^12.10.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
+  },
+  "overrides": {
+    "undici": "5"
   }
 }

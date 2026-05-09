@@ -29,21 +29,34 @@ export default function App() {
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [diagramData, setDiagramData] = useState<DiagramData | null>(null);
     const [selected, setSelected] = useState<FunctionModel | InterfaceModel | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [waiting, setWaiting] = useState(true);
 
     // Receive messages from extension
     useEffect(() => {
         const handler = (event: MessageEvent) => {
             const msg = event.data as ExtensionMessage;
             if (msg.type === 'load') {
-                setDiagramData(msg.data);
-                const { nodes: n, edges: e } = buildGraph(msg.data.iv, msg.data.ui);
-                setNodes(n);
-                setEdges(e);
+                try {
+                    setDiagramData(msg.data);
+                    const { nodes: n, edges: e } = buildGraph(msg.data.iv, msg.data.ui);
+                    setNodes(n);
+                    setEdges(e);
+                    setWaiting(false);
+                } catch (err) {
+                    setLoadError(String(err));
+                    setWaiting(false);
+                }
             }
         };
         window.addEventListener('message', handler);
         // Signal ready to extension host
-        vscodeApi?.postMessage({ type: 'ready' });
+        if (vscodeApi) {
+            vscodeApi.postMessage({ type: 'ready' });
+        } else {
+            setLoadError('acquireVsCodeApi is not available (not running inside VS Code?)');
+            setWaiting(false);
+        }
         return () => window.removeEventListener('message', handler);
     }, [setNodes, setEdges]);
 
@@ -71,6 +84,22 @@ export default function App() {
     }, [diagramData]);
 
     const onPaneClick = useCallback(() => setSelected(null), []);
+
+    if (waiting) {
+        return (
+            <div style={{ width: '100vw', height: '100vh', background: '#1e1e2e', color: '#cdd6f4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+                Loading diagram…
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div style={{ width: '100vw', height: '100vh', background: '#1e1e2e', color: '#f38ba8', padding: '2rem', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                Error: {loadError}
+            </div>
+        );
+    }
 
     return (
         <div style={{ width: '100vw', height: '100vh', background: '#1e1e2e', position: 'relative' }}>

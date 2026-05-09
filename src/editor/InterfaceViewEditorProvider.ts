@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { InterfaceViewDocument } from './InterfaceViewDocument';
 import { DiagramData, ExtensionMessage, WebviewMessage } from '../model/types';
+import { log } from '../logger';
 
 export class InterfaceViewEditorProvider
     implements vscode.CustomEditorProvider<InterfaceViewDocument> {
@@ -15,13 +16,22 @@ export class InterfaceViewEditorProvider
     constructor(private readonly extensionUri: vscode.Uri) { }
 
     async openCustomDocument(uri: vscode.Uri): Promise<InterfaceViewDocument> {
-        return InterfaceViewDocument.create(uri);
+        log(`openCustomDocument: ${uri.fsPath}`);
+        try {
+            const doc = await InterfaceViewDocument.create(uri);
+            log(`openCustomDocument OK: ${doc.iv.functions.length} functions, ${doc.iv.connections.length} connections`);
+            return doc;
+        } catch (err) {
+            log(`openCustomDocument FAILED: ${err}`);
+            throw err;
+        }
     }
 
     async resolveCustomEditor(
         document: InterfaceViewDocument,
         webviewPanel: vscode.WebviewPanel,
     ): Promise<void> {
+        log(`resolveCustomEditor: ${document.uri.fsPath}`);
         webviewPanel.webview.options = {
             enableScripts: true,
             localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'out', 'webview')],
@@ -29,8 +39,14 @@ export class InterfaceViewEditorProvider
         webviewPanel.webview.html = this.getHtml(webviewPanel.webview);
 
         webviewPanel.webview.onDidReceiveMessage((msg: WebviewMessage) => {
+            log(`webview message: ${msg.type}`);
             if (msg.type === 'ready') {
-                this.sendDiagram(webviewPanel.webview, document);
+                try {
+                    this.sendDiagram(webviewPanel.webview, document);
+                    log('sendDiagram: posted load message');
+                } catch (err) {
+                    log(`sendDiagram FAILED: ${err}`);
+                }
             }
         });
     }
@@ -66,10 +82,13 @@ export class InterfaceViewEditorProvider
             try {
                 const fs = require('fs') as typeof import('fs');
                 const assetsDir = path.join(base.fsPath, 'assets');
-                return fs.readdirSync(assetsDir)
-                    .filter((f: string) => f.endsWith('.js'))
-                    .map((f: string) => webview.asWebviewUri(vscode.Uri.joinPath(base, 'assets', f)));
-            } catch { return []; }
+                const files = fs.readdirSync(assetsDir).filter((f: string) => f.endsWith('.js'));
+                log(`getHtml: found JS assets: ${files.join(', ')}`);
+                return files.map((f: string) => webview.asWebviewUri(vscode.Uri.joinPath(base, 'assets', f)));
+            } catch (err) {
+                log(`getHtml: failed to read assets dir: ${err}`);
+                return [];
+            }
         })();
         const cssFiles = (() => {
             try {
