@@ -170,4 +170,4 @@ export type WebviewMessage =
     | { type: 'buildSkeletons' }
     | { type: 'build' }
     | { type: 'editFunction'; id: string }
-    | { type: 'connectFunctions'; riId: string; piId: string; riFuncId: string; piFuncId: string };
+    | { type: 'connectFunctions'; riId: string; piId: string; riFuncId: string; piFuncId: string; riRelX: number; riRelY: number; piRelX: number; piRelY: number };

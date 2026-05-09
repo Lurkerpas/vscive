@@ -7,17 +7,20 @@ interface FunctionNodeData {
     language: string;
     fn: FunctionModel;
     locked?: boolean;
+    isConnSrc?: boolean;
+    isConnTarget?: boolean;
     [key: string]: unknown;
 }
 
 export function FunctionNode({ data, selected }: NodeProps) {
     const d = data as FunctionNodeData;
     const caption = d.language ? `${d.label} [${d.language}]` : d.label;
+    const borderColor = d.isConnSrc ? '#a6e3a1' : selected ? '#89b4fa' : '#6c7086';
     return (
         <div style={{
             width: '100%',
             height: '100%',
-            border: `2px solid ${selected ? '#89b4fa' : '#6c7086'}`,
+            border: `2px solid ${borderColor}`,
             borderRadius: 6,
             background: '#1e1e2e',
             color: '#cdd6f4',

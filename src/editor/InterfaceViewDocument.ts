@@ -14,6 +14,8 @@ import {
 import { log } from '../logger';
 
 const SC_INV = 1 / SC_SCALE; // pixels → SC coords (= 20)
+const IFACE_W = 60;
+const IFACE_H = 80;
 
 /**
  * Legacy IV files embed coordinates as <Property name="Taste::coordinates"> on each entity
@@ -218,8 +220,6 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         const pX1 = pl?.coordinates[0] ?? 0;
         const pY1 = pl?.coordinates[1] ?? 0;
         // The relRf coords are the TOP-LEFT of the triangle; SC stores the center
-        const IFACE_W = 60;
-        const IFACE_H = 80;
         const scX = Math.round(pX1 + (relRfX + IFACE_W / 2) * SC_INV);
         const scY = Math.round(pY1 + (relRfY + IFACE_H / 2) * SC_INV);
 
@@ -270,7 +270,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
      * Create a matched RI on riFuncId and PI on piFuncId, then connect them.
      * Used when the user Ctrl+drags between two functions.
      */
-    connectFunctions(riId: string, piId: string, riFuncId: string, piFuncId: string): void {
+    connectFunctions(riId: string, piId: string, riFuncId: string, piFuncId: string, riRelX: number, riRelY: number, piRelX: number, piRelY: number): void {
         const riFn = this.findFn(this.iv.functions, riFuncId);
         const piFn = this.findFn(this.iv.functions, piFuncId);
         if (!riFn || !piFn) { return; }
@@ -303,17 +303,22 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         riFn.requiredInterfaces.push(riIface);
         piFn.providedInterfaces.push(piIface);
 
-        // Place interfaces on the appropriate edges
+        // Place interfaces at the clicked border positions (riRelX/Y, piRelX/Y are top-left of
+        // IFACE_W×IFACE_H box in flow-pixel coords relative to the host function's top-left)
         const riLayout = this.ui.entities[riFuncId];
         const piLayout = this.ui.entities[piFuncId];
-        if (riLayout && riLayout.coordinates.length >= 4) {
-            const [x1, y1, , y2] = riLayout.coordinates;
-            this.ui.entities[riId] = { coordinates: [Math.round(x1), Math.round((y1 + y2) / 2)] };
-        }
-        if (piLayout && piLayout.coordinates.length >= 4) {
-            const [x1, y1, x2, y2] = piLayout.coordinates;
-            this.ui.entities[piId] = { coordinates: [Math.round(x2), Math.round((y1 + y2) / 2)] };
-        }
+        const riOriginX = riLayout?.rootCoordinates?.[0] ?? riLayout?.coordinates[0] ?? 0;
+        const riOriginY = riLayout?.rootCoordinates?.[1] ?? riLayout?.coordinates[1] ?? 0;
+        const piOriginX = piLayout?.rootCoordinates?.[0] ?? piLayout?.coordinates[0] ?? 0;
+        const piOriginY = piLayout?.rootCoordinates?.[1] ?? piLayout?.coordinates[1] ?? 0;
+        this.ui.entities[riId] = { coordinates: [
+            Math.round(riOriginX + (riRelX + IFACE_W / 2) * SC_INV),
+            Math.round(riOriginY + (riRelY + IFACE_H / 2) * SC_INV),
+        ] };
+        this.ui.entities[piId] = { coordinates: [
+            Math.round(piOriginX + (piRelX + IFACE_W / 2) * SC_INV),
+            Math.round(piOriginY + (piRelY + IFACE_H / 2) * SC_INV),
+        ] };
 
         const connId = randomUUID();
         this.connect(connId, riId, piId);

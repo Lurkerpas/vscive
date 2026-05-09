@@ -127,7 +127,7 @@ export class InterfaceViewEditorProvider
                 }
                 case 'connectFunctions': {
                     const before = document.snapshot();
-                    document.connectFunctions(msg.riId, msg.piId, msg.riFuncId, msg.piFuncId);
+                    document.connectFunctions(msg.riId, msg.piId, msg.riFuncId, msg.piFuncId, msg.riRelX, msg.riRelY, msg.piRelX, msg.piRelY);
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;

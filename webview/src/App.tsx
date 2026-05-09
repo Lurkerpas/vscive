@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ReactFlow, Background, Controls, MiniMap,
     Node, Edge, NodeMouseHandler, NodeDragHandler, Connection,
@@ -78,8 +78,9 @@ function DiagramEditor() {
     const [locked, setLocked] = useState(false);
     const [optionsVisible, setOptionsVisible] = useState(false);
 
-    // Track ctrl-drag: source function node id
-    const ctrlDragSource = useRef<string | null>(null);
+    // ── Connect mode: click first function → select as source, click second → create RI+PI+connection
+    const [connectMode, setConnectMode] = useState(false);
+    const [connectSrc, setConnectSrc] = useState<{ id: string; relX: number; relY: number } | null>(null);
 
     const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow();
 
@@ -115,16 +116,71 @@ function DiagramEditor() {
         return () => window.removeEventListener('message', handler);
     }, [setNodes, setEdges]);
 
-    // ── Node click → select entity ───────────────────────────────────────────
-    const onNodeClick: NodeMouseHandler = useCallback((_evt, node) => {
+    /** Compute the absolute flow-space position of a node by walking the parent chain. */
+    const getAbsolutePos = useCallback((nodeId: string): { x: number; y: number } => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) { return { x: 0, y: 0 }; }
+        if (!node.parentId) { return { x: node.position.x, y: node.position.y }; }
+        const parent = getAbsolutePos(node.parentId);
+        return { x: parent.x + node.position.x, y: parent.y + node.position.y };
+    }, [nodes]);
+
+    /** Given a click event on a function node, compute the snapped interface position
+     *  (top-left of IFACE_W×IFACE_H box) in flow-pixel coords relative to the function's top-left. */
+    const clickToIfacePos = useCallback((evt: React.MouseEvent, node: Node): { relX: number; relY: number } => {
+        const absPos = getAbsolutePos(node.id);
+        const flowClick = screenToFlowPosition({ x: evt.clientX, y: evt.clientY });
+        const relX_raw = flowClick.x - absPos.x;
+        const relY_raw = flowClick.y - absPos.y;
+        const pw = node.measured?.width ?? (node.style?.width as number | undefined) ?? 800;
+        const ph = node.measured?.height ?? (node.style?.height as number | undefined) ?? 560;
+        const { x: relX, y: relY } = snapIfaceToEdge(relX_raw - IFACE_W / 2, relY_raw - IFACE_H / 2, pw, ph);
+        return { relX, relY };
+    }, [getAbsolutePos, screenToFlowPosition]);
+
+    // ── Node click → select entity, or pick connect-mode source/target ────────
+    const onNodeClick: NodeMouseHandler = useCallback((evt, node) => {
         if (!diagramData) { return; }
+
+        if (connectMode && node.type === 'functionNode') {
+            if (!connectSrc) {
+                // First click: select source function, record snapped border position
+                setConnectSrc({ id: node.id, ...clickToIfacePos(evt, node) });
+                return;
+            }
+            if (node.id !== connectSrc.id) {
+                // Second click: create connected RI+PI and exit connect mode
+                const { relX: piRelX, relY: piRelY } = clickToIfacePos(evt, node);
+                post({
+                    type: 'connectFunctions',
+                    riId: uuid(),
+                    piId: uuid(),
+                    riFuncId: connectSrc.id,
+                    piFuncId: node.id,
+                    riRelX: connectSrc.relX,
+                    riRelY: connectSrc.relY,
+                    piRelX,
+                    piRelY,
+                });
+            }
+            setConnectMode(false);
+            setConnectSrc(null);
+            return;
+        }
+
         setSelected(findEntity(diagramData.iv, node.id));
-    }, [diagramData]);
+    }, [diagramData, connectMode, connectSrc, clickToIfacePos]);
 
     const onPaneClick = useCallback(() => {
+        if (connectMode) {
+            // Cancel connect mode on background click
+            setConnectMode(false);
+            setConnectSrc(null);
+            return;
+        }
         setSelected(null);
         setContextMenu(null);
-    }, []);
+    }, [connectMode]);
 
     // ── Drag stop → persist positions to extension ───────────────────────────
     const onNodeDragStop: NodeDragHandler = useCallback((_evt, node) => {
@@ -259,6 +315,10 @@ function DiagramEditor() {
                     onClick: () => setDialog({ kind: 'addFunction', rfX: rfPos.x, rfY: rfPos.y }),
                 },
                 {
+                    label: '+ Add Connection',
+                    onClick: () => { setConnectMode(true); setConnectSrc(null); },
+                },
+                {
                     label: 'Build Skeletons',
                     onClick: () => post({ type: 'buildSkeletons' }),
                 },
@@ -319,27 +379,6 @@ function DiagramEditor() {
         post({ type: 'updateInterface', id, ...patch });
     }, []);
 
-    // ── Ctrl+drag: create connected PI+RI between two functions ─────────────
-    const onNodeMouseDown: NodeMouseHandler = useCallback((evt, node) => {
-        if (evt.ctrlKey && node.type === 'functionNode') {
-            ctrlDragSource.current = node.id;
-        }
-    }, []);
-
-    const onNodeMouseUp: NodeMouseHandler = useCallback((_evt, node) => {
-        const srcId = ctrlDragSource.current;
-        ctrlDragSource.current = null;
-        if (!srcId || node.type !== 'functionNode' || node.id === srcId) { return; }
-        // Create matched RI on src, PI on target, and connect
-        post({
-            type: 'connectFunctions',
-            riId: uuid(),
-            piId: uuid(),
-            riFuncId: srcId,
-            piFuncId: node.id,
-        });
-    }, []);
-
     // ── Palette actions ──────────────────────────────────────────────────────
     const onPaletteAddFunction = useCallback(() => {
         // Add at viewport center
@@ -382,19 +421,26 @@ function DiagramEditor() {
     }
 
     return (
-        <div style={{ width: '100vw', height: '100vh', background: '#1e1e2e', position: 'relative' }}>
+        <div style={{ width: '100vw', height: '100vh', background: '#1e1e2e', position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
             <Palette
                 onZoomIn={() => zoomIn()}
                 onZoomOut={() => zoomOut()}
                 onFitView={() => fitView({ padding: 0.1, maxZoom: 1 })}
                 onShowOptions={() => setOptionsVisible(v => !v)}
                 onAddFunction={onPaletteAddFunction}
+                onAddConnection={() => { setConnectMode(v => !v); setConnectSrc(null); }}
+                connectMode={connectMode}
                 locked={locked}
                 onToggleLock={() => setLocked(v => !v)}
                 optionsVisible={optionsVisible}
             />
             <ReactFlow
-                nodes={nodes.map(n => n.type === 'functionNode' ? { ...n, data: { ...n.data, locked } } : n)}
+                nodes={nodes.map(n => {
+                    if (n.type !== 'functionNode') { return n; }
+                    const isConnSrc = n.id === connectSrc?.id;
+                    const isConnTarget = connectMode && !connectSrc;
+                    return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget } };
+                })}
                 edges={edges}
                 onNodesChange={onNodesChangeWithResize}
                 onEdgesChange={onEdgesChange}
@@ -407,10 +453,8 @@ function DiagramEditor() {
                 onEdgesDelete={locked ? undefined : onEdgesDelete}
                 onPaneContextMenu={onPaneContextMenu}
                 onNodeContextMenu={onNodeContextMenu}
-                onNodeMouseDown={onNodeMouseDown}
-                onNodeMouseUp={onNodeMouseUp}
                 connectionMode={ConnectionMode.Loose}
-                nodesDraggable={!locked}
+                nodesDraggable={!locked && !connectMode}
                 nodesConnectable={!locked}
                 fitView
                 fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
@@ -451,6 +495,23 @@ function DiagramEditor() {
                 onConfirmInterface={onConfirmInterface}
                 onCancel={() => setDialog(null)}
             />
+
+            {/* Connect-mode status bar */}
+            {connectMode && (
+                <div style={{
+                    position: 'fixed', bottom: 0, left: 44, right: 0,
+                    background: '#313244', borderTop: '1px solid #89b4fa',
+                    color: '#89b4fa', fontFamily: 'sans-serif', fontSize: 13,
+                    padding: '6px 16px', zIndex: 100, pointerEvents: 'none',
+                    display: 'flex', alignItems: 'center', gap: 16,
+                }}>
+                    <span style={{ fontWeight: 700 }}>Connect mode</span>
+                    {connectSrc
+                        ? <span>Source selected — now click the target function. Click background to cancel.</span>
+                        : <span>Click the source function (will get a Required Interface). Click background to cancel.</span>
+                    }
+                </div>
+            )}
         </div>
     );
 }

@@ -6,6 +6,8 @@ interface PaletteProps {
     onFitView: () => void;
     onShowOptions: () => void;
     onAddFunction: () => void;
+    onAddConnection: () => void;
+    connectMode: boolean;
     locked: boolean;
     onToggleLock: () => void;
     optionsVisible: boolean;
@@ -74,6 +76,8 @@ export function Palette({
     onFitView,
     onShowOptions,
     onAddFunction,
+    onAddConnection,
+    connectMode,
     locked,
     onToggleLock,
     optionsVisible,
@@ -86,6 +90,7 @@ export function Palette({
             <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
             <PaletteBtn title="Show Options" onClick={onShowOptions} active={optionsVisible}>⚙</PaletteBtn>
             <PaletteBtn title="Add Function" onClick={onAddFunction}>＋▭</PaletteBtn>
+            <PaletteBtn title="Add Connection" onClick={onAddConnection} active={connectMode}>⇝</PaletteBtn>
             <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
             <PaletteBtn title={locked ? 'Unlock Diagram' : 'Lock Diagram from Modification'} onClick={onToggleLock} active={locked} danger={locked}>
                 {locked ? '🔒' : '🔓'}

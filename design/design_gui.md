@@ -39,4 +39,4 @@ Right clicking on a function shall present a menu with the following options:
 - Edit Function (launching editor for its source, logic to be implemented later),
 - Delete Function.
 
-Clicking Control and dragging from one function to another shall created a pair of connected Required and Provided Interfaces, as described in the requirements.
+Pressing "C" and dragging from one function to another shall created a pair of connected Required and Provided Interfaces, as described in the requirements.
