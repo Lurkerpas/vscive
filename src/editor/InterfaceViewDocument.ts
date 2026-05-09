@@ -166,13 +166,10 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         const pl = this.ui.entities[funcId];
         const pX1 = pl?.coordinates[0] ?? 0;
         const pY1 = pl?.coordinates[1] ?? 0;
-        // The relRf coords are the TOP-LEFT of the pill; SC stores the center
-        const IFACE_H = 28;
-        const IFACE_MIN_W = 120;
-        const IFACE_CHAR_W = 9;
-        const IFACE_PADDING = 30;
-        const ifaceW = Math.max(IFACE_MIN_W, name.length * IFACE_CHAR_W + IFACE_PADDING);
-        const scX = Math.round(pX1 + (relRfX + ifaceW / 2) * SC_INV);
+        // The relRf coords are the TOP-LEFT of the triangle; SC stores the center
+        const IFACE_W = 60;
+        const IFACE_H = 80;
+        const scX = Math.round(pX1 + (relRfX + IFACE_W / 2) * SC_INV);
         const scY = Math.round(pY1 + (relRfY + IFACE_H / 2) * SC_INV);
 
         const newIface: InterfaceModel = {

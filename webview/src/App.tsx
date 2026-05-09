@@ -11,7 +11,7 @@ import '@xyflow/react/dist/style.css';
 import {
     DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind, WebviewMessage,
 } from '../../src/model/types';
-import { buildGraph } from './transform';
+import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge } from './transform';
 import { FunctionNode } from './components/FunctionNode';
 import { InterfaceNode } from './components/InterfaceNode';
 import { AttributePanel } from './components/AttributePanel';
@@ -60,6 +60,25 @@ function findEntity(iv: { functions: FunctionModel[] }, id: string): FunctionMod
 
 function isInterface(e: FunctionModel | InterfaceModel | null): e is InterfaceModel {
     return e !== null && 'kind' in e;
+}
+
+/** Snap an interface node (width IFACE_W × IFACE_H) to the nearest edge of its parent. */
+function snapIfaceToEdge(
+    x: number, y: number, pw: number, ph: number,
+): { x: number; y: number; edge: IfaceEdge } {
+    const cx = x + IFACE_W / 2;
+    const cy = y + IFACE_H / 2;
+    const dLeft   = Math.abs(cx);
+    const dRight  = Math.abs(pw - cx);
+    const dTop    = Math.abs(cy);
+    const dBottom = Math.abs(ph - cy);
+    const min = Math.min(dLeft, dRight, dTop, dBottom);
+    const clampY = (v: number) => Math.max(-IFACE_H / 2, Math.min(ph - IFACE_H / 2, v));
+    const clampX = (v: number) => Math.max(-IFACE_W / 2, Math.min(pw - IFACE_W / 2, v));
+    if (min === dLeft)   { return { x: -IFACE_W, y: clampY(cy - IFACE_H / 2), edge: 'left' }; }
+    if (min === dRight)  { return { x: pw,        y: clampY(cy - IFACE_H / 2), edge: 'right' }; }
+    if (min === dTop)    { return { x: clampX(cx - IFACE_W / 2), y: -IFACE_H,  edge: 'top' }; }
+    return                        { x: clampX(cx - IFACE_W / 2), y: ph,         edge: 'bottom' };
 }
 
 // ─── Inner component (needs ReactFlow context for screenToFlowPosition) ─────
@@ -130,21 +149,31 @@ function DiagramEditor() {
     const onNodeDragStop: NodeDragHandler = useCallback((_evt, node) => {
         if (locked) { return; }
         const kind = node.type === 'functionNode' ? 'function' : 'interface';
-        const w = (node.measured?.width ?? (node.style?.width as number | undefined) ?? 800);
-        const h = (node.measured?.height ?? (node.style?.height as number | undefined) ?? 560);
+        let x = node.position.x;
+        let y = node.position.y;
+        const w = node.measured?.width ?? (node.style?.width as number | undefined) ?? 800;
+        const h = node.measured?.height ?? (node.style?.height as number | undefined) ?? 560;
+
+        if (node.type === 'interfaceNode') {
+            const parentNode = nodes.find(n => n.id === node.parentId);
+            if (parentNode) {
+                const pw = parentNode.measured?.width ?? (parentNode.style?.width as number | undefined) ?? 800;
+                const ph = parentNode.measured?.height ?? (parentNode.style?.height as number | undefined) ?? 560;
+                const snapped = snapIfaceToEdge(x, y, pw, ph);
+                x = snapped.x;
+                y = snapped.y;
+                setNodes(nds => nds.map(n => n.id === node.id
+                    ? { ...n, position: { x, y }, data: { ...n.data, edge: snapped.edge } }
+                    : n,
+                ));
+            }
+        }
+
         post({
             type: 'nodesMoved',
-            moves: [{
-                id: node.id,
-                kind,
-                x: node.position.x,
-                y: node.position.y,
-                w,
-                h,
-                parentId: node.parentId,
-            }],
+            moves: [{ id: node.id, kind, x, y, w, h, parentId: node.parentId }],
         });
-    }, [locked]);
+    }, [locked, nodes, setNodes]);
 
     // ── Node resize → persist new size ──────────────────────────────────────
     const onNodesChangeWithResize: OnNodesChange = useCallback((changes: NodeChange[]) => {
@@ -322,12 +351,12 @@ function DiagramEditor() {
     }, []);
 
     const onConfirmInterface = useCallback((name: string, kind: InterfaceKind, ifaceType: 'provided' | 'required', funcId: string) => {
-        // Position the new interface at the left or right edge of the parent function
         const parentNode = nodes.find(n => n.id === funcId);
-        const pw = parentNode?.measured?.width ?? (parentNode?.style?.width as number | undefined) ?? 200;
-        const ph = parentNode?.measured?.height ?? (parentNode?.style?.height as number | undefined) ?? 140;
-        const relRfX = ifaceType === 'provided' ? pw - 60 : -60;
-        const relRfY = ph / 2 - 14;
+        const pw = parentNode?.measured?.width ?? (parentNode?.style?.width as number | undefined) ?? 800;
+        const ph = parentNode?.measured?.height ?? (parentNode?.style?.height as number | undefined) ?? 560;
+        // PI on right edge, RI on left edge; centered vertically
+        const relRfX = ifaceType === 'provided' ? pw : -IFACE_W;
+        const relRfY = ph / 2 - IFACE_H / 2;
         post({ type: 'addInterface', id: uuid(), funcId, name, kind, ifaceType, relRfX, relRfY });
         setDialog(null);
     }, [nodes]);
