@@ -1,14 +1,21 @@
-.PHONY: all build watch package install clean
+.PHONY: all build build-ext build-webview watch package install clean
 
 VSIX := $(wildcard *.vsix)
 
 all: build
 
-# Compile TypeScript → out/
-build: node_modules
+# Compile both targets
+build: build-ext build-webview
+
+# Compile TypeScript extension host → out/
+build-ext: node_modules
 	npm run compile
 
-# Incremental watch build
+# Build React webview → out/webview/
+build-webview: node_modules
+	npm run compile-webview
+
+# Incremental watch build (extension host only)
 watch: node_modules
 	npm run watch
 
@@ -31,3 +38,4 @@ install: package
 # Remove build artifacts
 clean:
 	rm -rf out/ *.vsix
+

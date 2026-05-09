@@ -12,20 +12,55 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
-  "contributes": {},
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "vscive.interfaceViewEditor",
+        "displayName": "Interface View Editor",
+        "selector": [
+          {
+            "filenamePattern": "interfaceview.xml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "VSCIVE",
+      "properties": {
+        "vscive.attributesFilePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Attributes file. Defaults to $HOME/.local/default_attributes.xml."
+        }
+      }
+    }
+  },
   "scripts": {
     "compile": "tsc -p ./",
+    "compile-webview": "vite build",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "lint": "eslint src"
   },
   "devDependencies": {
-    "@types/vscode": "^1.90.0",
     "@types/node": "^20.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/vscode": "^1.90.0",
+    "@types/xmldom": "^0.1.34",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vscode/vsce": "^3.0.0",
     "eslint": "^9.0.0",
     "typescript": "^5.4.0",
-    "@vscode/vsce": "^3.0.0"
+    "vite": "^5.4.21"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.10",
+    "@xyflow/react": "^12.10.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   }
 }
