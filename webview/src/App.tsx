@@ -414,7 +414,7 @@ function DiagramEditor() {
                 nodesConnectable={!locked}
                 fitView
                 fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
-                minZoom={0.05}
+                minZoom={0.005}
                 maxZoom={4}
                 style={{ background: '#1e1e2e', marginLeft: 44 }}
             >
