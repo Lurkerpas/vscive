@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ReactFlow, Background, Controls, MiniMap,
     Node, Edge, NodeMouseHandler, NodeDragHandler, Connection,
@@ -80,8 +80,6 @@ function DiagramEditor() {
     const [locked, setLocked] = useState(false);
     const [optionsVisible, setOptionsVisible] = useState(false);
     const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
-
-    const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
 
     // ── Connect mode: click first function → select as source, click second → create RI+PI+connection
     const [connectMode, setConnectMode] = useState(false);
@@ -352,66 +350,160 @@ function DiagramEditor() {
 
     // ── Export image ─────────────────────────────────────────────────────────
     const onExportImage = useCallback(async (format: 'png' | 'svg') => {
-        const captureEl = reactFlowWrapperRef.current?.querySelector<HTMLElement>('.react-flow__viewport');
-        if (!captureEl) { return; }
+        if (nodes.length === 0) { return; }
 
-        // Compute bounding box from root function nodes (absolute positions)
-        const fnNodes = nodes.filter(n => n.type === 'functionNode' && !n.parentId);
-        if (fnNodes.length === 0) { return; }
+        const IFACE_W_EX = 60, IFACE_H_EX = 80;
+        const KIND_COLORS: Record<string, string> = {
+            Cyclic: '#a6e3a1', Sporadic: '#89b4fa', Protected: '#fab387', Unprotected: '#f38ba8',
+        };
+        const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        // Resolve absolute flow-coordinate position for any node
+        const nodeMap = new Map(nodes.map(n => [n.id, n]));
+        const absPos = (n: Node): { x: number; y: number } => {
+            if (!n.parentId) { return { x: n.position.x, y: n.position.y }; }
+            const parent = nodeMap.get(n.parentId);
+            if (!parent) { return { x: n.position.x, y: n.position.y }; }
+            const pp = absPos(parent);
+            return { x: pp.x + n.position.x, y: pp.y + n.position.y };
+        };
+
+        // Compute bounding box over all nodes
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const n of fnNodes) {
-            const x = n.position.x;
-            const y = n.position.y;
-            const w = n.measured?.width ?? (n.style?.width as number | undefined) ?? 200;
-            const h = n.measured?.height ?? (n.style?.height as number | undefined) ?? 100;
-            if (x < minX) { minX = x; }
-            if (y < minY) { minY = y; }
-            if (x + w > maxX) { maxX = x + w; }
-            if (y + h > maxY) { maxY = y + h; }
+        for (const n of nodes) {
+            const p = absPos(n);
+            const w = n.measured?.width ?? IFACE_W_EX;
+            const h = n.measured?.height ?? IFACE_H_EX;
+            if (p.x < minX) { minX = p.x; }
+            if (p.y < minY) { minY = p.y; }
+            if (p.x + w > maxX) { maxX = p.x + w; }
+            if (p.y + h > maxY) { maxY = p.y + h; }
         }
 
-        const pad = 40;
-        const contentW = maxX - minX;
-        const contentH = maxY - minY;
-        const imageW = Math.max(contentW + pad * 2, 400);
-        const imageH = Math.max(contentH + pad * 2, 300);
-        const zoom = Math.min(imageW / (contentW + pad * 2), imageH / (contentH + pad * 2), 2);
-        const tx = pad - minX * zoom;
-        const ty = pad - minY * zoom;
+        const pad = 60;
+        const svgW = Math.max(maxX - minX + pad * 2, 400);
+        const svgH = Math.max(maxY - minY + pad * 2, 300);
+        const ox = pad - minX;
+        const oy = pad - minY;
 
-        // Collect all CSS rules from loaded stylesheets
-        let css = '';
-        for (const sheet of Array.from(document.styleSheets)) {
-            try { css += Array.from(sheet.cssRules).map(r => r.cssText).join('\n'); } catch { /* skip */ }
+        const parts: string[] = [];
+        parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">`);
+        parts.push(`<rect width="100%" height="100%" fill="${options.canvasColor}"/>`);
+
+        // Edges (drawn below nodes)
+        for (const e of edges) {
+            const src = nodeMap.get(e.source);
+            const tgt = nodeMap.get(e.target);
+            if (!src || !tgt) { continue; }
+            const sp = absPos(src), tp = absPos(tgt);
+            const srcEdge = (src.data as Record<string,unknown>).edge as string ?? 'left';
+            const tgtEdge = (tgt.data as Record<string,unknown>).edge as string ?? 'left';
+            // Handle = outside midpoint of the triangle
+            const hx = (n: Node, p: {x:number;y:number}, edge: string) => {
+                const w = n.measured?.width ?? IFACE_W_EX;
+                switch (edge) {
+                    case 'right': return p.x + ox + w;
+                    case 'top':   return p.x + ox + w / 2;
+                    case 'bottom':return p.x + ox + w / 2;
+                    default:      return p.x + ox;
+                }
+            };
+            const hy = (n: Node, p: {x:number;y:number}, edge: string) => {
+                const h = n.measured?.height ?? IFACE_H_EX;
+                switch (edge) {
+                    case 'top':    return p.y + oy;
+                    case 'bottom': return p.y + oy + h;
+                    default:       return p.y + oy + h / 2;
+                }
+            };
+            const sx = hx(src, sp, srcEdge), sy = hy(src, sp, srcEdge);
+            const tx2 = hx(tgt, tp, tgtEdge), ty2 = hy(tgt, tp, tgtEdge);
+            const dx = Math.abs(tx2 - sx) * 0.5;
+            // Stroke width relative to iface size
+            const sw = Math.max(2, IFACE_W_EX * 0.05);
+            parts.push(`<path d="M${sx},${sy} C${sx+dx},${sy} ${tx2-dx},${ty2} ${tx2},${ty2}" stroke="#6c7086" stroke-width="${sw}" fill="none"/>`);
+            if (e.label) {
+                const lx = (sx + tx2) / 2, ly = (sy + ty2) / 2;
+                const labelFs = IFACE_H_EX * 0.4;
+                const labelW = String(e.label).length * labelFs * 0.6 + 12;
+                parts.push(`<rect x="${lx - labelW/2}" y="${ly - labelFs - 2}" width="${labelW}" height="${labelFs + 6}" fill="${options.canvasColor}" rx="3"/>`);
+                parts.push(`<text x="${lx}" y="${ly}" text-anchor="middle" fill="#cdd6f4" font-size="${labelFs}" font-family="sans-serif">${esc(String(e.label))}</text>`);
+            }
         }
 
-        // Clone the ReactFlow viewport and apply the export transform
-        const clone = captureEl.cloneNode(true) as HTMLElement;
-        clone.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
-        clone.style.transformOrigin = 'top left';
+        // Function nodes
+        for (const n of nodes.filter(n => n.type === 'functionNode')) {
+            const p = absPos(n);
+            const x = p.x + ox, y = p.y + oy;
+            const w = n.measured?.width ?? 200;
+            const h = n.measured?.height ?? 100;
+            const d = n.data as Record<string, unknown>;
+            const caption = d.language ? `${d.label} [${d.language}]` : String(d.label ?? '');
+            const fs = (d.fontSizeFn as number | undefined) ?? 90;
+            // Header height matches FunctionNode: font-size * line-height + top/bottom padding
+            const headerH = Math.round(fs * 1.2 + 12);
+            parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#1e1e2e" stroke="#6c7086" stroke-width="3" rx="6"/>`);
+            parts.push(`<rect x="${x+2}" y="${y+2}" width="${w-4}" height="${headerH}" fill="#313244" rx="4"/>`);
+            // Square off the bottom corners of the header bar
+            parts.push(`<rect x="${x+2}" y="${y+2+headerH/2}" width="${w-4}" height="${headerH/2}" fill="#313244"/>`);
+            parts.push(`<line x1="${x}" y1="${y+headerH+2}" x2="${x+w}" y2="${y+headerH+2}" stroke="#6c7086" stroke-width="1"/>`);
+            // Vertically center text in header
+            const textY = y + 2 + headerH * 0.7;
+            parts.push(`<text x="${x+10}" y="${textY}" fill="#cdd6f4" font-size="${fs}" font-weight="bold" font-family="sans-serif">${esc(caption)}</text>`);
+        }
 
-        const svgStr = [
-            `<svg xmlns="http://www.w3.org/2000/svg" width="${imageW}" height="${imageH}">`,
-            `<rect width="100%" height="100%" fill="${options.canvasColor}"/>`,
-            `<foreignObject x="0" y="0" width="${imageW}" height="${imageH}">`,
-            `<div xmlns="http://www.w3.org/1999/xhtml"`,
-            ` style="width:${imageW}px;height:${imageH}px;overflow:hidden;background:${options.canvasColor}">`,
-            `<style>${css}</style>`,
-            clone.outerHTML,
-            `</div></foreignObject></svg>`,
-        ].join('');
+        // Interface nodes
+        for (const n of nodes.filter(n => n.type === 'interfaceNode')) {
+            const p = absPos(n);
+            const x = p.x + ox, y = p.y + oy;
+            const d = n.data as Record<string, unknown>;
+            const iface = d.iface as { kind: string; type: string; name: string };
+            const edge = (d.edge as string) ?? 'left';
+            const color = KIND_COLORS[iface.kind] ?? '#cdd6f4';
+            const fs = (d.fontSizeIface as number | undefined) ?? 45;
 
-        const svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+            const tipDir = iface.type === 'provided'
+                ? (edge === 'left' ? 'right' : edge === 'right' ? 'left' : edge === 'top' ? 'down' : 'up')
+                : edge;
+
+            let pts: string;
+            const W = IFACE_W_EX, H = IFACE_H_EX;
+            switch (tipDir) {
+                case 'right': pts = `${x},${y} ${x},${y+H} ${x+W},${y+H/2}`; break;
+                case 'left':  pts = `${x+W},${y} ${x+W},${y+H} ${x},${y+H/2}`; break;
+                case 'down':  pts = `${x},${y} ${x+W},${y} ${x+W/2},${y+H}`; break;
+                default:      pts = `${x},${y+H} ${x+W},${y+H} ${x+W/2},${y}`; break; // up
+            }
+            parts.push(`<polygon points="${pts}" fill="${color}" fill-opacity="0.3" stroke="${color}" stroke-width="2"/>`);
+
+            // Label inside function body, matching InterfaceNode label placement
+            const GAP = 8;
+            let lx: number, ly: number, anchor: string;
+            switch (edge) {
+                case 'left':   lx = x + W + GAP; ly = y + H / 2 + fs * 0.35; anchor = 'start'; break;
+                case 'right':  lx = x - GAP;     ly = y + H / 2 + fs * 0.35; anchor = 'end';   break;
+                case 'top':    lx = x + W / 2;   ly = y + H + GAP + fs;      anchor = 'middle'; break;
+                default:       lx = x + W / 2;   ly = y - GAP;                anchor = 'middle'; break;
+            }
+            parts.push(`<text x="${lx}" y="${ly}" text-anchor="${anchor}" fill="#cdd6f4" font-size="${fs}" font-family="sans-serif">${esc(iface.name)}</text>`);
+        }
+
+        parts.push('</svg>');
+        const svgStr = parts.join('\n');
+        // base64-encode so the extension handler (Buffer.from(...,'base64')) and
+        // canvas Image loading both work correctly with the data: CSP directive
+        const svgB64 = btoa(Array.from(new TextEncoder().encode(svgStr), b => String.fromCharCode(b)).join(''));
+        const svgDataUrl = `data:image/svg+xml;base64,${svgB64}`;
 
         if (format === 'svg') {
             post({ type: 'exportImage', format, dataUrl: svgDataUrl });
             return;
         }
 
-        // PNG: render the SVG onto a canvas
+        // PNG: render native SVG (no foreignObject) onto canvas — works in Chromium
         const canvas = document.createElement('canvas');
-        canvas.width = imageW;
-        canvas.height = imageH;
+        canvas.width = svgW;
+        canvas.height = svgH;
         const ctx = canvas.getContext('2d');
         if (!ctx) { post({ type: 'exportImage', format: 'png', dataUrl: svgDataUrl }); return; }
         await new Promise<void>(resolve => {
@@ -421,7 +513,7 @@ function DiagramEditor() {
             img.src = svgDataUrl;
         });
         post({ type: 'exportImage', format: 'png', dataUrl: canvas.toDataURL('image/png') });
-    }, [nodes, options.canvasColor]);
+    }, [nodes, edges, options.canvasColor]);
 
     // ── Context menus ────────────────────────────────────────────────────────
     const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => {
@@ -554,7 +646,7 @@ function DiagramEditor() {
     }
 
     return (
-        <div ref={reactFlowWrapperRef} style={{ width: '100vw', height: '100vh', background: options.canvasColor, position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
+        <div style={{ width: '100vw', height: '100vh', background: options.canvasColor, position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
             <Palette
                 onZoomIn={() => zoomIn()}
                 onZoomOut={() => zoomOut()}

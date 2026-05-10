@@ -309,7 +309,7 @@ export class InterfaceViewEditorProvider
             } catch { return []; }
         })();
 
-        const csp = `default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource};`;
+        const csp = `default-src 'none'; img-src data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource};`;
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
