@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { EdgeProps, BaseEdge, useReactFlow } from '@xyflow/react';
 import { post } from '../vscodeApi';
 import { useEdgeMenu } from './EdgeMenuContext';
+import { Waypoint, WAYPOINT_NODE_RADIUS, WAYPOINT_NODE_SIZE, makeWaypointNodeId } from '../waypoints';
 
-interface Waypoint { x: number; y: number; }
 
 function distPointToSegment(p: Waypoint, a: Waypoint, b: Waypoint): number {
     const dx = b.x - a.x;
@@ -34,21 +34,13 @@ export function RoutedEdge({
     id, sourceX, sourceY, targetX, targetY,
     label, labelStyle, selected, data, style,
 }: EdgeProps) {
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, setNodes } = useReactFlow();
     const { showContextMenu } = useEdgeMenu();
-    const initialWaypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? [];
+    const waypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? [];
     const locked = (data as { locked?: boolean })?.locked ?? false;
-    const [localWps, setLocalWps] = useState<Waypoint[]>(initialWaypoints);
-    const draggingIdx = useRef<number | null>(null);
-
-    // Sync waypoints when the model is reloaded externally (e.g. undo/redo)
-    const wpKey = JSON.stringify(initialWaypoints);
-    useEffect(() => {
-        setLocalWps(JSON.parse(wpKey) as Waypoint[]);
-    }, [wpKey]);
 
     // Build polyline path: source → waypoints → target
-    const allPts = [{ x: sourceX, y: sourceY }, ...localWps, { x: targetX, y: targetY }];
+    const allPts = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }];
     let pathD = `M ${allPts[0].x},${allPts[0].y}`;
     for (let i = 1; i < allPts.length; i++) {
         pathD += ` L ${allPts[i].x},${allPts[i].y}`;
@@ -59,59 +51,6 @@ export function RoutedEdge({
     const labelX = (allPts[midI - 1].x + allPts[midI].x) / 2;
     const labelY = (allPts[midI - 1].y + allPts[midI].y) / 2;
 
-    // ── Waypoint drag handlers ────────────────────────────────────────────
-    const onHandlePointerDown = (e: React.PointerEvent, idx: number) => {
-        if (locked) { return; }
-        if (e.button !== 0) { return; } // only primary button
-        e.preventDefault();
-        e.stopPropagation();
-        draggingIdx.current = idx;
-        (e.target as Element).setPointerCapture(e.pointerId);
-    };
-
-    const onHandlePointerMove = (e: React.PointerEvent, idx: number) => {
-        if (locked) { return; }
-        if (draggingIdx.current !== idx) { return; }
-        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        setLocalWps(wps => wps.map((wp, i) => i === idx ? pos : wp));
-    };
-
-    const onHandlePointerUp = (e: React.PointerEvent, idx: number) => {
-        if (locked) { return; }
-        if (draggingIdx.current !== idx) { return; }
-        draggingIdx.current = null;
-        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        setLocalWps(wps => {
-            const next = wps.map((wp, i) => i === idx ? pos : wp);
-            post({ type: 'updateConnectionWaypoints', id, waypoints: next });
-            return next;
-        });
-    };
-
-    // ── Waypoint right-click → "Remove Node" / "Remove Connection" ───────
-    const onCircleContextMenu = (e: React.MouseEvent, idx: number) => {
-        if (locked) { return; }
-        e.preventDefault();
-        e.stopPropagation();
-        showContextMenu(e.clientX, e.clientY, [
-            {
-                label: 'Remove Node',
-                onClick: () => {
-                    setLocalWps(wps => {
-                        const next = wps.filter((_, i) => i !== idx);
-                        post({ type: 'updateConnectionWaypoints', id, waypoints: next });
-                        return next;
-                    });
-                },
-            },
-            {
-                label: 'Remove Connection',
-                danger: true,
-                onClick: () => post({ type: 'delete', ids: [id] }),
-            },
-        ]);
-    };
-
     // ── Edge path right-click → "Add Node" / "Remove Connection" ─────────
     const onPathContextMenu = (e: React.MouseEvent) => {
         if (locked) { return; }
@@ -119,12 +58,30 @@ export function RoutedEdge({
         e.stopPropagation();
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         // Compute nearest-segment insertion eagerly so the position is captured at right-click time
-        const { wps: insertedWps } = nearestSegmentInsertion(pos, allPts, localWps);
+        const { wps: insertedWps } = nearestSegmentInsertion(pos, allPts, waypoints);
         showContextMenu(e.clientX, e.clientY, [
             {
                 label: 'Add Node',
                 onClick: () => {
-                    setLocalWps(insertedWps);
+                    setNodes(nodes => [
+                        ...nodes.filter(n => !n.id.startsWith(`${id}::wp::`)),
+                        ...insertedWps.map((wp, index) => ({
+                            id: makeWaypointNodeId(id, index),
+                            type: 'waypointNode',
+                            position: {
+                                x: wp.x - WAYPOINT_NODE_RADIUS,
+                                y: wp.y - WAYPOINT_NODE_RADIUS,
+                            },
+                            width: WAYPOINT_NODE_SIZE,
+                            height: WAYPOINT_NODE_SIZE,
+                            measured: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+                            draggable: true,
+                            selectable: true,
+                            deletable: true,
+                            data: { connectionId: id, waypointIndex: index },
+                            style: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+                        })),
+                    ]);
                     post({ type: 'updateConnectionWaypoints', id, waypoints: insertedWps });
                 },
             },
@@ -157,23 +114,6 @@ export function RoutedEdge({
                 onContextMenu={onPathContextMenu}
                 style={{ cursor: 'default' }}
             />
-            {/* Draggable waypoint handles */}
-            {localWps.map((wp, idx) => (
-                <circle
-                    key={idx}
-                    cx={wp.x}
-                    cy={wp.y}
-                    r={5}
-                    fill="#cba6f7"
-                    stroke="#1e1e2e"
-                    strokeWidth={1.5}
-                    style={{ cursor: 'move' }}
-                    onPointerDown={e => onHandlePointerDown(e, idx)}
-                    onPointerMove={e => onHandlePointerMove(e, idx)}
-                    onPointerUp={e => onHandlePointerUp(e, idx)}
-                    onContextMenu={e => onCircleContextMenu(e, idx)}
-                />
-            ))}
         </>
     );
 }

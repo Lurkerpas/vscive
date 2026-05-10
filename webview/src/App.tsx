@@ -16,6 +16,7 @@ import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToE
 import { FunctionNode } from './components/FunctionNode';
 import { InterfaceNode } from './components/InterfaceNode';
 import { RoutedEdge } from './components/RoutedEdge';
+import { WaypointNode } from './components/WaypointNode';
 import { post, vscodeApi } from './vscodeApi';
 import { AttributePanel } from './components/AttributePanel';
 import { OptionsPanel } from './components/OptionsPanel';
@@ -23,10 +24,12 @@ import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { EdgeMenuContext } from './components/EdgeMenuContext';
 import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
 import { Palette } from './components/Palette';
+import { Waypoint, isWaypointNodeId, parseWaypointNodeId, waypointCenterFromNode } from './waypoints';
 
 const nodeTypes = {
     functionNode: FunctionNode,
     interfaceNode: InterfaceNode,
+    waypointNode: WaypointNode,
 };
 
 const edgeTypes = {
@@ -69,6 +72,44 @@ function snapToGrid(value: number, grid: number): number {
     return Math.round(value / grid) * grid;
 }
 
+function collectConnectionWaypoints(nodes: Node[], connectionId: string, overrideNode?: Node): Waypoint[] {
+    return nodes
+        .filter(node => {
+            const parsed = parseWaypointNodeId(node.id);
+            return parsed?.connectionId === connectionId;
+        })
+        .map(node => {
+            if (overrideNode && node.id === overrideNode.id) { return overrideNode; }
+            return node;
+        })
+        .sort((a, b) => {
+            const left = parseWaypointNodeId(a.id);
+            const right = parseWaypointNodeId(b.id);
+            return (left?.index ?? 0) - (right?.index ?? 0);
+        })
+        .map(waypointCenterFromNode);
+}
+
+function replaceConnectionWaypointNodes(nodes: Node[], connectionId: string, waypoints: Waypoint[]): Node[] {
+    const preserved = nodes.filter(node => parseWaypointNodeId(node.id)?.connectionId !== connectionId);
+    return [
+        ...preserved,
+        ...waypoints.map((waypoint, index) => ({
+            id: `${connectionId}::wp::${index}`,
+            type: 'waypointNode',
+            position: { x: waypoint.x - 10, y: waypoint.y - 10 },
+            width: 20,
+            height: 20,
+            measured: { width: 20, height: 20 },
+            draggable: true,
+            selectable: true,
+            deletable: true,
+            data: { connectionId, waypointIndex: index },
+            style: { width: 20, height: 20 },
+        })),
+    ];
+}
+
 // ─── Inner component (needs ReactFlow context for screenToFlowPosition) ─────
 
 function DiagramEditor() {
@@ -102,9 +143,13 @@ function DiagramEditor() {
         () => edges.map(e => ({
             ...e,
             labelStyle: { ...(e.labelStyle ?? {}), fontSize: options.fontSizeConn },
-            data: { ...(e.data as Record<string, unknown> | undefined), locked },
+            data: {
+                ...(e.data as Record<string, unknown> | undefined),
+                locked,
+                waypoints: collectConnectionWaypoints(nodes, e.id),
+            },
         })),
-        [edges, options.fontSizeConn, locked],
+        [edges, nodes, options.fontSizeConn, locked],
     );
 
     const selectedFunction = useMemo(
@@ -174,6 +219,11 @@ function DiagramEditor() {
     const onNodeClick: NodeMouseHandler = useCallback((evt, node) => {
         if (!diagramData) { return; }
 
+        if (isWaypointNodeId(node.id)) {
+            setSelected(null);
+            return;
+        }
+
         if (connectMode && node.type === 'functionNode') {
             if (!connectSrc) {
                 // First click: select source function, record snapped border position
@@ -217,6 +267,22 @@ function DiagramEditor() {
     // ── Drag stop → persist positions to extension ───────────────────────────
     const onNodeDragStop: NodeDragHandler = useCallback((_evt, node) => {
         if (locked) { return; }
+        if (node.type === 'waypointNode') {
+            const waypointNode = {
+                ...node,
+                width: node.width ?? 20,
+                height: node.height ?? 20,
+                measured: node.measured ?? { width: 20, height: 20 },
+            };
+            const parsed = parseWaypointNodeId(node.id);
+            if (!parsed) { return; }
+            post({
+                type: 'updateConnectionWaypoints',
+                id: parsed.connectionId,
+                waypoints: collectConnectionWaypoints(nodes, parsed.connectionId, waypointNode),
+            });
+            return;
+        }
         const kind = node.type === 'functionNode' ? 'function' : 'interface';
         let x = node.position.x;
         let y = node.position.y;
@@ -378,9 +444,38 @@ function DiagramEditor() {
     // ── Delete key → remove selected nodes/edges ─────────────────────────────
     const onNodesDelete = useCallback((deletedNodes: Node[]) => {
         if (locked) { return; }
-        const ids = deletedNodes.map(n => n.id);
-        if (ids.length > 0) { post({ type: 'delete', ids }); }
+        const entityIds = deletedNodes.filter(n => !isWaypointNodeId(n.id)).map(n => n.id);
+        if (entityIds.length > 0) {
+            post({ type: 'delete', ids: entityIds });
+        }
+
+        const waypointConnectionIds = [...new Set(deletedNodes
+            .map(n => parseWaypointNodeId(n.id)?.connectionId)
+            .filter((id): id is string => !!id))];
+        for (const connectionId of waypointConnectionIds) {
+            const deletedIds = new Set(deletedNodes.map(n => n.id));
+            const remaining = nodes
+                .filter(n => parseWaypointNodeId(n.id)?.connectionId === connectionId && !deletedIds.has(n.id))
+                .sort((a, b) => (parseWaypointNodeId(a.id)?.index ?? 0) - (parseWaypointNodeId(b.id)?.index ?? 0))
+                .map(waypointCenterFromNode);
+            setNodes(current => replaceConnectionWaypointNodes(current, connectionId, remaining));
+            post({ type: 'updateConnectionWaypoints', id: connectionId, waypoints: remaining });
+        }
     }, [locked]);
+
+    const onSelectionDragStop = useCallback((_evt: React.MouseEvent, draggedNodes: Node[]) => {
+        if (locked) { return; }
+        const waypointConnectionIds = [...new Set(draggedNodes
+            .map(node => parseWaypointNodeId(node.id)?.connectionId)
+            .filter((id): id is string => !!id))];
+        for (const connectionId of waypointConnectionIds) {
+            post({
+                type: 'updateConnectionWaypoints',
+                id: connectionId,
+                waypoints: collectConnectionWaypoints(nodes, connectionId),
+            });
+        }
+    }, [locked, nodes]);
 
     const onEdgesDelete = useCallback((deletedEdges: Edge[]) => {
         if (locked) { return; }
@@ -670,6 +765,29 @@ function DiagramEditor() {
         const entity = findEntity(diagramData.iv, node.id);
         const items: ContextMenuItem[] = [];
 
+        if (node.type === 'waypointNode') {
+            const parsed = parseWaypointNodeId(node.id);
+            if (!parsed) { return; }
+            const currentWaypoints = collectConnectionWaypoints(nodes, parsed.connectionId);
+            items.push(
+                {
+                    label: 'Remove Node',
+                    onClick: () => {
+                        const next = currentWaypoints.filter((_, index) => index !== parsed.index);
+                        setNodes(current => replaceConnectionWaypointNodes(current, parsed.connectionId, next));
+                        post({ type: 'updateConnectionWaypoints', id: parsed.connectionId, waypoints: next });
+                    },
+                },
+                {
+                    label: 'Remove Connection',
+                    danger: true,
+                    onClick: () => post({ type: 'delete', ids: [parsed.connectionId] }),
+                },
+            );
+            setContextMenu({ x: e.clientX, y: e.clientY, items });
+            return;
+        }
+
         if (entity && !isInterface(entity)) {
             const fn = entity as FunctionModel;
             if (!locked) {
@@ -862,6 +980,7 @@ function DiagramEditor() {
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 onNodeDragStop={onNodeDragStop}
+                onSelectionDragStop={onSelectionDragStop}
                 onConnect={onConnect}
                 onConnectEnd={onConnectEnd}
                 onNodesDelete={locked ? undefined : onNodesDelete}

@@ -2,6 +2,7 @@ import { Node, Edge } from '@xyflow/react';
 import {
     IvModel, UiModel, FunctionModel, InterfaceModel, ConnectionModel, EntityLayout,
 } from '../../src/model/types';
+import { makeWaypointNodeId, WAYPOINT_NODE_SIZE } from './waypoints';
 
 const SC_SCALE = 0.05;
 
@@ -218,25 +219,50 @@ function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, pa
 }
 
 function connectionToEdge(conn: ConnectionModel, ui: UiModel): Edge {
-    const layout = ui.entities[conn.id];
-    const waypoints: Array<{x: number; y: number}> = [];
-    if (layout?.coordinates && layout.coordinates.length >= 2) {
-        for (let i = 0; i + 1 < layout.coordinates.length; i += 2) {
-            waypoints.push({ x: layout.coordinates[i] * SC_SCALE, y: layout.coordinates[i + 1] * SC_SCALE });
-        }
-    }
     return {
         id: conn.id,
         source: conn.sourceIfaceId,
         target: conn.targetIfaceId,
         label: conn.name,
-        data: { conn, waypoints },
+        data: { conn },
         type: 'routedEdge',
     };
 }
 
+function connectionWaypointNodes(conn: ConnectionModel, ui: UiModel): Node[] {
+    const layout = ui.entities[conn.id];
+    const nodes: Node[] = [];
+    if (!layout?.coordinates || layout.coordinates.length < 2) { return nodes; }
+
+    for (let i = 0; i + 1 < layout.coordinates.length; i += 2) {
+        const centerX = layout.coordinates[i] * SC_SCALE;
+        const centerY = layout.coordinates[i + 1] * SC_SCALE;
+        nodes.push({
+            id: makeWaypointNodeId(conn.id, i / 2),
+            type: 'waypointNode',
+            position: {
+                x: centerX - WAYPOINT_NODE_SIZE / 2,
+                y: centerY - WAYPOINT_NODE_SIZE / 2,
+            },
+            width: WAYPOINT_NODE_SIZE,
+            height: WAYPOINT_NODE_SIZE,
+            measured: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+            draggable: true,
+            selectable: true,
+            deletable: true,
+            data: { connectionId: conn.id, waypointIndex: i / 2 },
+            style: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+        });
+    }
+
+    return nodes;
+}
+
 export function buildGraph(iv: IvModel, ui: UiModel): { nodes: Node[]; edges: Edge[] } {
-    const nodes = iv.functions.flatMap(fn => functionToNode(fn, ui));
+    const nodes = [
+        ...iv.functions.flatMap(fn => functionToNode(fn, ui)),
+        ...iv.connections.flatMap(conn => connectionWaypointNodes(conn, ui)),
+    ];
     const edges = iv.connections.map(conn => connectionToEdge(conn, ui));
     return { nodes, edges };
 }
