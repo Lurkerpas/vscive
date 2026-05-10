@@ -20,6 +20,7 @@ import { post, vscodeApi } from './vscodeApi';
 import { AttributePanel } from './components/AttributePanel';
 import { OptionsPanel } from './components/OptionsPanel';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
+import { EdgeMenuContext } from './components/EdgeMenuContext';
 import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
 import { Palette } from './components/Palette';
 
@@ -745,6 +746,7 @@ function DiagramEditor() {
     }
 
     return (
+        <EdgeMenuContext.Provider value={{ showContextMenu: (x, y, items) => setContextMenu({ x, y, items }) }}>
         <div style={{ width: '100vw', height: '100vh', background: options.canvasColor, position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
             <Palette
                 onZoomIn={() => zoomIn()}
@@ -859,6 +861,7 @@ function DiagramEditor() {
                 </div>
             )}
         </div>
+        </EdgeMenuContext.Provider>
     );
 }
 

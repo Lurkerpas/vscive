@@ -55,6 +55,14 @@ Right clicking on a function shall present a menu with the following options:
 Right clicking on an interface shall present a menu with the following options:
 - Copy (copying the selected interface).
 
+Right clicking on a node on a Connection shall present a menu with the following options:
+- Remove Node,
+- Remove Connection.
+
+Right clicking on a Connection shall present a menu with the following options:
+- Add Node,
+- Remove Connection.
+
 Copy-Paste shall copy the given entity, but wihout any connections, and assigning new UID.
 
 Snap to Grid shall be toggleable. When on, all positions of interfaces and function borders (so it applies also to resizing), shall be aligned to the grid.

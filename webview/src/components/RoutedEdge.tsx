@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { EdgeProps, BaseEdge, useReactFlow } from '@xyflow/react';
 import { post } from '../vscodeApi';
+import { useEdgeMenu } from './EdgeMenuContext';
 
 interface Waypoint { x: number; y: number; }
 
@@ -12,11 +13,29 @@ function distPointToSegment(p: Waypoint, a: Waypoint, b: Waypoint): number {
     return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
+/** Find the waypoint insertion index and the exact click position, given all polyline points. */
+function nearestSegmentInsertion(
+    pos: Waypoint,
+    pts: Waypoint[],
+    localWps: Waypoint[],
+): { wps: Waypoint[]; insertIdx: number } {
+    let bestI = 0;
+    let minD = Infinity;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const d = distPointToSegment(pos, pts[i], pts[i + 1]);
+        if (d < minD) { minD = d; bestI = i; }
+    }
+    // bestI is index into pts (which starts with source), so local waypoint insert index = bestI
+    const wps = [...localWps.slice(0, bestI), pos, ...localWps.slice(bestI)];
+    return { wps, insertIdx: bestI };
+}
+
 export function RoutedEdge({
     id, sourceX, sourceY, targetX, targetY,
     label, labelStyle, selected, data, style,
 }: EdgeProps) {
     const { screenToFlowPosition } = useReactFlow();
+    const { showContextMenu } = useEdgeMenu();
     const initialWaypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? [];
     const [localWps, setLocalWps] = useState<Waypoint[]>(initialWaypoints);
     const draggingIdx = useRef<number | null>(null);
@@ -41,6 +60,7 @@ export function RoutedEdge({
 
     // ── Waypoint drag handlers ────────────────────────────────────────────
     const onHandlePointerDown = (e: React.PointerEvent, idx: number) => {
+        if (e.button !== 0) { return; } // only primary button
         e.preventDefault();
         e.stopPropagation();
         draggingIdx.current = idx;
@@ -64,32 +84,50 @@ export function RoutedEdge({
         });
     };
 
-    const onHandleDblClick = (e: React.MouseEvent, idx: number) => {
+    // ── Waypoint right-click → "Remove Node" / "Remove Connection" ───────
+    const onCircleContextMenu = (e: React.MouseEvent, idx: number) => {
         e.preventDefault();
         e.stopPropagation();
-        setLocalWps(wps => {
-            const next = wps.filter((_, i) => i !== idx);
-            post({ type: 'updateConnectionWaypoints', id, waypoints: next });
-            return next;
-        });
+        showContextMenu(e.clientX, e.clientY, [
+            {
+                label: 'Remove Node',
+                onClick: () => {
+                    setLocalWps(wps => {
+                        const next = wps.filter((_, i) => i !== idx);
+                        post({ type: 'updateConnectionWaypoints', id, waypoints: next });
+                        return next;
+                    });
+                },
+            },
+            {
+                label: 'Remove Connection',
+                danger: true,
+                onClick: () => post({ type: 'delete', ids: [id] }),
+            },
+        ]);
     };
 
-    // ── Shift+click on edge path adds a new waypoint ─────────────────────
-    const onPathClick = (e: React.MouseEvent) => {
-        if (!e.shiftKey) { return; }
+    // ── Edge path right-click → "Add Node" / "Remove Connection" ─────────
+    const onPathContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        const pts = [{ x: sourceX, y: sourceY }, ...localWps, { x: targetX, y: targetY }];
-        let bestI = 0;
-        let minD = Infinity;
-        for (let i = 0; i < pts.length - 1; i++) {
-            const d = distPointToSegment(pos, pts[i], pts[i + 1]);
-            if (d < minD) { minD = d; bestI = i; }
-        }
-        const next = [...localWps.slice(0, bestI), pos, ...localWps.slice(bestI)];
-        setLocalWps(next);
-        post({ type: 'updateConnectionWaypoints', id, waypoints: next });
+        // Compute nearest-segment insertion eagerly so the position is captured at right-click time
+        const { wps: insertedWps } = nearestSegmentInsertion(pos, allPts, localWps);
+        showContextMenu(e.clientX, e.clientY, [
+            {
+                label: 'Add Node',
+                onClick: () => {
+                    setLocalWps(insertedWps);
+                    post({ type: 'updateConnectionWaypoints', id, waypoints: insertedWps });
+                },
+            },
+            {
+                label: 'Remove Connection',
+                danger: true,
+                onClick: () => post({ type: 'delete', ids: [id] }),
+            },
+        ]);
     };
 
     return (
@@ -103,14 +141,14 @@ export function RoutedEdge({
                 labelStyle={labelStyle}
                 style={{ ...style, stroke: selected ? '#89b4fa' : undefined }}
             />
-            {/* Wider invisible interaction path — captures shift+click for waypoint insertion */}
+            {/* Wider invisible interaction path — right-click for context menu */}
             <path
                 d={pathD}
                 fill="none"
                 strokeOpacity={0}
                 strokeWidth={20}
                 className="react-flow__edge-interaction"
-                onClick={onPathClick}
+                onContextMenu={onPathContextMenu}
                 style={{ cursor: 'default' }}
             />
             {/* Draggable waypoint handles */}
@@ -127,7 +165,7 @@ export function RoutedEdge({
                     onPointerDown={e => onHandlePointerDown(e, idx)}
                     onPointerMove={e => onHandlePointerMove(e, idx)}
                     onPointerUp={e => onHandlePointerUp(e, idx)}
-                    onDoubleClick={e => onHandleDblClick(e, idx)}
+                    onContextMenu={e => onCircleContextMenu(e, idx)}
                 />
             ))}
         </>
