@@ -288,7 +288,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             type: 'required',
             kind: 'Sporadic',
             parameters: [],
-            inheritPI: false,
+            inheritPI: true,
             autonamed: true,
             properties: [],
             extraAttrs: { layer: 'default', enable_multicast: 'true', required_system_element: 'NO' },
@@ -369,7 +369,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         for (const id of toRemove) { delete this.ui.entities[id]; }
     }
 
-    updateFunction(id: string, patch: { name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }): void {
+    updateFunction(id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }): void {
         const fn = this.findFn(this.iv.functions, id);
         if (!fn) { return; }
         if (patch.name !== undefined) {
@@ -382,8 +382,16 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             }
         }
         if (patch.language !== undefined) { fn.language = patch.language; }
+        if (patch.defaultImplementation !== undefined) { fn.defaultImplementation = patch.defaultImplementation; }
+        if (patch.isType !== undefined) { fn.isType = patch.isType; }
+        if (patch.fixedSystemElement !== undefined) { fn.fixedSystemElement = patch.fixedSystemElement; }
         if (patch.properties !== undefined) { fn.properties = patch.properties; }
-        if (patch.extraAttrs !== undefined) { fn.extraAttrs = { ...fn.extraAttrs, ...patch.extraAttrs }; }
+        if (patch.extraAttrs !== undefined) {
+            fn.extraAttrs = { ...fn.extraAttrs, ...patch.extraAttrs };
+            // Keep typed boolean fields in sync when changed via schema extraAttrs
+            if (patch.extraAttrs.is_type !== undefined) { fn.isType = patch.extraAttrs.is_type.toUpperCase() === 'YES'; }
+            if (patch.extraAttrs.fixed_system_element !== undefined) { fn.fixedSystemElement = patch.extraAttrs.fixed_system_element.toUpperCase() === 'YES'; }
+        }
     }
 
     updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }): void {

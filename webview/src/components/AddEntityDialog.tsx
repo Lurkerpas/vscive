@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { InterfaceKind } from '../../../src/model/types';
+import { InterfaceKind, AttributeSchema } from '../../../src/model/types';
 
 interface AddFunctionState {
     kind: 'addFunction';
@@ -19,13 +19,23 @@ export type DialogState = AddFunctionState | AddInterfaceState | null;
 
 interface Props {
     state: DialogState;
+    schema?: AttributeSchema;
     onConfirmFunction: (name: string, language: string, rfX: number, rfY: number, parentId?: string) => void;
     onConfirmInterface: (name: string, kind: InterfaceKind, ifaceType: 'provided' | 'required', funcId: string) => void;
     onCancel: () => void;
 }
 
-const LANGUAGES = ['C', 'Ada', 'C_Sharp', 'Blackbox_C', 'SDL', 'Simulink', 'VHDL', 'MicroPython', 'CPP', 'Lustre'];
-const KINDS: InterfaceKind[] = ['Sporadic', 'Protected', 'Unprotected', 'Cyclic'];
+const FALLBACK_LANGUAGES = ['C', 'Ada', 'C_Sharp', 'Blackbox_C', 'SDL', 'Simulink', 'VHDL', 'MicroPython', 'CPP', 'Lustre'];
+function getLanguages(schema?: AttributeSchema): string[] {
+    const attr = schema?.attrs.find(a => a.name === 'language');
+    if (attr && attr.type.kind === 'enumeration' && attr.type.entries.length > 0) {
+        return attr.type.entries;
+    }
+    return FALLBACK_LANGUAGES;
+}
+// Cyclic RI is not allowed (REQ-0112); PI may be Cyclic
+const PI_KINDS: InterfaceKind[] = ['Sporadic', 'Protected', 'Unprotected', 'Cyclic'];
+const RI_KINDS: InterfaceKind[] = ['Sporadic', 'Protected', 'Unprotected'];
 
 const OVERLAY: React.CSSProperties = {
     position: 'fixed', inset: 0,
@@ -57,16 +67,18 @@ const BTN = (primary: boolean): React.CSSProperties => ({
     color: primary ? '#1e1e2e' : '#cdd6f4',
 });
 
-export function AddEntityDialog({ state, onConfirmFunction, onConfirmInterface, onCancel }: Props) {
+export function AddEntityDialog({ state, schema, onConfirmFunction, onConfirmInterface, onCancel }: Props) {
+    const languages = getLanguages(schema);
+    const defaultLang = languages[0] ?? 'C';
     const [name, setName] = useState('');
-    const [language, setLanguage] = useState('C');
+    const [language, setLanguage] = useState(defaultLang);
     const [kind, setKind] = useState<InterfaceKind>('Sporadic');
     const [ifaceType, setIfaceType] = useState<'provided' | 'required'>('provided');
 
     const resetAndCancel = useCallback(() => {
-        setName(''); setLanguage('C'); setKind('Sporadic'); setIfaceType('provided');
+        setName(''); setLanguage(defaultLang); setKind('Sporadic'); setIfaceType('provided');
         onCancel();
-    }, [onCancel]);
+    }, [onCancel, defaultLang]);
 
     const submit = useCallback(() => {
         if (!name.trim()) { return; }
@@ -75,8 +87,8 @@ export function AddEntityDialog({ state, onConfirmFunction, onConfirmInterface, 
         } else if (state?.kind === 'addInterface') {
             onConfirmInterface(name.trim(), kind, state.presetType ?? ifaceType, state.funcId);
         }
-        setName(''); setLanguage('C'); setKind('Sporadic'); setIfaceType('provided');
-    }, [state, name, language, kind, ifaceType, onConfirmFunction, onConfirmInterface]);
+        setName(''); setLanguage(defaultLang); setKind('Sporadic'); setIfaceType('provided');
+    }, [state, name, language, kind, ifaceType, defaultLang, onConfirmFunction, onConfirmInterface]);
 
     if (!state) { return null; }
 
@@ -96,7 +108,7 @@ export function AddEntityDialog({ state, onConfirmFunction, onConfirmInterface, 
                         />
                         <label style={LABEL}>Language</label>
                         <select style={INPUT} value={language} onChange={e => setLanguage(e.target.value)}>
-                            {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                            {languages.map(l => <option key={l} value={l}>{l}</option>)}
                         </select>
                     </>
                 ) : (
@@ -121,7 +133,7 @@ export function AddEntityDialog({ state, onConfirmFunction, onConfirmInterface, 
                         )}
                         <label style={LABEL}>Kind</label>
                         <select style={INPUT} value={kind} onChange={e => setKind(e.target.value as InterfaceKind)}>
-                            {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
+                            {((state.presetType ?? ifaceType) === 'required' ? RI_KINDS : PI_KINDS).map(k => <option key={k} value={k}>{k}</option>)}
                         </select>
                     </>
                 )}

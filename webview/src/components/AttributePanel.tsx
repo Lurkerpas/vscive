@@ -9,8 +9,19 @@ type SelectedEntity = FunctionModel | InterfaceModel | null;
 interface Props {
     selected: SelectedEntity;
     schema: AttributeSchema;
-    onUpdateFunction: (id: string, patch: { name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => void;
+    /** When set, the selected RI is connected: show these PI params as locked/read-only. */
+    connectedPiParams?: ParameterModel[];
+    onUpdateFunction: (id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => void;
     onUpdateInterface: (id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }) => void;
+}
+
+/** Extract language entries from the schema's 'language' attr, falling back to a built-in list. */
+function schemaLanguages(schema: AttributeSchema): string[] {
+    const attr = schema.attrs.find(a => a.name === 'language');
+    if (attr && attr.type.kind === 'enumeration' && attr.type.entries.length > 0) {
+        return attr.type.entries;
+    }
+    return ['C', 'Ada', 'C_Sharp', 'Blackbox_C', 'Blackbox_Device', 'SDL', 'Simulink', 'VHDL', 'MicroPython', 'RTDS', 'Taste_Dataview', 'Pohic', 'CPP', 'System_C', 'Lustre', 'SCADE'];
 }
 
 function isInterface(e: SelectedEntity): e is InterfaceModel {
@@ -75,8 +86,9 @@ function Row({ label, value }: { label: string; value: string | boolean }) {
     );
 }
 
-const LANGUAGES = ['C', 'Ada', 'C_Sharp', 'Blackbox_C', 'Blackbox_Device', 'SDL', 'Simulink', 'VHDL', 'MicroPython', 'RTDS', 'Taste_Dataview', 'Pohic', 'CPP', 'System_C', 'Lustre', 'SCADE'];
-const KINDS: InterfaceKind[] = ['Sporadic', 'Cyclic', 'Protected', 'Unprotected'];
+// KINDS for RI excludes Cyclic (REQ-0112: Cyclic RI disallowed)
+const PI_KINDS: InterfaceKind[] = ['Sporadic', 'Cyclic', 'Protected', 'Unprotected'];
+const RI_KINDS: InterfaceKind[] = ['Sporadic', 'Protected', 'Unprotected'];
 const ENCODINGS: ParameterEncoding[] = ['NATIVE', 'ACN', 'UPER'];
 
 // ── Validator helpers ─────────────────────────────────────────────────────
@@ -164,7 +176,7 @@ function SchemaAttrField({ attrDef, value, onChange, onBlur }: {
     );
 }
 
-function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInterface }: Props) {
+function AttributePanelInner({ selected, schema, connectedPiParams, onUpdateFunction, onUpdateInterface }: Props) {
     // Local mutable copies — initialised once from selected on mount/remount
     const [params, setParams] = useState<ParameterModel[]>(() =>
         selected && isInterface(selected) ? selected.parameters.map(p => ({ ...p })) : [],
@@ -242,6 +254,10 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
         const scope2 = iface.type === 'provided' ? 'ProvidedInterface' as const : 'RequiredInterface' as const;
         const lookup = ifaceAttrLookup(iface, extraAttrs);
         const schemaAttrs = filterAttrs(schema, scope1, scope2, lookup, iface.extraAttrs);
+        const kindOptions = iface.type === 'provided' ? PI_KINDS : RI_KINDS;
+        // For a connected RI, params are locked and inherited from the PI
+        const paramsLocked = iface.type === 'required' && connectedPiParams !== undefined;
+        const displayParams = paramsLocked ? connectedPiParams! : params;
         return (
             <div style={PANEL_STYLE}>
                 <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>Interface</div>
@@ -258,7 +274,7 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
                     <span style={LABEL}>Kind</span>
                     <select style={SELECT} value={iface.kind}
                         onChange={e => onUpdateInterface(iface.id, { kind: e.target.value as InterfaceKind })}>
-                        {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
+                        {kindOptions.map(k => <option key={k} value={k}>{k}</option>)}
                     </select>
                 </div>
 
@@ -273,34 +289,44 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
                     </label>
                 </div>
 
-                {/* Parameters — editable grid */}
+                {/* Parameters — editable grid, or locked inherited params for connected RIs */}
                 <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Parameters</span>
-                    <button style={BTN_SMALL} onClick={addParam}>+ Add</button>
+                    <span>Parameters{paramsLocked && <span style={{ color: '#a6adc8', fontWeight: 'normal' }}> (inherited, locked)</span>}</span>
+                    {!paramsLocked && <button style={BTN_SMALL} onClick={addParam}>+ Add</button>}
                 </div>
-                {params.map((p, i) => (
+                {displayParams.map((p, i) => (
                     <div key={i} style={{ border: '1px solid #313244', borderRadius: 4, padding: '4px 6px', marginBottom: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3, marginBottom: 4 }}>
-                            <button style={BTN_SMALL} disabled={i === 0} onClick={() => moveParam(i, -1)} title="Move up">↑</button>
-                            <button style={BTN_SMALL} disabled={i === params.length - 1} onClick={() => moveParam(i, 1)} title="Move down">↓</button>
-                            <button style={BTN_DANGER} onClick={() => removeParam(i)} title="Remove">✕</button>
-                        </div>
+                        {!paramsLocked && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3, marginBottom: 4 }}>
+                                <button style={BTN_SMALL} disabled={i === 0} onClick={() => moveParam(i, -1)} title="Move up">↑</button>
+                                <button style={BTN_SMALL} disabled={i === params.length - 1} onClick={() => moveParam(i, 1)} title="Move down">↓</button>
+                                <button style={BTN_DANGER} onClick={() => removeParam(i)} title="Remove">✕</button>
+                            </div>
+                        )}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             <span style={LABEL}>name</span>
-                            <input style={INPUT} value={p.name} onChange={e => updateParam(i, { name: e.target.value })} />
+                            {paramsLocked
+                                ? <span style={STATIC}>{p.name}</span>
+                                : <input style={INPUT} value={p.name} onChange={e => updateParam(i, { name: e.target.value })} />}
                             <span style={LABEL}>type</span>
-                            <input style={INPUT} value={p.type} onChange={e => updateParam(i, { type: e.target.value })} />
+                            {paramsLocked
+                                ? <span style={STATIC}>{p.type}</span>
+                                : <input style={INPUT} value={p.type} onChange={e => updateParam(i, { type: e.target.value })} />}
                             <span style={LABEL}>direction</span>
-                            <select style={SELECT} value={p.direction}
-                                onChange={e => updateParam(i, { direction: e.target.value as 'input' | 'output' })}>
-                                <option value="input">input</option>
-                                <option value="output">output</option>
-                            </select>
+                            {paramsLocked
+                                ? <span style={STATIC}>{p.direction}</span>
+                                : <select style={SELECT} value={p.direction}
+                                    onChange={e => updateParam(i, { direction: e.target.value as 'input' | 'output' })}>
+                                    <option value="input">input</option>
+                                    <option value="output">output</option>
+                                </select>}
                             <span style={LABEL}>encoding</span>
-                            <select style={SELECT} value={p.encoding}
-                                onChange={e => updateParam(i, { encoding: e.target.value as ParameterEncoding })}>
-                                {ENCODINGS.map(enc => <option key={enc} value={enc}>{enc}</option>)}
-                            </select>
+                            {paramsLocked
+                                ? <span style={STATIC}>{p.encoding}</span>
+                                : <select style={SELECT} value={p.encoding}
+                                    onChange={e => updateParam(i, { encoding: e.target.value as ParameterEncoding })}>
+                                    {ENCODINGS.map(enc => <option key={enc} value={enc}>{enc}</option>)}
+                                </select>}
                         </div>
                     </div>
                 ))}
@@ -340,7 +366,10 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
 
     const fn = selected as FunctionModel;
     const fnLookup = fnAttrLookup(fn, extraAttrs);
-    const schemaAttrs = filterAttrs(schema, 'Function', 'Function', fnLookup, fn.extraAttrs);
+    // Exclude attrs that are managed as dedicated typed fields to avoid duplication
+    const schemaAttrs = filterAttrs(schema, 'Function', 'Function', fnLookup, fn.extraAttrs)
+        .filter(a => a.name !== 'is_type' && a.name !== 'fixed_system_element');
+    const languages = schemaLanguages(schema);
     return (
         <div style={PANEL_STYLE}>
             <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>Function</div>
@@ -355,13 +384,33 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
                 <span style={LABEL}>Language</span>
                 <select style={SELECT} value={fn.language}
                     onChange={e => onUpdateFunction(fn.id, { language: e.target.value })}>
-                    {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                    {languages.map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
             </div>
 
-            <Row label="Impl." value={fn.defaultImplementation} />
-            <Row label="Is Type" value={fn.isType} />
-            <Row label="Fixed" value={fn.fixedSystemElement} />
+            <div style={ROW}>
+                <span style={LABEL}>Default Implementation</span>
+                <input style={INPUT} defaultValue={fn.defaultImplementation}
+                    onBlur={e => onUpdateFunction(fn.id, { defaultImplementation: e.target.value })} />
+            </div>
+
+            <div style={ROW}>
+                <span style={LABEL}>Is Type</span>
+                <select style={SELECT} value={fn.isType ? 'YES' : 'NO'}
+                    onChange={e => onUpdateFunction(fn.id, { isType: e.target.value === 'YES' })}>
+                    <option value="NO">NO</option>
+                    <option value="YES">YES</option>
+                </select>
+            </div>
+
+            <div style={ROW}>
+                <span style={LABEL}>Fixed System Element</span>
+                <select style={SELECT} value={fn.fixedSystemElement ? 'YES' : 'NO'}
+                    onChange={e => onUpdateFunction(fn.id, { fixedSystemElement: e.target.value === 'YES' })}>
+                    <option value="NO">NO</option>
+                    <option value="YES">YES</option>
+                </select>
+            </div>
 
             {fn.implementations.length > 0 && (
                 <>

@@ -108,7 +108,7 @@ export class InterfaceViewEditorProvider
                 }
                 case 'updateFunction': {
                     const before = document.snapshot();
-                    document.updateFunction(msg.id, { name: msg.name, language: msg.language, properties: msg.properties, extraAttrs: msg.extraAttrs });
+                    document.updateFunction(msg.id, { name: msg.name, language: msg.language, defaultImplementation: msg.defaultImplementation, isType: msg.isType, fixedSystemElement: msg.fixedSystemElement, properties: msg.properties, extraAttrs: msg.extraAttrs });
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;

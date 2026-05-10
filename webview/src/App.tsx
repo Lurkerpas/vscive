@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ReactFlow, Background, Controls, MiniMap,
     Node, Edge, NodeMouseHandler, NodeDragHandler, Connection,
@@ -617,13 +617,23 @@ function DiagramEditor() {
         });
     }, []);
 
-    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => {
+    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => {
         post({ type: 'updateFunction', id, ...patch });
     }, []);
 
     const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }) => {
         post({ type: 'updateInterface', id, ...patch });
     }, []);
+
+    // ── Compute PI params for connected RI (for parameter locking) ───────────
+    const connectedPiParams = useMemo(() => {
+        if (!selected || !isInterface(selected) || selected.type !== 'required' || !diagramData) { return undefined; }
+        const conn = diagramData.iv.connections.find(c => c.sourceIfaceId === selected.id);
+        if (!conn) { return undefined; }
+        const pi = findEntity(diagramData.iv, conn.targetIfaceId);
+        if (!pi || !isInterface(pi)) { return undefined; }
+        return (pi as InterfaceModel).parameters;
+    }, [selected, diagramData]);
 
     // ── Palette actions ──────────────────────────────────────────────────────
     const onPaletteAddFunction = useCallback(() => {
@@ -740,6 +750,7 @@ function DiagramEditor() {
                 <AttributePanel
                     selected={selected}
                     schema={diagramData?.schema ?? { attrs: [] }}
+                    connectedPiParams={connectedPiParams}
                     onUpdateFunction={onUpdateFunction}
                     onUpdateInterface={onUpdateInterface}
                 />
@@ -756,6 +767,7 @@ function DiagramEditor() {
 
             <AddEntityDialog
                 state={dialog}
+                schema={diagramData?.schema}
                 onConfirmFunction={onConfirmFunction}
                 onConfirmInterface={onConfirmInterface}
                 onCancel={() => setDialog(null)}
