@@ -387,7 +387,8 @@ function DiagramEditor() {
         const oy = pad - minY;
 
         const parts: string[] = [];
-        parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">`);
+        // viewBox lets us scale for PNG without losing precision in SVG export
+        parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}">`);
         parts.push(`<rect width="100%" height="100%" fill="${options.canvasColor}"/>`);
 
         // Edges (drawn below nodes)
@@ -500,19 +501,39 @@ function DiagramEditor() {
             return;
         }
 
-        // PNG: render native SVG (no foreignObject) onto canvas — works in Chromium
+        // PNG: Chromium canvas max area is ~268 Mpx. Scale down to fit within 8192px
+        // on the longest side, then render a new SVG at that pixel size.
+        const MAX_PNG_PX = 8192;
+        const pngScale = Math.min(1, MAX_PNG_PX / Math.max(svgW, svgH));
+        const canvasW = Math.max(1, Math.round(svgW * pngScale));
+        const canvasH = Math.max(1, Math.round(svgH * pngScale));
+
+        // Replace width/height in the SVG so the browser renders it at canvas size
+        const scaledSvgStr = svgStr.replace(
+            `width="${svgW}" height="${svgH}"`,
+            `width="${canvasW}" height="${canvasH}"`,
+        );
+        const scaledB64 = btoa(Array.from(new TextEncoder().encode(scaledSvgStr), b => String.fromCharCode(b)).join(''));
+        const scaledDataUrl = `data:image/svg+xml;base64,${scaledB64}`;
+
         const canvas = document.createElement('canvas');
-        canvas.width = svgW;
-        canvas.height = svgH;
+        canvas.width = canvasW;
+        canvas.height = canvasH;
         const ctx = canvas.getContext('2d');
         if (!ctx) { post({ type: 'exportImage', format: 'png', dataUrl: svgDataUrl }); return; }
         await new Promise<void>(resolve => {
             const img = new Image();
             img.onload = () => { ctx.drawImage(img, 0, 0); resolve(); };
             img.onerror = () => resolve();
-            img.src = svgDataUrl;
+            img.src = scaledDataUrl;
         });
-        post({ type: 'exportImage', format: 'png', dataUrl: canvas.toDataURL('image/png') });
+        const pngDataUrl = canvas.toDataURL('image/png');
+        // 'data:,' means canvas backing store failed — fall back to SVG bytes
+        if (pngDataUrl === 'data:,') {
+            post({ type: 'exportImage', format: 'png', dataUrl: svgDataUrl });
+        } else {
+            post({ type: 'exportImage', format: 'png', dataUrl: pngDataUrl });
+        }
     }, [nodes, edges, options.canvasColor]);
 
     // ── Context menus ────────────────────────────────────────────────────────
