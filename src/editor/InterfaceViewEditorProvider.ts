@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { InterfaceViewDocument } from './InterfaceViewDocument';
-import { DiagramData, ExtensionMessage, IvModel, UiModel, WebviewMessage } from '../model/types';
+import { DiagramData, DEFAULT_OPTIONS, EditorOptions, ExtensionMessage, IvModel, UiModel, WebviewMessage } from '../model/types';
 import { log } from '../logger';
 
 export class InterfaceViewEditorProvider
@@ -16,7 +16,17 @@ export class InterfaceViewEditorProvider
     /** Map document URI → active webview, used for undo/redo repaint. */
     private readonly _webviews = new Map<string, vscode.Webview>();
 
-    constructor(private readonly extensionUri: vscode.Uri) { }
+    constructor(private readonly context: vscode.ExtensionContext) { }
+
+    private get extensionUri() { return this.context.extensionUri; }
+
+    private getOptions(): EditorOptions {
+        return this.context.globalState.get<EditorOptions>('editorOptions', DEFAULT_OPTIONS);
+    }
+
+    private async saveOptions(options: EditorOptions): Promise<void> {
+        await this.context.globalState.update('editorOptions', options);
+    }
 
     async openCustomDocument(uri: vscode.Uri): Promise<InterfaceViewDocument> {
         log(`openCustomDocument: ${uri.fsPath}`);
@@ -50,6 +60,10 @@ export class InterfaceViewEditorProvider
             switch (msg.type) {
                 case 'ready': {
                     try {
+                        const opts = this.getOptions();
+                        // Reload schema from the persisted path now that we know it
+                        await document.loadSchemaFromPath(opts.attrFilePath);
+                        webviewPanel.webview.postMessage({ type: 'options', options: opts } as ExtensionMessage);
                         this.sendDiagram(webviewPanel.webview, document);
                         log('sendDiagram: posted load message');
                     } catch (err) {
@@ -94,14 +108,14 @@ export class InterfaceViewEditorProvider
                 }
                 case 'updateFunction': {
                     const before = document.snapshot();
-                    document.updateFunction(msg.id, { name: msg.name, language: msg.language });
+                    document.updateFunction(msg.id, { name: msg.name, language: msg.language, properties: msg.properties, extraAttrs: msg.extraAttrs });
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
                 }
                 case 'updateInterface': {
                     const before = document.snapshot();
-                    document.updateInterface(msg.id, { name: msg.name, kind: msg.kind, inheritPI: msg.inheritPI, parameters: msg.parameters });
+                    document.updateInterface(msg.id, { name: msg.name, kind: msg.kind, inheritPI: msg.inheritPI, parameters: msg.parameters, extraAttrs: msg.extraAttrs });
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
@@ -137,6 +151,32 @@ export class InterfaceViewEditorProvider
                     document.connectToFunction(msg.id, msg.connId, msg.existingIfaceId, msg.targetFuncId, msg.relRfX, msg.relRfY);
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'updateOptions': {
+                    const prev = this.getOptions();
+                    await this.saveOptions(msg.options);
+                    if (msg.options.attrFilePath !== prev.attrFilePath) {
+                        await document.loadSchemaFromPath(msg.options.attrFilePath);
+                        this.sendDiagram(webviewPanel.webview, document);
+                    }
+                    break;
+                }
+                case 'browseAttrFile': {
+                    const uris = await vscode.window.showOpenDialog({
+                        canSelectFiles: true,
+                        canSelectFolders: false,
+                        canSelectMany: false,
+                        filters: { 'XML files': ['xml'], 'All files': ['*'] },
+                        title: 'Select default attributes file',
+                    });
+                    if (uris && uris.length > 0) {
+                        const opts: EditorOptions = { ...this.getOptions(), attrFilePath: uris[0].fsPath };
+                        await this.saveOptions(opts);
+                        webviewPanel.webview.postMessage({ type: 'options', options: opts } as ExtensionMessage);
+                        await document.loadSchemaFromPath(opts.attrFilePath);
+                        this.sendDiagram(webviewPanel.webview, document);
+                    }
                     break;
                 }
             }

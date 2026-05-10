@@ -1,22 +1,8 @@
 import React from 'react';
+import { EditorOptions, DEFAULT_OPTIONS } from '../../../src/model/types';
 
-export interface EditorOptions {
-    canvasColor: string;
-    snapEnabled: boolean;
-    snapGridSize: number;
-    fontSizeFn: number;
-    fontSizeIface: number;
-    fontSizeConn: number;
-}
-
-export const DEFAULT_OPTIONS: EditorOptions = {
-    canvasColor: '#1e1e2e',
-    snapEnabled: false,
-    snapGridSize: 20,
-    fontSizeFn: 90,
-    fontSizeIface: 45,
-    fontSizeConn: 11,
-};
+export type { EditorOptions };
+export { DEFAULT_OPTIONS };
 
 const PANEL_STYLE: React.CSSProperties = {
     position: 'absolute',
@@ -56,13 +42,33 @@ const INPUT: React.CSSProperties = {
 interface OptionsPanelProps {
     options: EditorOptions;
     onChange: (patch: Partial<EditorOptions>) => void;
+    onBrowseAttrFile: () => void;
 }
 
-export function OptionsPanel({ options, onChange }: OptionsPanelProps) {
+export function OptionsPanel({ options, onChange, onBrowseAttrFile }: OptionsPanelProps) {
     return (
         <div style={PANEL_STYLE}>
             <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>
                 Options
+            </div>
+
+            <div style={ROW}>
+                <span style={LABEL}>Attributes File</span>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <input
+                        type="text"
+                        value={options.attrFilePath}
+                        onChange={e => onChange({ attrFilePath: e.target.value })}
+                        placeholder="(default / not set)"
+                        style={{ ...INPUT, flex: 1 }}
+                    />
+                    <button
+                        onClick={onBrowseAttrFile}
+                        title="Browse…"
+                        style={{ background: '#313244', color: '#cdd6f4', border: '1px solid #45475a', borderRadius: 3, padding: '2px 6px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >…</button>
+                </div>
+                <span style={{ color: '#6c7086', fontSize: 10 }}>Changing reloads the diagram schema.</span>
             </div>
 
             <div style={ROW}>

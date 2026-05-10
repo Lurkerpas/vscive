@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     FunctionModel, InterfaceModel, InterfaceKind, AttributeSchema,
-    ParameterModel, ParameterEncoding, PropertyModel,
+    ParameterModel, ParameterEncoding, PropertyModel, AttrDef, AttrValidator,
 } from '../../../src/model/types';
 
 type SelectedEntity = FunctionModel | InterfaceModel | null;
@@ -9,8 +9,8 @@ type SelectedEntity = FunctionModel | InterfaceModel | null;
 interface Props {
     selected: SelectedEntity;
     schema: AttributeSchema;
-    onUpdateFunction: (id: string, patch: { name?: string; language?: string; properties?: PropertyModel[] }) => void;
-    onUpdateInterface: (id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[] }) => void;
+    onUpdateFunction: (id: string, patch: { name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => void;
+    onUpdateInterface: (id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }) => void;
 }
 
 function isInterface(e: SelectedEntity): e is InterfaceModel {
@@ -79,7 +79,90 @@ const LANGUAGES = ['C', 'Ada', 'C_Sharp', 'Blackbox_C', 'Blackbox_Device', 'SDL'
 const KINDS: InterfaceKind[] = ['Sporadic', 'Cyclic', 'Protected', 'Unprotected'];
 const ENCODINGS: ParameterEncoding[] = ['NATIVE', 'ACN', 'UPER'];
 
+// ── Validator helpers ─────────────────────────────────────────────────────
+
+/** Group validators by name; each group is OR'd, groups are AND'd. */
+function checkValidators(validators: AttrValidator[], lookup: (name: string) => string): boolean {
+    if (!validators || validators.length === 0) { return true; }
+    const byName = new Map<string, string[]>();
+    for (const v of validators) {
+        if (!byName.has(v.name)) { byName.set(v.name, []); }
+        byName.get(v.name)!.push(v.value);
+    }
+    for (const [name, allowed] of byName) {
+        if (!allowed.includes(lookup(name))) { return false; }
+    }
+    return true;
+}
+
+function ifaceAttrLookup(iface: InterfaceModel, extraAttrs: Record<string, string>): (name: string) => string {
+    return (name: string) => {
+        if (name === 'kind') { return iface.kind; }
+        return extraAttrs[name] ?? iface.extraAttrs[name] ?? '';
+    };
+}
+
+function fnAttrLookup(fn: FunctionModel, extraAttrs: Record<string, string>): (name: string) => string {
+    return (name: string) => {
+        if (name === 'is_type') { return fn.isType ? 'YES' : 'NO'; }
+        return extraAttrs[name] ?? fn.extraAttrs[name] ?? '';
+    };
+}
+
+/** Filter schema attrs applicable to a given scope with validator conditions checked.
+ *  Also includes attrs that are present in entityExtraAttrs even if the scope doesn't match,
+ *  so RI elements carrying PI-scoped attrs (wcet, stack_size, …) are still editable. */
+function filterAttrs(
+    schema: { attrs: AttrDef[] },
+    scope1: string,
+    scope2: string,
+    lookup: (name: string) => string,
+    entityExtraAttrs?: Record<string, string>,
+): AttrDef[] {
+    return schema.attrs.filter(a => {
+        if (!a.visible) { return false; }
+        if (!a.label) { return false; } // unnamed / internal attrs
+        const matchedScope = a.scopes.find(s => s === scope1 || s === scope2);
+        if (matchedScope) {
+            // In-scope: apply validators
+            const validators = a.scopeValidators?.[matchedScope] ?? [];
+            return checkValidators(validators, lookup);
+        }
+        // Out-of-scope but value is present in entity extraAttrs → show it anyway
+        return entityExtraAttrs !== undefined && Object.prototype.hasOwnProperty.call(entityExtraAttrs, a.name);
+    });
+}
+
 // ── Inner panel: remounted when selected.id changes (via key prop) ────────
+
+/** Render one schema attribute as an editable field. */
+function SchemaAttrField({ attrDef, value, onChange, onBlur }: {
+    attrDef: AttrDef;
+    value: string;
+    onChange?: (v: string) => void;
+    onBlur?: (v: string) => void;
+}) {
+    if (attrDef.type.kind === 'enumeration') {
+        const entries = attrDef.type.entries;
+        return (
+            <div style={ROW}>
+                <span style={LABEL}>{attrDef.label}</span>
+                <select style={SELECT} value={value || attrDef.type.defaultValue}
+                    onChange={e => onChange?.(e.target.value)}>
+                    {entries.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
+            </div>
+        );
+    }
+    // String type
+    return (
+        <div style={ROW}>
+            <span style={LABEL}>{attrDef.label}</span>
+            <input style={INPUT} defaultValue={value}
+                onBlur={e => onBlur?.(e.target.value)} />
+        </div>
+    );
+}
 
 function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInterface }: Props) {
     // Local mutable copies — initialised once from selected on mount/remount
@@ -89,8 +172,23 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
     const [fnProps, setFnProps] = useState<PropertyModel[]>(() =>
         selected && !isInterface(selected) ? (selected as FunctionModel).properties.map(p => ({ ...p })) : [],
     );
+    const [extraAttrs, setExtraAttrs] = useState<Record<string, string>>(() =>
+        selected ? { ...(isInterface(selected) ? selected.extraAttrs : (selected as FunctionModel).extraAttrs) } : {},
+    );
 
     if (!selected) { return null; }
+
+    // ── ExtraAttr helpers ─────────────────────────────────────────────────────
+
+    const updateExtraAttr = (name: string, value: string) => {
+        const next = { ...extraAttrs, [name]: value };
+        setExtraAttrs(next);
+        if (isInterface(selected)) {
+            onUpdateInterface(selected.id, { extraAttrs: { [name]: value } });
+        } else {
+            onUpdateFunction(selected.id, { extraAttrs: { [name]: value } });
+        }
+    };
 
     // ── Parameter helpers ─────────────────────────────────────────────────────
 
@@ -138,10 +236,12 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
 
     if (isInterface(selected)) {
         const iface = selected;
-        const schemaAttrs = schema.attrs.filter(a =>
-            a.scopes.includes(iface.type === 'provided' ? 'Provided_Interface' : 'Required_Interface')
-            || a.scopes.includes(iface.type === 'provided' ? 'ProvidedInterface' : 'RequiredInterface'),
-        );
+        const piScope = 'Provided_Interface' as const;
+        const riScope = 'Required_Interface' as const;
+        const scope1 = iface.type === 'provided' ? piScope : riScope;
+        const scope2 = iface.type === 'provided' ? 'ProvidedInterface' as const : 'RequiredInterface' as const;
+        const lookup = ifaceAttrLookup(iface, extraAttrs);
+        const schemaAttrs = filterAttrs(schema, scope1, scope2, lookup, iface.extraAttrs);
         return (
             <div style={PANEL_STYLE}>
                 <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>Interface</div>
@@ -208,10 +308,16 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
                 {schemaAttrs.length > 0 && (
                     <>
                         <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
-                            Extra Attributes
+                            Attributes
                         </div>
                         {schemaAttrs.map((a, i) => (
-                            <Row key={i} label={a.label} value={iface.extraAttrs[a.name] ?? ''} />
+                            <SchemaAttrField
+                                key={a.name}
+                                attrDef={a}
+                                value={extraAttrs[a.name] ?? iface.extraAttrs[a.name] ?? (a.type.kind === 'enumeration' ? a.type.defaultValue : (a.type.defaultValue ?? ''))}
+                                onChange={v => updateExtraAttr(a.name, v)}
+                                onBlur={v => updateExtraAttr(a.name, v)}
+                            />
                         ))}
                     </>
                 )}
@@ -233,7 +339,8 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
     // ── Function panel ────────────────────────────────────────────────────────
 
     const fn = selected as FunctionModel;
-    const schemaAttrs = schema.attrs.filter(a => a.scopes.includes('Function'));
+    const fnLookup = fnAttrLookup(fn, extraAttrs);
+    const schemaAttrs = filterAttrs(schema, 'Function', 'Function', fnLookup, fn.extraAttrs);
     return (
         <div style={PANEL_STYLE}>
             <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>Function</div>
@@ -270,10 +377,16 @@ function AttributePanelInner({ selected, schema, onUpdateFunction, onUpdateInter
             {schemaAttrs.length > 0 && (
                 <>
                     <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
-                        Extra Attributes
+                        Attributes
                     </div>
-                    {schemaAttrs.map((a, i) => (
-                        <Row key={i} label={a.label} value={fn.extraAttrs[a.name] ?? ''} />
+                    {schemaAttrs.map((a) => (
+                        <SchemaAttrField
+                            key={a.name}
+                            attrDef={a}
+                            value={extraAttrs[a.name] ?? fn.extraAttrs[a.name] ?? (a.type.kind === 'enumeration' ? a.type.defaultValue : (a.type.defaultValue ?? ''))}
+                            onChange={v => updateExtraAttr(a.name, v)}
+                            onBlur={v => updateExtraAttr(a.name, v)}
+                        />
                     ))}
                 </>
             )}

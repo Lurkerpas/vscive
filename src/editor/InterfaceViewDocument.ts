@@ -97,15 +97,20 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
     }
 
     async loadSchema(): Promise<void> {
-        const cfgPath = vscode.workspace.getConfiguration('vscive').get<string>('attributesFilePath')
+        await this.loadSchemaFromPath('');
+    }
+
+    async loadSchemaFromPath(attrFilePath: string): Promise<void> {
+        const cfgPath = attrFilePath
+            || vscode.workspace.getConfiguration('vscive').get<string>('attributesFilePath')
             || path.join(process.env.HOME ?? '~', '.local', 'default_attributes.xml');
-        log(`loadSchema: trying ${cfgPath}`);
+        log(`loadSchemaFromPath: trying ${cfgPath}`);
         try {
             const xml = fs.readFileSync(cfgPath, 'utf8');
             this.schema = parseAttrXml(xml);
-            log('loadSchema: schema loaded');
+            log('loadSchemaFromPath: schema loaded');
         } catch (err) {
-            log(`loadSchema: not found (${err}), using empty schema`);
+            log(`loadSchemaFromPath: not found (${err}), using empty schema`);
             this.schema = EMPTY_SCHEMA;
         }
     }
@@ -364,21 +369,23 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         for (const id of toRemove) { delete this.ui.entities[id]; }
     }
 
-    updateFunction(id: string, patch: { name?: string; language?: string; properties?: PropertyModel[] }): void {
+    updateFunction(id: string, patch: { name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }): void {
         const fn = this.findFn(this.iv.functions, id);
         if (!fn) { return; }
         if (patch.name !== undefined) { fn.name = patch.name; }
         if (patch.language !== undefined) { fn.language = patch.language; }
         if (patch.properties !== undefined) { fn.properties = patch.properties; }
+        if (patch.extraAttrs !== undefined) { fn.extraAttrs = { ...fn.extraAttrs, ...patch.extraAttrs }; }
     }
 
-    updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[] }): void {
+    updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }): void {
         const result = this.findIface(id);
         if (!result) { return; }
         if (patch.name !== undefined) { result.iface.name = patch.name; }
         if (patch.kind !== undefined) { result.iface.kind = patch.kind; }
         if (patch.inheritPI !== undefined) { result.iface.inheritPI = patch.inheritPI; }
         if (patch.parameters !== undefined) { result.iface.parameters = patch.parameters; }
+        if (patch.extraAttrs !== undefined) { result.iface.extraAttrs = { ...result.iface.extraAttrs, ...patch.extraAttrs }; }
     }
 
     connectToFunction(newIfaceId: string, connId: string, existingIfaceId: string, targetFuncId: string, relRfX: number, relRfY: number): void {

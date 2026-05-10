@@ -10,13 +10,13 @@ import '@xyflow/react/dist/style.css';
 
 import {
     DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
-    WebviewMessage, NodeMove, PropertyModel, ParameterModel,
+    WebviewMessage, NodeMove, PropertyModel, ParameterModel, EditorOptions, DEFAULT_OPTIONS,
 } from '../../src/model/types';
 import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToEdge } from './transform';
 import { FunctionNode } from './components/FunctionNode';
 import { InterfaceNode } from './components/InterfaceNode';
 import { AttributePanel } from './components/AttributePanel';
-import { OptionsPanel, EditorOptions, DEFAULT_OPTIONS } from './components/OptionsPanel';
+import { OptionsPanel } from './components/OptionsPanel';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
 import { Palette } from './components/Palette';
@@ -91,7 +91,9 @@ function DiagramEditor() {
     useEffect(() => {
         const handler = (event: MessageEvent) => {
             const msg = event.data as ExtensionMessage;
-            if (msg.type === 'load') {
+            if (msg.type === 'options') {
+                setOptions(msg.options);
+            } else if (msg.type === 'load') {
                 try {
                     setDiagramData(msg.data);
                     const { nodes: n, edges: e } = buildGraph(msg.data.iv, msg.data.ui);
@@ -415,11 +417,19 @@ function DiagramEditor() {
     }, [diagramData]);
 
     // ── Attribute panel callbacks ────────────────────────────────────────────
-    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; properties?: PropertyModel[] }) => {
+    const updateOptions = useCallback((patch: Partial<EditorOptions>) => {
+        setOptions(o => {
+            const next = { ...o, ...patch };
+            post({ type: 'updateOptions', options: next });
+            return next;
+        });
+    }, []);
+
+    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => {
         post({ type: 'updateFunction', id, ...patch });
     }, []);
 
-    const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[] }) => {
+    const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }) => {
         post({ type: 'updateInterface', id, ...patch });
     }, []);
 
@@ -470,7 +480,7 @@ function DiagramEditor() {
                 onZoomIn={() => zoomIn()}
                 onZoomOut={() => zoomOut()}
                 onFitView={() => fitView({ padding: 0.1, maxZoom: 1 })}
-                onToggleSnap={() => setOptions(o => ({ ...o, snapEnabled: !o.snapEnabled }))}
+                onToggleSnap={() => updateOptions({ snapEnabled: !options.snapEnabled })}
                 snapEnabled={options.snapEnabled}
                 onShowOptions={() => setOptionsVisible(v => !v)}
                 onAddFunction={onPaletteAddFunction}
@@ -528,7 +538,8 @@ function DiagramEditor() {
             {optionsVisible && !selected && (
                 <OptionsPanel
                     options={options}
-                    onChange={patch => setOptions(o => ({ ...o, ...patch }))}
+                    onChange={updateOptions}
+                    onBrowseAttrFile={() => post({ type: 'browseAttrFile' })}
                 />
             )}
 

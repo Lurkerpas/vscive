@@ -1,5 +1,5 @@
 import { DOMParser, Element as XmlElement, Document as XmlDocument } from '@xmldom/xmldom';
-import { AttributeSchema, AttrDef, EntityScope, EnumerationType, StringType } from '../model/types';
+import { AttributeSchema, AttrDef, EntityScope, EnumerationType, StringType, AttrValidator } from '../model/types';
 
 function childElements(el: XmlElement | XmlDocument, tagName: string): XmlElement[] {
     const out: XmlElement[] = [];
@@ -30,11 +30,20 @@ export function parseAttrXml(xml: string): AttributeSchema {
         const visible = (attrEl.getAttribute('visible') ?? 'true') !== 'false';
 
         const scopes: EntityScope[] = [];
+        const scopeValidators: Partial<Record<EntityScope, AttrValidator[]>> = {};
         const scopesEl = childElements(attrEl, 'Scopes')[0] as XmlElement | undefined;
         if (scopesEl) {
             for (const tag of SCOPE_TAGS) {
-                if (childElements(scopesEl as XmlElement, tag).length > 0) {
+                const scopeEls = childElements(scopesEl as XmlElement, tag);
+                if (scopeEls.length > 0) {
                     scopes.push(tag);
+                    const validators: AttrValidator[] = childElements(scopeEls[0], 'AttrValidator').map(v => ({
+                        name: v.getAttribute('name') ?? '',
+                        value: v.getAttribute('value') ?? '',
+                    }));
+                    if (validators.length > 0) {
+                        scopeValidators[tag] = validators;
+                    }
                 }
             }
         }
@@ -62,7 +71,7 @@ export function parseAttrXml(xml: string): AttributeSchema {
             }
         }
 
-        attrs.push({ label, name, visible, scopes, type });
+        attrs.push({ label, name, visible, scopes, scopeValidators, type });
     }
 
     return { attrs };

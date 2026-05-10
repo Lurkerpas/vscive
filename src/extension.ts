@@ -9,7 +9,7 @@ export function activate(context: vscode.ExtensionContext): void {
         context.subscriptions.push(
             vscode.window.registerCustomEditorProvider(
                 InterfaceViewEditorProvider.viewType,
-                new InterfaceViewEditorProvider(context.extensionUri),
+                new InterfaceViewEditorProvider(context),
                 { supportsMultipleEditorsPerDocument: false },
             )
         );

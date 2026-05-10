@@ -110,6 +110,11 @@ export interface UiModel {
 
 export type EntityScope = 'Function' | 'Provided_Interface' | 'Required_Interface' | 'ProvidedInterface' | 'RequiredInterface';
 
+export interface AttrValidator {
+    name: string;
+    value: string;
+}
+
 export interface EnumerationType {
     kind: 'enumeration';
     defaultValue: string;
@@ -127,12 +132,36 @@ export interface AttrDef {
     name: string;
     visible: boolean;
     scopes: EntityScope[];
+    /** Validator conditions keyed by scope. Empty array = always shown in that scope. */
+    scopeValidators: Partial<Record<EntityScope, AttrValidator[]>>;
     type: EnumerationType | StringType;
 }
 
 export interface AttributeSchema {
     attrs: AttrDef[];
 }
+
+// ── Editor options (persisted in extension globalState) ──────────────────
+
+export interface EditorOptions {
+    canvasColor: string;
+    snapEnabled: boolean;
+    snapGridSize: number;
+    fontSizeFn: number;
+    fontSizeIface: number;
+    fontSizeConn: number;
+    attrFilePath: string;
+}
+
+export const DEFAULT_OPTIONS: EditorOptions = {
+    canvasColor: '#1e1e2e',
+    snapEnabled: false,
+    snapGridSize: 20,
+    fontSizeFn: 90,
+    fontSizeIface: 45,
+    fontSizeConn: 11,
+    attrFilePath: '',
+};
 
 // ── postMessage protocol ───────────────────────────────────────────────────
 
@@ -143,7 +172,8 @@ export interface DiagramData {
 }
 
 export type ExtensionMessage =
-    | { type: 'load'; data: DiagramData };
+    | { type: 'load'; data: DiagramData }
+    | { type: 'options'; options: EditorOptions };
 
 /** A single node-move record sent from the webview after drag-stop. */
 export interface NodeMove {
@@ -165,10 +195,12 @@ export type WebviewMessage =
     | { type: 'addInterface'; id: string; funcId: string; name: string; kind: InterfaceKind; ifaceType: 'provided' | 'required'; relRfX: number; relRfY: number }
     | { type: 'connect'; id: string; sourceIfaceId: string; targetIfaceId: string }
     | { type: 'delete'; ids: string[] }
-    | { type: 'updateFunction'; id: string; name?: string; language?: string; properties?: PropertyModel[] }
-    | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[] }
+    | { type: 'updateFunction'; id: string; name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }
+    | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }
     | { type: 'buildSkeletons' }
     | { type: 'build' }
     | { type: 'editFunction'; id: string }
     | { type: 'connectFunctions'; riId: string; piId: string; riFuncId: string; piFuncId: string; riRelX: number; riRelY: number; piRelX: number; piRelY: number }
-    | { type: 'connectToFunction'; id: string; connId: string; existingIfaceId: string; targetFuncId: string; relRfX: number; relRfY: number };
+    | { type: 'connectToFunction'; id: string; connId: string; existingIfaceId: string; targetFuncId: string; relRfX: number; relRfY: number }
+    | { type: 'updateOptions'; options: EditorOptions }
+    | { type: 'browseAttrFile' };
