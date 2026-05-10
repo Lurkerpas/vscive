@@ -105,7 +105,6 @@ export function Palette({
             <PaletteBtn title="Zoom to Fit" onClick={onFitView}>⊡</PaletteBtn>
             <PaletteBtn title={snapEnabled ? 'Snap to Grid: ON' : 'Snap to Grid: OFF'} onClick={onToggleSnap} active={snapEnabled}>⊞</PaletteBtn>
             <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
-            <PaletteBtn title="Show Options" onClick={onShowOptions} active={optionsVisible}>⚙</PaletteBtn>
             <PaletteBtn title="Add Function" onClick={onAddFunction} disabled={locked}>＋▭</PaletteBtn>
             <PaletteBtn
                 title={interfaceActionsEnabled ? 'Add Provided Interface' : 'Add Provided Interface (select a function first)'}
@@ -118,8 +117,10 @@ export function Palette({
                 disabled={!interfaceActionsEnabled}
             >◁</PaletteBtn>
             <PaletteBtn title="Add Connection" onClick={onAddConnection} active={connectMode} disabled={locked}>⇝</PaletteBtn>
+            <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
             <PaletteBtn title="Export Diagram as Image" onClick={onExportImage}>⬇</PaletteBtn>
             <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
+            <PaletteBtn title="Show Options" onClick={onShowOptions} active={optionsVisible}>⚙</PaletteBtn>
             <PaletteBtn title={locked ? 'Unlock Diagram' : 'Lock Diagram from Modification'} onClick={onToggleLock} active={locked} danger={locked}>
                 {locked ? '🔒' : '🔓'}
             </PaletteBtn>
