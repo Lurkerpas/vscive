@@ -277,10 +277,25 @@ function DiagramEditor() {
                     if (!fnNode) { return nds; }
 
                     const grid = Math.max(1, options.snapGridSize || 1);
-                    const x = options.snapEnabled ? snapToGrid(fnNode.position.x, grid) : fnNode.position.x;
-                    const y = options.snapEnabled ? snapToGrid(fnNode.position.y, grid) : fnNode.position.y;
-                    const w = options.snapEnabled ? Math.max(grid, snapToGrid(rawW, grid)) : rawW;
-                    const h = options.snapEnabled ? Math.max(grid, snapToGrid(rawH, grid)) : rawH;
+                    const minW = options.snapEnabled ? Math.max(grid, Math.ceil(200 / grid) * grid) : 200;
+                    const minH = options.snapEnabled ? Math.max(grid, Math.ceil(100 / grid) * grid) : 100;
+
+                    let x = fnNode.position.x;
+                    let y = fnNode.position.y;
+                    let w = rawW;
+                    let h = rawH;
+
+                    if (options.snapEnabled) {
+                        const snappedLeft = snapToGrid(fnNode.position.x, grid);
+                        const snappedTop = snapToGrid(fnNode.position.y, grid);
+                        const snappedRight = snapToGrid(fnNode.position.x + rawW, grid);
+                        const snappedBottom = snapToGrid(fnNode.position.y + rawH, grid);
+
+                        x = snappedLeft;
+                        y = snappedTop;
+                        w = Math.max(minW, snappedRight - snappedLeft);
+                        h = Math.max(minH, snappedBottom - snappedTop);
+                    }
 
                     // Post function resize to backend
                     post({
@@ -300,7 +315,14 @@ function DiagramEditor() {
                     const ifaceMoves: NodeMove[] = [];
                     const updated = nds.map(n => {
                         if (n.id === change.id) {
-                            return { ...n, position: { x, y }, style: { ...n.style, width: w, height: h } };
+                            return {
+                                ...n,
+                                position: { x, y },
+                                width: w,
+                                height: h,
+                                measured: { width: w, height: h },
+                                style: { ...n.style, width: w, height: h },
+                            };
                         }
                         if (n.parentId !== change.id || n.type !== 'interfaceNode') { return n; }
                         const snapped = snapIfaceToEdge(n.position.x, n.position.y, w, h);
@@ -857,7 +879,11 @@ function DiagramEditor() {
                 maxZoom={4}
                 style={{ background: options.canvasColor, marginLeft: 44 }}
             >
-                <Background color="#313244" variant={BackgroundVariant.Dots} />
+                <Background
+                    color="#313244"
+                    variant={BackgroundVariant.Dots}
+                    gap={options.snapGridSize}
+                />
                 <Controls style={{ display: 'none' }} />
                 <MiniMap
                     nodeColor={(n) => n.type === 'interfaceNode' ? '#89b4fa' : '#313244'}
