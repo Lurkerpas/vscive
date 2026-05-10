@@ -9,7 +9,8 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import {
-    DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind, WebviewMessage, NodeMove,
+    DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
+    WebviewMessage, NodeMove, PropertyModel, ParameterModel,
 } from '../../src/model/types';
 import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToEdge } from './transform';
 import { FunctionNode } from './components/FunctionNode';
@@ -414,11 +415,11 @@ function DiagramEditor() {
     }, [diagramData]);
 
     // ── Attribute panel callbacks ────────────────────────────────────────────
-    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string }) => {
+    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; properties?: PropertyModel[] }) => {
         post({ type: 'updateFunction', id, ...patch });
     }, []);
 
-    const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean }) => {
+    const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[] }) => {
         post({ type: 'updateInterface', id, ...patch });
     }, []);
 

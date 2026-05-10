@@ -9,7 +9,7 @@ import { serializeIvXml } from '../serializers/IvXmlSerializer';
 import { serializeUiXml } from '../serializers/UiXmlSerializer';
 import {
     IvModel, UiModel, EntityLayout, AttributeSchema, FunctionModel, InterfaceModel,
-    ConnectionModel, InterfaceKind, NodeMove, PropertyModel,
+    ConnectionModel, InterfaceKind, NodeMove, PropertyModel, ParameterModel,
 } from '../model/types';
 import { log } from '../logger';
 
@@ -364,19 +364,21 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         for (const id of toRemove) { delete this.ui.entities[id]; }
     }
 
-    updateFunction(id: string, patch: { name?: string; language?: string }): void {
+    updateFunction(id: string, patch: { name?: string; language?: string; properties?: PropertyModel[] }): void {
         const fn = this.findFn(this.iv.functions, id);
         if (!fn) { return; }
         if (patch.name !== undefined) { fn.name = patch.name; }
         if (patch.language !== undefined) { fn.language = patch.language; }
+        if (patch.properties !== undefined) { fn.properties = patch.properties; }
     }
 
-    updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean }): void {
+    updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[] }): void {
         const result = this.findIface(id);
         if (!result) { return; }
         if (patch.name !== undefined) { result.iface.name = patch.name; }
         if (patch.kind !== undefined) { result.iface.kind = patch.kind; }
         if (patch.inheritPI !== undefined) { result.iface.inheritPI = patch.inheritPI; }
+        if (patch.parameters !== undefined) { result.iface.parameters = patch.parameters; }
     }
 
     connectToFunction(newIfaceId: string, connId: string, existingIfaceId: string, targetFuncId: string, relRfX: number, relRfY: number): void {

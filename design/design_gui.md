@@ -66,7 +66,7 @@ When Function is selected, the properties panel shall show, and allow to edit, a
 
 When Interface is selected, the properties panel shall show, and allow to edit, all interface properties, as well as its color, and arguments.
 Arguments shall be shown for both provided and required interfaces, however, when connected, the arguments of provided interfaces shall be editable, while the arguments of required interfaces shall be locked and inherited from the connected provided interface.
-Arguments shall be presented in a grid, with columns for name, type, encoding and direction, as well as buttons to move the given argument up and down in order.
+Arguments shall be presented in a grid, with columns for name, type, encoding and direction, as well as buttons to move the given argument up and down in order, as well as remove it. There should also be a button to add a new parameter.
 
 InheritPI property shall be editable via a checkbox.
 

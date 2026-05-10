@@ -101,7 +101,7 @@ export class InterfaceViewEditorProvider
                 }
                 case 'updateInterface': {
                     const before = document.snapshot();
-                    document.updateInterface(msg.id, { name: msg.name, kind: msg.kind, inheritPI: msg.inheritPI });
+                    document.updateInterface(msg.id, { name: msg.name, kind: msg.kind, inheritPI: msg.inheritPI, parameters: msg.parameters });
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
