@@ -138,18 +138,20 @@ function DiagramEditor() {
 
     const { screenToFlowPosition, zoomIn, zoomOut, fitView, getIntersectingNodes } = useReactFlow();
 
-    // Edges with labelStyle applied reactively (fontSizeConn may change independently of diagram load)
+    // Edges with derived render data applied reactively (options may change independently of diagram load)
     const styledEdges = useMemo(
         () => edges.map(e => ({
             ...e,
-            labelStyle: { ...(e.labelStyle ?? {}), fontSize: options.fontSizeConn },
             data: {
                 ...(e.data as Record<string, unknown> | undefined),
                 locked,
                 waypoints: collectConnectionWaypoints(nodes, e.id),
+                fontSizeConn: options.fontSizeConn,
+                canvasColor: options.canvasColor,
+                showConnectionLabels: options.showConnectionLabels,
             },
         })),
-        [edges, nodes, options.fontSizeConn, locked],
+        [edges, nodes, options.fontSizeConn, options.canvasColor, options.showConnectionLabels, locked],
     );
 
     const selectedFunction = useMemo(
@@ -600,9 +602,9 @@ function DiagramEditor() {
             // Stroke width relative to iface size
             const sw = Math.max(2, IFACE_W_EX * 0.05);
             parts.push(`<path d="M${sx},${sy} C${sx+dx},${sy} ${tx2-dx},${ty2} ${tx2},${ty2}" stroke="#6c7086" stroke-width="${sw}" fill="none"/>`);
-            if (e.label) {
+            if (options.showConnectionLabels && e.label) {
                 const lx = (sx + tx2) / 2, ly = (sy + ty2) / 2;
-                const labelFs = IFACE_H_EX * 0.4;
+                const labelFs = Math.max(6, options.fontSizeConn);
                 const labelW = String(e.label).length * labelFs * 0.6 + 12;
                 parts.push(`<rect x="${lx - labelW/2}" y="${ly - labelFs - 2}" width="${labelW}" height="${labelFs + 6}" fill="${options.canvasColor}" rx="3"/>`);
                 parts.push(`<text x="${lx}" y="${ly}" text-anchor="middle" fill="#cdd6f4" font-size="${labelFs}" font-family="sans-serif">${esc(String(e.label))}</text>`);
@@ -663,7 +665,9 @@ function DiagramEditor() {
                 case 'top':    lx = x + W / 2;   ly = y + H + GAP + fs;      anchor = 'middle'; break;
                 default:       lx = x + W / 2;   ly = y - GAP;                anchor = 'middle'; break;
             }
-            parts.push(`<text x="${lx}" y="${ly}" text-anchor="${anchor}" fill="#cdd6f4" font-size="${fs}" font-family="sans-serif">${esc(iface.name)}</text>`);
+            if (options.showInterfaceNames) {
+                parts.push(`<text x="${lx}" y="${ly}" text-anchor="${anchor}" fill="#cdd6f4" font-size="${fs}" font-family="sans-serif">${esc(iface.name)}</text>`);
+            }
         }
 
         parts.push('</svg>');
@@ -711,7 +715,7 @@ function DiagramEditor() {
         } else {
             post({ type: 'exportImage', format: 'png', dataUrl: pngDataUrl });
         }
-    }, [nodes, edges, options.canvasColor]);
+    }, [nodes, edges, options.canvasColor, options.fontSizeConn, options.showConnectionLabels, options.showInterfaceNames]);
 
     useEffect(() => {
         if (!pendingExportFormat) { return; }
@@ -965,7 +969,7 @@ function DiagramEditor() {
                     if (n.type !== 'functionNode') {
                         // Pass font size option into interface nodes too
                         return n.type === 'interfaceNode'
-                            ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface } }
+                            ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface, showInterfaceNames: options.showInterfaceNames } }
                             : n;
                     }
                     const isConnSrc = n.id === connectSrc?.id;

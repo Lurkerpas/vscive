@@ -127,6 +127,32 @@ export function OptionsPanel({ options, onChange, onBrowseAttrFile }: OptionsPan
                 </label>
             </div>
 
+            <div style={ROW}>
+                <span style={LABEL}>Show Interface Names</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#cdd6f4', fontSize: 11, padding: '2px 0' }}>
+                    <input
+                        type="checkbox"
+                        checked={options.showInterfaceNames}
+                        onChange={e => onChange({ showInterfaceNames: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                    />
+                    Enabled
+                </label>
+            </div>
+
+            <div style={ROW}>
+                <span style={LABEL}>Show Connection Labels</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#cdd6f4', fontSize: 11, padding: '2px 0' }}>
+                    <input
+                        type="checkbox"
+                        checked={options.showConnectionLabels}
+                        onChange={e => onChange({ showConnectionLabels: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                    />
+                    Enabled
+                </label>
+            </div>
+
             <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
                 Font Sizes (flow-px)
             </div>

@@ -8,6 +8,7 @@ interface InterfaceNodeData {
     iface: InterfaceModel;
     edge?: IfaceEdge;
     fontSizeIface?: number;
+    showInterfaceNames?: boolean;
     [key: string]: unknown;
 }
 
@@ -134,7 +135,7 @@ export function InterfaceNode({ data, selected }: NodeProps) {
                     strokeWidth={2}
                 />
             </svg>
-            <span style={labelStyle}>{iface.name}</span>
+            {d.showInterfaceNames !== false && <span style={labelStyle}>{iface.name}</span>}
             <span style={iconStyle}>{kindIcon}</span>
             {iface.type === 'provided'
                 ? <Handle type="target" position={handlePos} style={handleStyle} />

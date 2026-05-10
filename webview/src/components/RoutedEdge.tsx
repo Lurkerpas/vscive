@@ -32,12 +32,22 @@ function nearestSegmentInsertion(
 
 export function RoutedEdge({
     id, sourceX, sourceY, targetX, targetY,
-    label, labelStyle, selected, data, style,
+    label, selected, data, style,
 }: EdgeProps) {
     const { screenToFlowPosition, setNodes } = useReactFlow();
     const { showContextMenu } = useEdgeMenu();
-    const waypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? [];
-    const locked = (data as { locked?: boolean })?.locked ?? false;
+    const edgeData = (data as {
+        waypoints?: Waypoint[];
+        locked?: boolean;
+        fontSizeConn?: number;
+        canvasColor?: string;
+        showConnectionLabels?: boolean;
+    }) ?? {};
+    const waypoints: Waypoint[] = edgeData.waypoints ?? [];
+    const locked = edgeData.locked ?? false;
+    const labelFontSize = edgeData.fontSizeConn ?? 11;
+    const labelBg = edgeData.canvasColor ?? '#1e1e2e';
+    const showConnectionLabels = edgeData.showConnectionLabels ?? true;
 
     // Build polyline path: source → waypoints → target
     const allPts = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }];
@@ -50,6 +60,11 @@ export function RoutedEdge({
     const midI = Math.max(1, Math.floor(allPts.length / 2));
     const labelX = (allPts[midI - 1].x + allPts[midI].x) / 2;
     const labelY = (allPts[midI - 1].y + allPts[midI].y) / 2;
+    const labelText = typeof label === 'string' || typeof label === 'number' ? String(label) : '';
+    const labelPaddingX = 6;
+    const labelPaddingY = 3;
+    const labelWidth = labelText.length * labelFontSize * 0.6 + labelPaddingX * 2;
+    const labelHeight = labelFontSize + labelPaddingY * 2;
 
     // ── Edge path right-click → "Add Node" / "Remove Connection" ─────────
     const onPathContextMenu = (e: React.MouseEvent) => {
@@ -98,12 +113,30 @@ export function RoutedEdge({
             <BaseEdge
                 id={id}
                 path={pathD}
-                labelX={labelX}
-                labelY={labelY}
-                label={label}
-                labelStyle={labelStyle}
                 style={{ ...style, stroke: selected ? '#89b4fa' : undefined }}
             />
+            {showConnectionLabels && labelText && (
+                <g transform={`translate(${labelX}, ${labelY})`} style={{ pointerEvents: 'none' }}>
+                    <rect
+                        x={-labelWidth / 2}
+                        y={-labelHeight / 2}
+                        width={labelWidth}
+                        height={labelHeight}
+                        rx={3}
+                        fill={labelBg}
+                    />
+                    <text
+                        x={0}
+                        y={labelFontSize * 0.35}
+                        textAnchor="middle"
+                        fill="#cdd6f4"
+                        fontSize={labelFontSize}
+                        fontFamily="sans-serif"
+                    >
+                        {labelText}
+                    </text>
+                </g>
+            )}
             {/* Wider invisible interaction path — right-click for context menu */}
             <path
                 d={pathD}

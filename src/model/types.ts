@@ -148,6 +148,8 @@ export interface EditorOptions {
     snapEnabled: boolean;
     snapGridSize: number;
     showMinimap: boolean;
+    showInterfaceNames: boolean;
+    showConnectionLabels: boolean;
     fontSizeFn: number;
     fontSizeIface: number;
     fontSizeConn: number;
@@ -161,6 +163,8 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     snapEnabled: false,
     snapGridSize: 20,
     showMinimap: true,
+    showInterfaceNames: true,
+    showConnectionLabels: true,
     fontSizeFn: 90,
     fontSizeIface: 45,
     fontSizeConn: 11,
