@@ -179,6 +179,27 @@ export class InterfaceViewEditorProvider
                     }
                     break;
                 }
+                case 'exportImage': {
+                    const ext = msg.format === 'svg' ? 'svg' : 'png';
+                    const defaultUri = vscode.Uri.file(
+                        path.join(path.dirname(document.uri.fsPath), `diagram.${ext}`),
+                    );
+                    const saveUri = await vscode.window.showSaveDialog({
+                        defaultUri,
+                        filters: msg.format === 'svg'
+                            ? { 'SVG image': ['svg'] }
+                            : { 'PNG image': ['png'] },
+                        title: 'Export Diagram as Image',
+                    });
+                    if (!saveUri) { break; }
+                    // Data URL format: "data:<mime>;base64,<data>"
+                    const comma = msg.dataUrl.indexOf(',');
+                    const base64 = msg.dataUrl.slice(comma + 1);
+                    const bytes = Buffer.from(base64, 'base64');
+                    await vscode.workspace.fs.writeFile(saveUri, bytes);
+                    vscode.window.showInformationMessage(`Diagram exported to ${path.basename(saveUri.fsPath)}`);
+                    break;
+                }
             }
         });
     }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ReactFlow, Background, Controls, MiniMap,
     Node, Edge, NodeMouseHandler, NodeDragHandler, Connection,
@@ -80,6 +80,8 @@ function DiagramEditor() {
     const [locked, setLocked] = useState(false);
     const [optionsVisible, setOptionsVisible] = useState(false);
     const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
+
+    const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
 
     // ── Connect mode: click first function → select as source, click second → create RI+PI+connection
     const [connectMode, setConnectMode] = useState(false);
@@ -348,6 +350,79 @@ function DiagramEditor() {
         });
     }, [diagramData, nodes, screenToFlowPosition, getIntersectingNodes, getAbsolutePos]);
 
+    // ── Export image ─────────────────────────────────────────────────────────
+    const onExportImage = useCallback(async (format: 'png' | 'svg') => {
+        const captureEl = reactFlowWrapperRef.current?.querySelector<HTMLElement>('.react-flow__viewport');
+        if (!captureEl) { return; }
+
+        // Compute bounding box from root function nodes (absolute positions)
+        const fnNodes = nodes.filter(n => n.type === 'functionNode' && !n.parentId);
+        if (fnNodes.length === 0) { return; }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of fnNodes) {
+            const x = n.position.x;
+            const y = n.position.y;
+            const w = n.measured?.width ?? (n.style?.width as number | undefined) ?? 200;
+            const h = n.measured?.height ?? (n.style?.height as number | undefined) ?? 100;
+            if (x < minX) { minX = x; }
+            if (y < minY) { minY = y; }
+            if (x + w > maxX) { maxX = x + w; }
+            if (y + h > maxY) { maxY = y + h; }
+        }
+
+        const pad = 40;
+        const contentW = maxX - minX;
+        const contentH = maxY - minY;
+        const imageW = Math.max(contentW + pad * 2, 400);
+        const imageH = Math.max(contentH + pad * 2, 300);
+        const zoom = Math.min(imageW / (contentW + pad * 2), imageH / (contentH + pad * 2), 2);
+        const tx = pad - minX * zoom;
+        const ty = pad - minY * zoom;
+
+        // Collect all CSS rules from loaded stylesheets
+        let css = '';
+        for (const sheet of Array.from(document.styleSheets)) {
+            try { css += Array.from(sheet.cssRules).map(r => r.cssText).join('\n'); } catch { /* skip */ }
+        }
+
+        // Clone the ReactFlow viewport and apply the export transform
+        const clone = captureEl.cloneNode(true) as HTMLElement;
+        clone.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+        clone.style.transformOrigin = 'top left';
+
+        const svgStr = [
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${imageW}" height="${imageH}">`,
+            `<rect width="100%" height="100%" fill="${options.canvasColor}"/>`,
+            `<foreignObject x="0" y="0" width="${imageW}" height="${imageH}">`,
+            `<div xmlns="http://www.w3.org/1999/xhtml"`,
+            ` style="width:${imageW}px;height:${imageH}px;overflow:hidden;background:${options.canvasColor}">`,
+            `<style>${css}</style>`,
+            clone.outerHTML,
+            `</div></foreignObject></svg>`,
+        ].join('');
+
+        const svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+
+        if (format === 'svg') {
+            post({ type: 'exportImage', format, dataUrl: svgDataUrl });
+            return;
+        }
+
+        // PNG: render the SVG onto a canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = imageW;
+        canvas.height = imageH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { post({ type: 'exportImage', format: 'png', dataUrl: svgDataUrl }); return; }
+        await new Promise<void>(resolve => {
+            const img = new Image();
+            img.onload = () => { ctx.drawImage(img, 0, 0); resolve(); };
+            img.onerror = () => resolve();
+            img.src = svgDataUrl;
+        });
+        post({ type: 'exportImage', format: 'png', dataUrl: canvas.toDataURL('image/png') });
+    }, [nodes, options.canvasColor]);
+
     // ── Context menus ────────────────────────────────────────────────────────
     const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => {
         e.preventDefault();
@@ -372,9 +447,13 @@ function DiagramEditor() {
                     label: 'Build',
                     onClick: () => post({ type: 'build' }),
                 },
+                {
+                    label: 'Export Diagram as Image',
+                    onClick: () => onExportImage('png'),
+                },
             ],
         });
-    }, [screenToFlowPosition]);
+    }, [screenToFlowPosition, onExportImage]);
 
     const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
         e.preventDefault();
@@ -475,7 +554,7 @@ function DiagramEditor() {
     }
 
     return (
-        <div style={{ width: '100vw', height: '100vh', background: options.canvasColor, position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
+        <div ref={reactFlowWrapperRef} style={{ width: '100vw', height: '100vh', background: options.canvasColor, position: 'relative', cursor: connectMode ? 'crosshair' : 'default' }}>
             <Palette
                 onZoomIn={() => zoomIn()}
                 onZoomOut={() => zoomOut()}
@@ -485,6 +564,7 @@ function DiagramEditor() {
                 onShowOptions={() => setOptionsVisible(v => !v)}
                 onAddFunction={onPaletteAddFunction}
                 onAddConnection={() => { setConnectMode(v => !v); setConnectSrc(null); }}
+                onExportImage={() => onExportImage('png')}
                 connectMode={connectMode}
                 locked={locked}
                 onToggleLock={() => setLocked(v => !v)}

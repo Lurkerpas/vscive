@@ -173,7 +173,8 @@ export interface DiagramData {
 
 export type ExtensionMessage =
     | { type: 'load'; data: DiagramData }
-    | { type: 'options'; options: EditorOptions };
+    | { type: 'options'; options: EditorOptions }
+    | { type: 'requestExport'; format: 'png' | 'svg' };
 
 /** A single node-move record sent from the webview after drag-stop. */
 export interface NodeMove {
@@ -203,4 +204,5 @@ export type WebviewMessage =
     | { type: 'connectFunctions'; riId: string; piId: string; riFuncId: string; piFuncId: string; riRelX: number; riRelY: number; piRelX: number; piRelY: number }
     | { type: 'connectToFunction'; id: string; connId: string; existingIfaceId: string; targetFuncId: string; relRfX: number; relRfY: number }
     | { type: 'updateOptions'; options: EditorOptions }
-    | { type: 'browseAttrFile' };
+    | { type: 'browseAttrFile' }
+    | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };
