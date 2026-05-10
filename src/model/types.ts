@@ -147,6 +147,7 @@ export interface EditorOptions {
     canvasColor: string;
     snapEnabled: boolean;
     snapGridSize: number;
+    showMinimap: boolean;
     fontSizeFn: number;
     fontSizeIface: number;
     fontSizeConn: number;
@@ -159,6 +160,7 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     canvasColor: '#1e1e2e',
     snapEnabled: false,
     snapGridSize: 20,
+    showMinimap: true,
     fontSizeFn: 90,
     fontSizeIface: 45,
     fontSizeConn: 11,

@@ -114,6 +114,19 @@ export function OptionsPanel({ options, onChange, onBrowseAttrFile }: OptionsPan
                 />
             </div>
 
+            <div style={ROW}>
+                <span style={LABEL}>Show Minimap</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#cdd6f4', fontSize: 11, padding: '2px 0' }}>
+                    <input
+                        type="checkbox"
+                        checked={options.showMinimap}
+                        onChange={e => onChange({ showMinimap: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                    />
+                    Enabled
+                </label>
+            </div>
+
             <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
                 Font Sizes (flow-px)
             </div>

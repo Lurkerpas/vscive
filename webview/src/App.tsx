@@ -1004,11 +1004,13 @@ function DiagramEditor() {
                     gap={options.snapGridSize}
                 />
                 <Controls style={{ display: 'none' }} />
-                <MiniMap
-                    nodeColor={(n) => n.type === 'interfaceNode' ? '#89b4fa' : '#313244'}
-                    style={{ background: '#181825' }}
-                    position="top-right"
-                />
+                {options.showMinimap && (
+                    <MiniMap
+                        nodeColor={(n) => n.type === 'interfaceNode' ? '#89b4fa' : '#313244'}
+                        style={{ background: '#181825' }}
+                        position="top-right"
+                    />
+                )}
             </ReactFlow>
 
             {optionsVisible && !selected && (

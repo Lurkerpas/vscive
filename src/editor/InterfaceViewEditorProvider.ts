@@ -26,7 +26,8 @@ export class InterfaceViewEditorProvider
     private get extensionUri() { return this.context.extensionUri; }
 
     private getOptions(): EditorOptions {
-        return this.context.globalState.get<EditorOptions>('editorOptions', DEFAULT_OPTIONS);
+        const saved = this.context.globalState.get<Partial<EditorOptions>>('editorOptions', DEFAULT_OPTIONS);
+        return { ...DEFAULT_OPTIONS, ...saved };
     }
 
     private async saveOptions(options: EditorOptions): Promise<void> {
