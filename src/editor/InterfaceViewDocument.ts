@@ -372,7 +372,15 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
     updateFunction(id: string, patch: { name?: string; language?: string; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }): void {
         const fn = this.findFn(this.iv.functions, id);
         if (!fn) { return; }
-        if (patch.name !== undefined) { fn.name = patch.name; }
+        if (patch.name !== undefined) {
+            const oldName = fn.name;
+            fn.name = patch.name;
+            // Propagate to connection endpoint name fields (REQ-0050)
+            for (const conn of this.iv.connections) {
+                if (conn.sourceFuncName === oldName) { conn.sourceFuncName = patch.name; }
+                if (conn.targetFuncName === oldName) { conn.targetFuncName = patch.name; }
+            }
+        }
         if (patch.language !== undefined) { fn.language = patch.language; }
         if (patch.properties !== undefined) { fn.properties = patch.properties; }
         if (patch.extraAttrs !== undefined) { fn.extraAttrs = { ...fn.extraAttrs, ...patch.extraAttrs }; }
@@ -381,7 +389,24 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
     updateInterface(id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }): void {
         const result = this.findIface(id);
         if (!result) { return; }
-        if (patch.name !== undefined) { result.iface.name = patch.name; }
+        if (patch.name !== undefined) {
+            const oldName = result.iface.name;
+            result.iface.name = patch.name;
+            // Propagate to connection endpoint name fields (REQ-0050)
+            for (const conn of this.iv.connections) {
+                if (result.iface.type === 'required') {
+                    if (conn.sourceIfaceId === id && conn.sourceRiName === oldName) {
+                        conn.sourceRiName = patch.name;
+                        conn.name = `${patch.name}_to_${conn.targetPiName}`;
+                    }
+                } else {
+                    if (conn.targetIfaceId === id && conn.targetPiName === oldName) {
+                        conn.targetPiName = patch.name;
+                        conn.name = `${conn.sourceRiName}_to_${patch.name}`;
+                    }
+                }
+            }
+        }
         if (patch.kind !== undefined) { result.iface.kind = patch.kind; }
         if (patch.inheritPI !== undefined) { result.iface.inheritPI = patch.inheritPI; }
         if (patch.parameters !== undefined) { result.iface.parameters = patch.parameters; }
