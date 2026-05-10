@@ -37,6 +37,7 @@ export function RoutedEdge({
     const { screenToFlowPosition } = useReactFlow();
     const { showContextMenu } = useEdgeMenu();
     const initialWaypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? [];
+    const locked = (data as { locked?: boolean })?.locked ?? false;
     const [localWps, setLocalWps] = useState<Waypoint[]>(initialWaypoints);
     const draggingIdx = useRef<number | null>(null);
 
@@ -60,6 +61,7 @@ export function RoutedEdge({
 
     // ── Waypoint drag handlers ────────────────────────────────────────────
     const onHandlePointerDown = (e: React.PointerEvent, idx: number) => {
+        if (locked) { return; }
         if (e.button !== 0) { return; } // only primary button
         e.preventDefault();
         e.stopPropagation();
@@ -68,12 +70,14 @@ export function RoutedEdge({
     };
 
     const onHandlePointerMove = (e: React.PointerEvent, idx: number) => {
+        if (locked) { return; }
         if (draggingIdx.current !== idx) { return; }
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         setLocalWps(wps => wps.map((wp, i) => i === idx ? pos : wp));
     };
 
     const onHandlePointerUp = (e: React.PointerEvent, idx: number) => {
+        if (locked) { return; }
         if (draggingIdx.current !== idx) { return; }
         draggingIdx.current = null;
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
@@ -86,6 +90,7 @@ export function RoutedEdge({
 
     // ── Waypoint right-click → "Remove Node" / "Remove Connection" ───────
     const onCircleContextMenu = (e: React.MouseEvent, idx: number) => {
+        if (locked) { return; }
         e.preventDefault();
         e.stopPropagation();
         showContextMenu(e.clientX, e.clientY, [
@@ -109,6 +114,7 @@ export function RoutedEdge({
 
     // ── Edge path right-click → "Add Node" / "Remove Connection" ─────────
     const onPathContextMenu = (e: React.MouseEvent) => {
+        if (locked) { return; }
         e.preventDefault();
         e.stopPropagation();
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });

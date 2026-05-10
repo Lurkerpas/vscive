@@ -9,6 +9,7 @@ type SelectedEntity = FunctionModel | InterfaceModel | null;
 interface Props {
     selected: SelectedEntity;
     schema: AttributeSchema;
+    locked?: boolean;
     /** When set, the selected RI is connected: show these PI params as locked/read-only. */
     connectedPiParams?: ParameterModel[];
     onUpdateFunction: (id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => void;
@@ -130,8 +131,10 @@ function filterAttrs(
     scope2: string,
     lookup: (name: string) => string,
     entityExtraAttrs?: Record<string, string>,
+    excludedNames: ReadonlySet<string> = new Set(),
 ): AttrDef[] {
     return schema.attrs.filter(a => {
+        if (excludedNames.has(a.name)) { return false; }
         if (!a.visible) { return false; }
         if (!a.label) { return false; } // unnamed / internal attrs
         const matchedScope = a.scopes.find(s => s === scope1 || s === scope2);
@@ -176,7 +179,7 @@ function SchemaAttrField({ attrDef, value, onChange, onBlur }: {
     );
 }
 
-function AttributePanelInner({ selected, schema, connectedPiParams, onUpdateFunction, onUpdateInterface }: Props) {
+function AttributePanelInner({ selected, schema, locked = false, connectedPiParams, onUpdateFunction, onUpdateInterface }: Props) {
     // Local mutable copies — initialised once from selected on mount/remount
     const [params, setParams] = useState<ParameterModel[]>(() =>
         selected && isInterface(selected) ? selected.parameters.map(p => ({ ...p })) : [],
@@ -253,13 +256,20 @@ function AttributePanelInner({ selected, schema, connectedPiParams, onUpdateFunc
         const scope1 = iface.type === 'provided' ? piScope : riScope;
         const scope2 = iface.type === 'provided' ? 'ProvidedInterface' as const : 'RequiredInterface' as const;
         const lookup = ifaceAttrLookup(iface, extraAttrs);
-        const schemaAttrs = filterAttrs(schema, scope1, scope2, lookup, iface.extraAttrs);
+        const schemaAttrs = filterAttrs(
+            schema,
+            scope1,
+            scope2,
+            lookup,
+            iface.extraAttrs,
+            new Set(['name', 'kind', 'type', 'autonamed', 'inheritPI']),
+        );
         const kindOptions = iface.type === 'provided' ? PI_KINDS : RI_KINDS;
         // For a connected RI, params are locked and inherited from the PI
         const paramsLocked = iface.type === 'required' && connectedPiParams !== undefined;
         const displayParams = paramsLocked ? connectedPiParams! : params;
         return (
-            <div style={PANEL_STYLE}>
+            <div style={{ ...PANEL_STYLE, ...(locked ? { opacity: 0.75, pointerEvents: 'none' as const } : {}) }}>
                 <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>Interface</div>
 
                 <div style={ROW}>
@@ -367,11 +377,17 @@ function AttributePanelInner({ selected, schema, connectedPiParams, onUpdateFunc
     const fn = selected as FunctionModel;
     const fnLookup = fnAttrLookup(fn, extraAttrs);
     // Exclude attrs that are managed as dedicated typed fields to avoid duplication
-    const schemaAttrs = filterAttrs(schema, 'Function', 'Function', fnLookup, fn.extraAttrs)
-        .filter(a => a.name !== 'is_type' && a.name !== 'fixed_system_element');
+    const schemaAttrs = filterAttrs(
+        schema,
+        'Function',
+        'Function',
+        fnLookup,
+        fn.extraAttrs,
+        new Set(['name', 'language', 'default_implementation', 'is_type', 'fixed_system_element', 'required_system_element']),
+    );
     const languages = schemaLanguages(schema);
     return (
-        <div style={PANEL_STYLE}>
+        <div style={{ ...PANEL_STYLE, ...(locked ? { opacity: 0.75, pointerEvents: 'none' as const } : {}) }}>
             <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>Function</div>
 
             <div style={ROW}>

@@ -59,6 +59,7 @@ export class InterfaceViewEditorProvider
         const key = document.uri.toString();
         this._webviews.set(key, webviewPanel.webview);
         webviewPanel.onDidDispose(() => this._webviews.delete(key));
+        let pendingExport: { uri: vscode.Uri; format: 'png' | 'svg' } | null = null;
 
         webviewPanel.webview.onDidReceiveMessage(async (msg: WebviewMessage) => {
             log(`webview message: ${msg.type}`);
@@ -184,6 +185,26 @@ export class InterfaceViewEditorProvider
                     }
                     break;
                 }
+                case 'requestExport': {
+                    const defaultUri = vscode.Uri.file(
+                        path.join(path.dirname(document.uri.fsPath), 'diagram.png'),
+                    );
+                    const saveUri = await vscode.window.showSaveDialog({
+                        defaultUri,
+                        filters: {
+                            'PNG image': ['png'],
+                            'SVG image': ['svg'],
+                        },
+                        title: 'Export Diagram as Image',
+                    });
+                    if (!saveUri) { break; }
+
+                    const ext = path.extname(saveUri.fsPath).toLowerCase();
+                    const format: 'png' | 'svg' = ext === '.svg' ? 'svg' : 'png';
+                    pendingExport = { uri: saveUri, format };
+                    webviewPanel.webview.postMessage({ type: 'requestExport', format } as ExtensionMessage);
+                    break;
+                }
                 case 'pasteFunction': {
                     const before = document.snapshot();
                     document.pasteFunction(msg.newId, msg.source, msg.rfX, msg.rfY);
@@ -213,24 +234,14 @@ export class InterfaceViewEditorProvider
                     break;
                 }
                 case 'exportImage': {
-                    const ext = msg.format === 'svg' ? 'svg' : 'png';
-                    const defaultUri = vscode.Uri.file(
-                        path.join(path.dirname(document.uri.fsPath), `diagram.${ext}`),
-                    );
-                    const saveUri = await vscode.window.showSaveDialog({
-                        defaultUri,
-                        filters: msg.format === 'svg'
-                            ? { 'SVG image': ['svg'] }
-                            : { 'PNG image': ['png'] },
-                        title: 'Export Diagram as Image',
-                    });
-                    if (!saveUri) { break; }
+                    if (!pendingExport) { break; }
                     // Data URL format: "data:<mime>;base64,<data>"
                     const comma = msg.dataUrl.indexOf(',');
                     const base64 = msg.dataUrl.slice(comma + 1);
                     const bytes = Buffer.from(base64, 'base64');
-                    await vscode.workspace.fs.writeFile(saveUri, bytes);
-                    vscode.window.showInformationMessage(`Diagram exported to ${path.basename(saveUri.fsPath)}`);
+                    await vscode.workspace.fs.writeFile(pendingExport.uri, bytes);
+                    vscode.window.showInformationMessage(`Diagram exported to ${path.basename(pendingExport.uri.fsPath)}`);
+                    pendingExport = null;
                     break;
                 }
             }
@@ -245,7 +256,7 @@ export class InterfaceViewEditorProvider
         const serial = (this._editSerials.get(key) ?? 0) + 1;
         this._editSerials.set(key, serial);
 
-        const maxDepth = (this.getOptions().undoDepth ?? 50);
+        const maxDepth = (this.getOptions().undoDepth ?? 100);
         const minUndoable = Math.max(
             this._minUndoableSerials.get(key) ?? 0,
             serial - maxDepth,
@@ -332,26 +343,30 @@ export class InterfaceViewEditorProvider
 
     private getHtml(webview: vscode.Webview): string {
         const base = vscode.Uri.joinPath(this.extensionUri, 'out', 'webview');
-        const jsFiles = (() => {
+        const { jsFiles, cssFiles } = (() => {
             try {
                 const fs = require('fs') as typeof import('fs');
-                const assetsDir = path.join(base.fsPath, 'assets');
-                const files = fs.readdirSync(assetsDir).filter((f: string) => f.endsWith('.js'));
-                log(`getHtml: found JS assets: ${files.join(', ')}`);
-                return files.map((f: string) => webview.asWebviewUri(vscode.Uri.joinPath(base, 'assets', f)));
+                const htmlPath = path.join(base.fsPath, 'index.html');
+                const indexHtml = fs.readFileSync(htmlPath, 'utf8');
+
+                const scriptMatches = [...indexHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map(match => match[1]);
+                const styleMatches = [...indexHtml.matchAll(/<link[^>]+href="([^"]+)"/g)].map(match => match[1]);
+
+                const toWebviewUri = (assetPath: string) => {
+                    const normalized = assetPath.replace(/^\/+/, '');
+                    const segments = normalized.split('/').filter(Boolean);
+                    return webview.asWebviewUri(vscode.Uri.joinPath(base, ...segments));
+                };
+
+                log(`getHtml: resolved JS assets from index.html: ${scriptMatches.join(', ')}`);
+                return {
+                    jsFiles: scriptMatches.map(toWebviewUri),
+                    cssFiles: styleMatches.map(toWebviewUri),
+                };
             } catch (err) {
-                log(`getHtml: failed to read assets dir: ${err}`);
-                return [];
+                log(`getHtml: failed to read built index.html: ${err}`);
+                return { jsFiles: [], cssFiles: [] };
             }
-        })();
-        const cssFiles = (() => {
-            try {
-                const fs = require('fs') as typeof import('fs');
-                const assetsDir = path.join(base.fsPath, 'assets');
-                return fs.readdirSync(assetsDir)
-                    .filter((f: string) => f.endsWith('.css'))
-                    .map((f: string) => webview.asWebviewUri(vscode.Uri.joinPath(base, 'assets', f)));
-            } catch { return []; }
         })();
 
         const csp = `default-src 'none'; img-src data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource};`;

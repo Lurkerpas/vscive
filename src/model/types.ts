@@ -163,7 +163,7 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     fontSizeIface: 45,
     fontSizeConn: 11,
     attrFilePath: '',
-    undoDepth: 50,
+    undoDepth: 100,
 };
 
 // ── postMessage protocol ───────────────────────────────────────────────────
@@ -194,6 +194,7 @@ export interface NodeMove {
 
 export type WebviewMessage =
     | { type: 'ready' }
+    | { type: 'requestExport' }
     | { type: 'nodesMoved'; moves: NodeMove[] }
     | { type: 'addFunction'; id: string; name: string; language: string; rfX: number; rfY: number; parentId?: string }
     | { type: 'addInterface'; id: string; funcId: string; name: string; kind: InterfaceKind; ifaceType: 'provided' | 'required'; relRfX: number; relRfY: number }

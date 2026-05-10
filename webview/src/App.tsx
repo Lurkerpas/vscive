@@ -61,6 +61,14 @@ function isInterface(e: FunctionModel | InterfaceModel | null): e is InterfaceMo
     return e !== null && 'kind' in e;
 }
 
+function isFunction(e: FunctionModel | InterfaceModel | null): e is FunctionModel {
+    return e !== null && !('kind' in e);
+}
+
+function snapToGrid(value: number, grid: number): number {
+    return Math.round(value / grid) * grid;
+}
+
 // ─── Inner component (needs ReactFlow context for screenToFlowPosition) ─────
 
 function DiagramEditor() {
@@ -77,6 +85,7 @@ function DiagramEditor() {
     const [locked, setLocked] = useState(false);
     const [optionsVisible, setOptionsVisible] = useState(false);
     const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
+    const [pendingExportFormat, setPendingExportFormat] = useState<'png' | 'svg' | null>(null);
     const [clipboard, setClipboard] = useState<
         | { kind: 'function'; data: FunctionModel }
         | { kind: 'interface'; data: InterfaceModel }
@@ -90,8 +99,17 @@ function DiagramEditor() {
 
     // Edges with labelStyle applied reactively (fontSizeConn may change independently of diagram load)
     const styledEdges = useMemo(
-        () => edges.map(e => ({ ...e, labelStyle: { fontSize: options.fontSizeConn } })),
-        [edges, options.fontSizeConn],
+        () => edges.map(e => ({
+            ...e,
+            labelStyle: { ...(e.labelStyle ?? {}), fontSize: options.fontSizeConn },
+            data: { ...(e.data as Record<string, unknown> | undefined), locked },
+        })),
+        [edges, options.fontSizeConn, locked],
+    );
+
+    const selectedFunction = useMemo(
+        () => isFunction(selected) ? selected : null,
+        [selected],
     );
 
     // ── Receive messages from extension ─────────────────────────────────────
@@ -100,6 +118,8 @@ function DiagramEditor() {
             const msg = event.data as ExtensionMessage;
             if (msg.type === 'options') {
                 setOptions(msg.options);
+            } else if (msg.type === 'requestExport') {
+                setPendingExportFormat(msg.format);
             } else if (msg.type === 'load') {
                 try {
                     setDiagramData(msg.data);
@@ -249,12 +269,18 @@ function DiagramEditor() {
         onNodesChange(changes);
         for (const change of changes) {
             if (change.type === 'dimensions' && change.resizing === false) {
-                const w = (change as { dimensions?: { width: number; height: number } }).dimensions?.width ?? 800;
-                const h = (change as { dimensions?: { width: number; height: number } }).dimensions?.height ?? 560;
+                const rawW = (change as { dimensions?: { width: number; height: number } }).dimensions?.width ?? 800;
+                const rawH = (change as { dimensions?: { width: number; height: number } }).dimensions?.height ?? 560;
 
                 setNodes(nds => {
                     const fnNode = nds.find(n => n.id === change.id);
                     if (!fnNode) { return nds; }
+
+                    const grid = Math.max(1, options.snapGridSize || 1);
+                    const x = options.snapEnabled ? snapToGrid(fnNode.position.x, grid) : fnNode.position.x;
+                    const y = options.snapEnabled ? snapToGrid(fnNode.position.y, grid) : fnNode.position.y;
+                    const w = options.snapEnabled ? Math.max(grid, snapToGrid(rawW, grid)) : rawW;
+                    const h = options.snapEnabled ? Math.max(grid, snapToGrid(rawH, grid)) : rawH;
 
                     // Post function resize to backend
                     post({
@@ -262,8 +288,8 @@ function DiagramEditor() {
                         moves: [{
                             id: fnNode.id,
                             kind: 'function',
-                            x: fnNode.position.x,
-                            y: fnNode.position.y,
+                            x,
+                            y,
                             w,
                             h,
                             parentId: fnNode.parentId,
@@ -273,6 +299,9 @@ function DiagramEditor() {
                     // Re-snap all child interfaces to the new edges
                     const ifaceMoves: NodeMove[] = [];
                     const updated = nds.map(n => {
+                        if (n.id === change.id) {
+                            return { ...n, position: { x, y }, style: { ...n.style, width: w, height: h } };
+                        }
                         if (n.parentId !== change.id || n.type !== 'interfaceNode') { return n; }
                         const snapped = snapIfaceToEdge(n.position.x, n.position.y, w, h);
                         ifaceMoves.push({
@@ -289,10 +318,11 @@ function DiagramEditor() {
                 });
             }
         }
-    }, [onNodesChange, setNodes]);
+    }, [onNodesChange, options.snapEnabled, options.snapGridSize, setNodes]);
 
     // ── Connect ──────────────────────────────────────────────────────────────
     const onConnect = useCallback((params: Connection) => {
+        if (locked) { return; }
         if (!diagramData || !params.source || !params.target) { return; }
         const { iv } = diagramData;
 
@@ -321,21 +351,24 @@ function DiagramEditor() {
         if (srcIface.kind !== tgtIface.kind) { return; }
 
         post({ type: 'connect', id: uuid(), sourceIfaceId: riId, targetIfaceId: piId });
-    }, [diagramData]);
+    }, [diagramData, locked]);
 
     // ── Delete key → remove selected nodes/edges ─────────────────────────────
     const onNodesDelete = useCallback((deletedNodes: Node[]) => {
+        if (locked) { return; }
         const ids = deletedNodes.map(n => n.id);
         if (ids.length > 0) { post({ type: 'delete', ids }); }
-    }, []);
+    }, [locked]);
 
     const onEdgesDelete = useCallback((deletedEdges: Edge[]) => {
+        if (locked) { return; }
         const ids = deletedEdges.map(e => e.id);
         if (ids.length > 0) { post({ type: 'delete', ids }); }
-    }, []);
+    }, [locked]);
 
     // ── Drag interface handle → function node: create compatible interface + connect ──
     const onConnectEnd: OnConnectEnd = useCallback((event, connectionState) => {
+        if (locked) { return; }
         // If connection was valid, onConnect already handled it
         if (connectionState.isValid || !diagramData) { return; }
         const fromNodeId = (connectionState.fromNode as Node | null)?.id;
@@ -373,7 +406,7 @@ function DiagramEditor() {
             relRfX: relX,
             relRfY: relY,
         });
-    }, [diagramData, nodes, screenToFlowPosition, getIntersectingNodes, getAbsolutePos]);
+    }, [diagramData, getAbsolutePos, getIntersectingNodes, locked, nodes, screenToFlowPosition]);
 
     // ── Export image ─────────────────────────────────────────────────────────
     const onExportImage = useCallback(async (format: 'png' | 'svg') => {
@@ -563,21 +596,30 @@ function DiagramEditor() {
         }
     }, [nodes, edges, options.canvasColor]);
 
+    useEffect(() => {
+        if (!pendingExportFormat) { return; }
+        void onExportImage(pendingExportFormat);
+        setPendingExportFormat(null);
+    }, [onExportImage, pendingExportFormat]);
+
     // ── Context menus ────────────────────────────────────────────────────────
     const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => {
         e.preventDefault();
         const rfPos = screenToFlowPosition({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY });
-        const items: ContextMenuItem[] = [
-            {
-                label: '+ Add Function',
-                onClick: () => setDialog({ kind: 'addFunction', rfX: rfPos.x, rfY: rfPos.y }),
-            },
-            {
-                label: '+ Add Connection',
-                onClick: () => { setConnectMode(true); setConnectSrc(null); },
-            },
-        ];
-        if (clipboard?.kind === 'function') {
+        const items: ContextMenuItem[] = [];
+        if (!locked) {
+            items.push(
+                {
+                    label: '+ Add Function',
+                    onClick: () => setDialog({ kind: 'addFunction', rfX: rfPos.x, rfY: rfPos.y }),
+                },
+                {
+                    label: '+ Add Connection',
+                    onClick: () => { setConnectMode(true); setConnectSrc(null); },
+                },
+            );
+        }
+        if (!locked && clipboard?.kind === 'function') {
             items.push({
                 label: 'Paste Function',
                 onClick: () => post({ type: 'pasteFunction', newId: uuid(), source: clipboard.data, rfX: rfPos.x, rfY: rfPos.y }),
@@ -594,11 +636,11 @@ function DiagramEditor() {
             },
             {
                 label: 'Export Diagram as Image',
-                onClick: () => onExportImage('png'),
+                onClick: () => post({ type: 'requestExport' }),
             },
         );
         setContextMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items });
-    }, [screenToFlowPosition, onExportImage, clipboard]);
+    }, [clipboard, locked, screenToFlowPosition]);
 
     const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
         e.preventDefault();
@@ -608,28 +650,30 @@ function DiagramEditor() {
 
         if (entity && !isInterface(entity)) {
             const fn = entity as FunctionModel;
-            items.push(
-                {
-                    label: '+ Add Provided Interface',
-                    onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'provided' }),
-                },
-                {
-                    label: '+ Add Required Interface',
-                    onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'required' }),
-                },
-                {
-                    label: 'Add Nested Function',
-                    onClick: () => {
-                        const abs = getAbsolutePos(fn.id);
-                        setDialog({ kind: 'addFunction', rfX: abs.x + 100, rfY: abs.y + 100, parentId: fn.id });
+            if (!locked) {
+                items.push(
+                    {
+                        label: '+ Add Provided Interface',
+                        onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'provided' }),
                     },
-                },
-                {
-                    label: 'Copy Function',
-                    onClick: () => setClipboard({ kind: 'function', data: fn }),
-                },
-            );
-            if (clipboard?.kind === 'interface') {
+                    {
+                        label: '+ Add Required Interface',
+                        onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'required' }),
+                    },
+                    {
+                        label: 'Add Nested Function',
+                        onClick: () => {
+                            const abs = getAbsolutePos(fn.id);
+                            setDialog({ kind: 'addFunction', rfX: abs.x + 100, rfY: abs.y + 100, parentId: fn.id });
+                        },
+                    },
+                );
+            }
+            items.push({
+                label: 'Copy Function',
+                onClick: () => setClipboard({ kind: 'function', data: fn }),
+            });
+            if (!locked && clipboard?.kind === 'interface') {
                 const iface = clipboard.data;
                 const pw = node.measured?.width ?? 800;
                 const ph = node.measured?.height ?? 560;
@@ -640,7 +684,7 @@ function DiagramEditor() {
                     onClick: () => post({ type: 'pasteInterface', newId: uuid(), source: iface, funcId: fn.id, relRfX, relRfY }),
                 });
             }
-            if (node.parentId) {
+            if (!locked && node.parentId) {
                 items.push({
                     label: 'Move to Root',
                     onClick: () => post({ type: 'reparentFunction', id: fn.id }),
@@ -651,31 +695,33 @@ function DiagramEditor() {
                     label: 'Edit Function',
                     onClick: () => post({ type: 'editFunction', id: fn.id }),
                 },
-                {
+            );
+            if (!locked) {
+                items.push({
                     label: 'Delete Function',
                     danger: true,
                     onClick: () => post({ type: 'delete', ids: [fn.id] }),
-                },
-            );
+                });
+            }
         } else if (entity && isInterface(entity)) {
             const iface = entity as InterfaceModel;
-            items.push(
-                {
-                    label: 'Copy Interface',
-                    onClick: () => setClipboard({ kind: 'interface', data: iface }),
-                },
-                {
+            items.push({
+                label: 'Copy Interface',
+                onClick: () => setClipboard({ kind: 'interface', data: iface }),
+            });
+            if (!locked) {
+                items.push({
                     label: 'Delete Interface',
                     danger: true,
                     onClick: () => post({ type: 'delete', ids: [iface.id] }),
-                },
-            );
+                });
+            }
         }
 
         if (items.length > 0) {
             setContextMenu({ x: e.clientX, y: e.clientY, items });
         }
-    }, [diagramData, clipboard, getAbsolutePos]);
+    }, [clipboard, diagramData, getAbsolutePos, locked]);
 
     // ── Attribute panel callbacks ────────────────────────────────────────────
     const updateOptions = useCallback((patch: Partial<EditorOptions>) => {
@@ -687,12 +733,14 @@ function DiagramEditor() {
     }, []);
 
     const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => {
+        if (locked) { return; }
         post({ type: 'updateFunction', id, ...patch });
-    }, []);
+    }, [locked]);
 
     const onUpdateInterface = useCallback((id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }) => {
+        if (locked) { return; }
         post({ type: 'updateInterface', id, ...patch });
-    }, []);
+    }, [locked]);
 
     // ── Compute PI params for connected RI (for parameter locking) ───────────
     const connectedPiParams = useMemo(() => {
@@ -706,10 +754,16 @@ function DiagramEditor() {
 
     // ── Palette actions ──────────────────────────────────────────────────────
     const onPaletteAddFunction = useCallback(() => {
+        if (locked) { return; }
         // Add at viewport center
         const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
         setDialog({ kind: 'addFunction', rfX: center.x, rfY: center.y });
-    }, [screenToFlowPosition]);
+    }, [locked, screenToFlowPosition]);
+
+    const onPaletteAddInterface = useCallback((ifaceType: 'provided' | 'required') => {
+        if (locked || !selectedFunction) { return; }
+        setDialog({ kind: 'addInterface', funcId: selectedFunction.id, funcName: selectedFunction.name, presetType: ifaceType });
+    }, [locked, selectedFunction]);
 
     // ── Dialog confirm ───────────────────────────────────────────────────────
     const onConfirmFunction = useCallback((name: string, language: string, rfX: number, rfY: number, parentId?: string) => {
@@ -756,8 +810,11 @@ function DiagramEditor() {
                 snapEnabled={options.snapEnabled}
                 onShowOptions={() => setOptionsVisible(v => !v)}
                 onAddFunction={onPaletteAddFunction}
+                onAddProvidedInterface={() => onPaletteAddInterface('provided')}
+                onAddRequiredInterface={() => onPaletteAddInterface('required')}
+                interfaceActionsEnabled={!locked && selectedFunction !== null}
                 onAddConnection={() => { setConnectMode(v => !v); setConnectSrc(null); }}
-                onExportImage={() => onExportImage('png')}
+                onExportImage={() => post({ type: 'requestExport' })}
                 connectMode={connectMode}
                 locked={locked}
                 onToggleLock={() => setLocked(v => !v)}
@@ -821,6 +878,7 @@ function DiagramEditor() {
                 <AttributePanel
                     selected={selected}
                     schema={diagramData?.schema ?? { attrs: [] }}
+                    locked={locked}
                     connectedPiParams={connectedPiParams}
                     onUpdateFunction={onUpdateFunction}
                     onUpdateInterface={onUpdateInterface}

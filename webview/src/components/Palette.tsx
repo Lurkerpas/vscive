@@ -8,6 +8,9 @@ interface PaletteProps {
     snapEnabled: boolean;
     onShowOptions: () => void;
     onAddFunction: () => void;
+    onAddProvidedInterface: () => void;
+    onAddRequiredInterface: () => void;
+    interfaceActionsEnabled: boolean;
     onAddConnection: () => void;
     onExportImage: () => void;
     connectMode: boolean;
@@ -35,21 +38,24 @@ function PaletteBtn({
     onClick,
     active,
     danger,
+    disabled,
     children,
 }: {
     title: string;
     onClick: () => void;
     active?: boolean;
     danger?: boolean;
+    disabled?: boolean;
     children: React.ReactNode;
 }) {
     const [hovered, setHovered] = React.useState(false);
-    const bg = active ? '#45475a' : hovered ? '#313244' : 'transparent';
-    const color = danger ? '#f38ba8' : active ? '#89b4fa' : '#cdd6f4';
+    const bg = disabled ? 'transparent' : active ? '#45475a' : hovered ? '#313244' : 'transparent';
+    const color = disabled ? '#6c7086' : danger ? '#f38ba8' : active ? '#89b4fa' : '#cdd6f4';
     return (
         <button
             title={title}
             onClick={onClick}
+            disabled={disabled}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             style={{
@@ -57,7 +63,7 @@ function PaletteBtn({
                 border: 'none',
                 borderRadius: 6,
                 color,
-                cursor: 'pointer',
+                cursor: disabled ? 'not-allowed' : 'pointer',
                 width: 36,
                 height: 36,
                 display: 'flex',
@@ -66,6 +72,7 @@ function PaletteBtn({
                 fontSize: 18,
                 transition: 'background 0.1s',
                 padding: 0,
+                opacity: disabled ? 0.6 : 1,
             }}
         >
             {children}
@@ -81,6 +88,9 @@ export function Palette({
     snapEnabled,
     onShowOptions,
     onAddFunction,
+    onAddProvidedInterface,
+    onAddRequiredInterface,
+    interfaceActionsEnabled,
     onAddConnection,
     onExportImage,
     connectMode,
@@ -96,8 +106,18 @@ export function Palette({
             <PaletteBtn title={snapEnabled ? 'Snap to Grid: ON' : 'Snap to Grid: OFF'} onClick={onToggleSnap} active={snapEnabled}>⊞</PaletteBtn>
             <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
             <PaletteBtn title="Show Options" onClick={onShowOptions} active={optionsVisible}>⚙</PaletteBtn>
-            <PaletteBtn title="Add Function" onClick={onAddFunction}>＋▭</PaletteBtn>
-            <PaletteBtn title="Add Connection" onClick={onAddConnection} active={connectMode}>⇝</PaletteBtn>
+            <PaletteBtn title="Add Function" onClick={onAddFunction} disabled={locked}>＋▭</PaletteBtn>
+            <PaletteBtn
+                title={interfaceActionsEnabled ? 'Add Provided Interface' : 'Add Provided Interface (select a function first)'}
+                onClick={onAddProvidedInterface}
+                disabled={!interfaceActionsEnabled}
+            >▷</PaletteBtn>
+            <PaletteBtn
+                title={interfaceActionsEnabled ? 'Add Required Interface' : 'Add Required Interface (select a function first)'}
+                onClick={onAddRequiredInterface}
+                disabled={!interfaceActionsEnabled}
+            >◁</PaletteBtn>
+            <PaletteBtn title="Add Connection" onClick={onAddConnection} active={connectMode} disabled={locked}>⇝</PaletteBtn>
             <PaletteBtn title="Export Diagram as Image" onClick={onExportImage}>⬇</PaletteBtn>
             <div style={{ width: 24, height: 1, background: '#45475a', margin: '4px 0' }} />
             <PaletteBtn title={locked ? 'Unlock Diagram' : 'Lock Diagram from Modification'} onClick={onToggleLock} active={locked} danger={locked}>

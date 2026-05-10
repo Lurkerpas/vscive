@@ -50,7 +50,41 @@ function serializeInterface(iface: InterfaceModel, indent: string): string {
     return [`${indent}<${tag}${toAttrStr(attrs)}>`, ...children, `${indent}</${tag}>`].join('\n');
 }
 
-function serializeFunction(fn: FunctionModel, indent: string): string {
+function findIfaceHostPath(
+    functions: FunctionModel[],
+    ifaceId: string,
+    path: FunctionModel[] = [],
+): FunctionModel[] | undefined {
+    for (const fn of functions) {
+        const nextPath = [...path, fn];
+        if ([...fn.providedInterfaces, ...fn.requiredInterfaces].some(iface => iface.id === ifaceId)) {
+            return nextPath;
+        }
+        const found = findIfaceHostPath(fn.nestedFunctions, ifaceId, nextPath);
+        if (found) { return found; }
+    }
+    return undefined;
+}
+
+function inferConnectionOwnerId(iv: IvModel, conn: ConnectionModel): string | undefined {
+    const srcPath = findIfaceHostPath(iv.functions, conn.sourceIfaceId);
+    const tgtPath = findIfaceHostPath(iv.functions, conn.targetIfaceId);
+    if (!srcPath || !tgtPath) { return undefined; }
+
+    let ownerId: string | undefined;
+    const maxDepth = Math.min(srcPath.length, tgtPath.length);
+    for (let index = 0; index < maxDepth; index++) {
+        if (srcPath[index].id !== tgtPath[index].id) { break; }
+        ownerId = srcPath[index].id;
+    }
+    return ownerId;
+}
+
+function serializeFunction(
+    fn: FunctionModel,
+    indent: string,
+    connectionsByOwner: Map<string | undefined, ConnectionModel[]>,
+): string {
     const knownAttrs: Record<string, string> = {
         id: fn.id,
         name: fn.name,
@@ -72,7 +106,10 @@ function serializeFunction(fn: FunctionModel, indent: string): string {
         lines.push(serializeInterface(iface, `${indent}  `));
     }
     for (const nested of fn.nestedFunctions) {
-        lines.push(serializeFunction(nested, `${indent}  `));
+        lines.push(serializeFunction(nested, `${indent}  `, connectionsByOwner));
+    }
+    for (const conn of connectionsByOwner.get(fn.id) ?? []) {
+        lines.push(serializeConnection(conn, `${indent}  `));
     }
     if (fn.implementations.length > 0) {
         lines.push(`${indent}  <Implementations>`);
@@ -101,6 +138,14 @@ function serializeConnection(conn: ConnectionModel, indent: string): string {
 }
 
 export function serializeIvXml(iv: IvModel): string {
+    const connectionsByOwner = new Map<string | undefined, ConnectionModel[]>();
+    for (const conn of iv.connections) {
+        const ownerId = inferConnectionOwnerId(iv, conn);
+        const bucket = connectionsByOwner.get(ownerId) ?? [];
+        bucket.push(conn);
+        connectionsByOwner.set(ownerId, bucket);
+    }
+
     const rootAttrs: Record<string, string> = {
         version: iv.version,
         asn1file: iv.asn1file,
@@ -113,9 +158,9 @@ export function serializeIvXml(iv: IvModel): string {
         `<InterfaceView${toAttrStr(rootAttrs)}>`,
     ];
     for (const fn of iv.functions) {
-        lines.push(serializeFunction(fn, '  '));
+        lines.push(serializeFunction(fn, '  ', connectionsByOwner));
     }
-    for (const conn of iv.connections) {
+    for (const conn of connectionsByOwner.get(undefined) ?? []) {
         lines.push(serializeConnection(conn, '  '));
     }
     for (const layer of iv.layers) {

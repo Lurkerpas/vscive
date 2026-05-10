@@ -11,6 +11,8 @@ The pallete shall have the following buttons:
 - Snap to Grid,
 - Show Options,
 - Add Function,
+- Add Provided Interface (adds to the currently selected Function),
+- Add Required Interface (adds to the currently selected Function),
 - Add Connection,
 - Export Diagram as Image,
 - Lock Diagram from Modification.
@@ -49,6 +51,7 @@ Right clicking on a function shall present a menu with the following options:
 - Copy (copying the selected function),
 - Paste (if Interface has been copied),
 - Add Nested Function,
+- Move to Root (if a function is nested),
 - Edit Function (launching editor for its source, logic to be implemented later),
 - Delete Function.
 
