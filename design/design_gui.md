@@ -12,6 +12,7 @@ The pallete shall have the following buttons:
 - Show Options,
 - Add Function,
 - Add Connection,
+- Export Diagram as Image,
 - Lock Diagram from Modification.
 
 The buttons shall be illustrated using only an icon, with name shown as a tooltip on mouse hover.
@@ -37,14 +38,24 @@ If there is an interface, sporadic, protected or unprotected, once its connectio
 Right clicking on the canvas shall present a menu with the following options:
 - Add Function,
 - Add Connection,
+- Paste (if Function has been copied),
 - Build Skeletons (invoking make skeletons in the folder of the interfaceview.xml),
-- Build (invoking make in the folder of the interfaceview.xml).
+- Build (invoking make in the folder of the interfaceview.xml),
+- Export Diagram as Image.
 
 Right clicking on a function shall present a menu with the following options:
 - Add Provided Interface,
 - Add Required Interface,
+- Copy (copying the selected function),
+- Paste (if Interface has been copied),
+- Add Nested Function,
 - Edit Function (launching editor for its source, logic to be implemented later),
 - Delete Function.
+
+Right clicking on an interface shall present a menu with the following options:
+- Copy (copying the selected interface).
+
+Copy-Paste shall copy the given entity, but wihout any connections, and assigning new UID.
 
 Snap to Grid shall be toggleable. When on, all positions of interfaces and function borders (so it applies also to resizing), shall be aligned to the grid.
 Lock Diagram from Modification shall be toggleable. When on, all positions and sizes shall be locked.
