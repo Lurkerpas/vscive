@@ -151,6 +151,8 @@ export interface EditorOptions {
     fontSizeIface: number;
     fontSizeConn: number;
     attrFilePath: string;
+    /** Maximum number of undo steps retained per document. */
+    undoDepth: number;
 }
 
 export const DEFAULT_OPTIONS: EditorOptions = {
@@ -161,6 +163,7 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     fontSizeIface: 45,
     fontSizeConn: 11,
     attrFilePath: '',
+    undoDepth: 50,
 };
 
 // ── postMessage protocol ───────────────────────────────────────────────────
@@ -205,4 +208,6 @@ export type WebviewMessage =
     | { type: 'connectToFunction'; id: string; connId: string; existingIfaceId: string; targetFuncId: string; relRfX: number; relRfY: number }
     | { type: 'updateOptions'; options: EditorOptions }
     | { type: 'browseAttrFile' }
-    | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };
+    | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string }
+    | { type: 'pasteFunction'; newId: string; source: FunctionModel; rfX: number; rfY: number }
+    | { type: 'pasteInterface'; newId: string; source: InterfaceModel; funcId: string; relRfX: number; relRfY: number };

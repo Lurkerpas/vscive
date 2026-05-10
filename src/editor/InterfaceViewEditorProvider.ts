@@ -16,6 +16,11 @@ export class InterfaceViewEditorProvider
     /** Map document URI → active webview, used for undo/redo repaint. */
     private readonly _webviews = new Map<string, vscode.Webview>();
 
+    /** Per-document monotonic edit counter for undo depth enforcement. */
+    private readonly _editSerials = new Map<string, number>();
+    /** Per-document minimum serial still eligible for undo (older entries become no-ops). */
+    private readonly _minUndoableSerials = new Map<string, number>();
+
     constructor(private readonly context: vscode.ExtensionContext) { }
 
     private get extensionUri() { return this.context.extensionUri; }
@@ -179,6 +184,20 @@ export class InterfaceViewEditorProvider
                     }
                     break;
                 }
+                case 'pasteFunction': {
+                    const before = document.snapshot();
+                    document.pasteFunction(msg.newId, msg.source, msg.rfX, msg.rfY);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'pasteInterface': {
+                    const before = document.snapshot();
+                    document.pasteInterface(msg.newId, msg.source, msg.funcId, msg.relRfX, msg.relRfY);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
                 case 'exportImage': {
                     const ext = msg.format === 'svg' ? 'svg' : 'png';
                     const defaultUri = vscode.Uri.file(
@@ -208,14 +227,26 @@ export class InterfaceViewEditorProvider
         document: InterfaceViewDocument,
         before: { iv: IvModel; ui: UiModel },
     ): void {
-        const after = document.snapshot();
         const key = document.uri.toString();
+        const serial = (this._editSerials.get(key) ?? 0) + 1;
+        this._editSerials.set(key, serial);
+
+        const maxDepth = (this.getOptions().undoDepth ?? 50);
+        const minUndoable = Math.max(
+            this._minUndoableSerials.get(key) ?? 0,
+            serial - maxDepth,
+        );
+        this._minUndoableSerials.set(key, minUndoable);
+
+        const after = document.snapshot();
         this._onDidChangeCustomDocument.fire({
             document,
             undo: async () => {
-                document.restore(before);
-                const wv = this._webviews.get(key);
-                if (wv) { this.sendDiagram(wv, document); }
+                if (serial > (this._minUndoableSerials.get(key) ?? 0)) {
+                    document.restore(before);
+                    const wv = this._webviews.get(key);
+                    if (wv) { this.sendDiagram(wv, document); }
+                }
             },
             redo: async () => {
                 document.restore(after);

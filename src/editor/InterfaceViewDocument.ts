@@ -459,6 +459,62 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         this.connect(connId, riId, piId);
     }
 
+    /**
+     * Paste a function as a copy of `source` — new IDs, no connections, no nested functions.
+     * `rfX`, `rfY` are the flow-pixel (React Flow) top-left position for the pasted node.
+     */
+    pasteFunction(newId: string, source: FunctionModel, rfX: number, rfY: number): void {
+        const scX1 = Math.round(rfX * SC_INV);
+        const scY1 = Math.round(rfY * SC_INV);
+        const scX2 = scX1 + Math.round(800 * SC_INV);
+        const scY2 = scY1 + Math.round(560 * SC_INV);
+
+        const newFn: FunctionModel = {
+            ...(JSON.parse(JSON.stringify(source)) as FunctionModel),
+            id: newId,
+            nestedFunctions: [],
+            providedInterfaces: source.providedInterfaces.map(iface => ({
+                ...(JSON.parse(JSON.stringify(iface)) as InterfaceModel),
+                id: randomUUID(),
+            })),
+            requiredInterfaces: source.requiredInterfaces.map(iface => ({
+                ...(JSON.parse(JSON.stringify(iface)) as InterfaceModel),
+                id: randomUUID(),
+            })),
+        };
+
+        this.iv.functions.push(newFn);
+        this.ui.entities[newId] = { coordinates: [scX1, scY1, scX2, scY2] };
+        // Interface positions are omitted; buildGraph falls back to stacking on left/right edges.
+    }
+
+    /**
+     * Paste an interface as a copy of `source` onto function `funcId` — new ID, no connections.
+     * `relRfX`, `relRfY` are the top-left of the IFACE_W×IFACE_H box relative to the function's top-left.
+     */
+    pasteInterface(newId: string, source: InterfaceModel, funcId: string, relRfX: number, relRfY: number): void {
+        const fn = this.findFn(this.iv.functions, funcId);
+        if (!fn) { return; }
+
+        const pl = this.ui.entities[funcId];
+        const pX1 = pl?.coordinates[0] ?? 0;
+        const pY1 = pl?.coordinates[1] ?? 0;
+        const scX = Math.round(pX1 + (relRfX + IFACE_W / 2) * SC_INV);
+        const scY = Math.round(pY1 + (relRfY + IFACE_H / 2) * SC_INV);
+
+        const newIface: InterfaceModel = {
+            ...(JSON.parse(JSON.stringify(source)) as InterfaceModel),
+            id: newId,
+        };
+
+        if (source.type === 'provided') {
+            fn.providedInterfaces.push(newIface);
+        } else {
+            fn.requiredInterfaces.push(newIface);
+        }
+        this.ui.entities[newId] = { coordinates: [scX, scY] };
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────
 
     private findFn(fns: FunctionModel[], id: string): FunctionModel | undefined {

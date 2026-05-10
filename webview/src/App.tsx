@@ -80,6 +80,10 @@ function DiagramEditor() {
     const [locked, setLocked] = useState(false);
     const [optionsVisible, setOptionsVisible] = useState(false);
     const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
+    const [clipboard, setClipboard] = useState<
+        | { kind: 'function'; data: FunctionModel }
+        | { kind: 'interface'; data: InterfaceModel }
+        | null>(null);
 
     // ── Connect mode: click first function → select as source, click second → create RI+PI+connection
     const [connectMode, setConnectMode] = useState(false);
@@ -540,33 +544,38 @@ function DiagramEditor() {
     const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => {
         e.preventDefault();
         const rfPos = screenToFlowPosition({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY });
-        setContextMenu({
-            x: (e as MouseEvent).clientX,
-            y: (e as MouseEvent).clientY,
-            items: [
-                {
-                    label: '+ Add Function',
-                    onClick: () => setDialog({ kind: 'addFunction', rfX: rfPos.x, rfY: rfPos.y }),
-                },
-                {
-                    label: '+ Add Connection',
-                    onClick: () => { setConnectMode(true); setConnectSrc(null); },
-                },
-                {
-                    label: 'Build Skeletons',
-                    onClick: () => post({ type: 'buildSkeletons' }),
-                },
-                {
-                    label: 'Build',
-                    onClick: () => post({ type: 'build' }),
-                },
-                {
-                    label: 'Export Diagram as Image',
-                    onClick: () => onExportImage('png'),
-                },
-            ],
-        });
-    }, [screenToFlowPosition, onExportImage]);
+        const items: ContextMenuItem[] = [
+            {
+                label: '+ Add Function',
+                onClick: () => setDialog({ kind: 'addFunction', rfX: rfPos.x, rfY: rfPos.y }),
+            },
+            {
+                label: '+ Add Connection',
+                onClick: () => { setConnectMode(true); setConnectSrc(null); },
+            },
+        ];
+        if (clipboard?.kind === 'function') {
+            items.push({
+                label: 'Paste Function',
+                onClick: () => post({ type: 'pasteFunction', newId: uuid(), source: clipboard.data, rfX: rfPos.x, rfY: rfPos.y }),
+            });
+        }
+        items.push(
+            {
+                label: 'Build Skeletons',
+                onClick: () => post({ type: 'buildSkeletons' }),
+            },
+            {
+                label: 'Build',
+                onClick: () => post({ type: 'build' }),
+            },
+            {
+                label: 'Export Diagram as Image',
+                onClick: () => onExportImage('png'),
+            },
+        );
+        setContextMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items });
+    }, [screenToFlowPosition, onExportImage, clipboard]);
 
     const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
         e.preventDefault();
@@ -586,6 +595,23 @@ function DiagramEditor() {
                     onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'required' }),
                 },
                 {
+                    label: 'Copy Function',
+                    onClick: () => setClipboard({ kind: 'function', data: fn }),
+                },
+            );
+            if (clipboard?.kind === 'interface') {
+                const iface = clipboard.data;
+                const pw = node.measured?.width ?? 800;
+                const ph = node.measured?.height ?? 560;
+                const relRfX = iface.type === 'provided' ? pw : -IFACE_W;
+                const relRfY = ph / 2 - IFACE_H / 2;
+                items.push({
+                    label: 'Paste Interface',
+                    onClick: () => post({ type: 'pasteInterface', newId: uuid(), source: iface, funcId: fn.id, relRfX, relRfY }),
+                });
+            }
+            items.push(
+                {
                     label: 'Edit Function',
                     onClick: () => post({ type: 'editFunction', id: fn.id }),
                 },
@@ -596,17 +622,24 @@ function DiagramEditor() {
                 },
             );
         } else if (entity && isInterface(entity)) {
-            items.push({
-                label: 'Delete Interface',
-                danger: true,
-                onClick: () => post({ type: 'delete', ids: [entity.id] }),
-            });
+            const iface = entity as InterfaceModel;
+            items.push(
+                {
+                    label: 'Copy Interface',
+                    onClick: () => setClipboard({ kind: 'interface', data: iface }),
+                },
+                {
+                    label: 'Delete Interface',
+                    danger: true,
+                    onClick: () => post({ type: 'delete', ids: [iface.id] }),
+                },
+            );
         }
 
         if (items.length > 0) {
             setContextMenu({ x: e.clientX, y: e.clientY, items });
         }
-    }, [diagramData]);
+    }, [diagramData, clipboard]);
 
     // ── Attribute panel callbacks ────────────────────────────────────────────
     const updateOptions = useCallback((patch: Partial<EditorOptions>) => {

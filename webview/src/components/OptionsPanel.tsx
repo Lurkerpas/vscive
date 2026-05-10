@@ -158,6 +158,23 @@ export function OptionsPanel({ options, onChange, onBrowseAttrFile }: OptionsPan
                 Font sizes are in diagram space units (same scale as node dimensions).
                 Reload diagram after changing to see effect on connections.
             </div>
+
+            <div style={{ color: '#89b4fa', marginTop: 12, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
+                History
+            </div>
+
+            <div style={ROW}>
+                <span style={LABEL}>Undo / Redo Depth</span>
+                <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={options.undoDepth}
+                    onChange={e => onChange({ undoDepth: Math.max(1, Number(e.target.value) || 50) })}
+                    style={INPUT}
+                />
+                <span style={{ color: '#6c7086', fontSize: 10 }}>Maximum number of undo steps retained.</span>
+            </div>
         </div>
     );
 }
