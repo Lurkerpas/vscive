@@ -217,19 +217,26 @@ function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, pa
     ];
 }
 
-function connectionToEdge(conn: ConnectionModel): Edge {
+function connectionToEdge(conn: ConnectionModel, ui: UiModel): Edge {
+    const layout = ui.entities[conn.id];
+    const waypoints: Array<{x: number; y: number}> = [];
+    if (layout?.coordinates && layout.coordinates.length >= 2) {
+        for (let i = 0; i + 1 < layout.coordinates.length; i += 2) {
+            waypoints.push({ x: layout.coordinates[i] * SC_SCALE, y: layout.coordinates[i + 1] * SC_SCALE });
+        }
+    }
     return {
         id: conn.id,
         source: conn.sourceIfaceId,
         target: conn.targetIfaceId,
         label: conn.name,
-        data: { conn },
-        type: 'straight',
+        data: { conn, waypoints },
+        type: 'routedEdge',
     };
 }
 
 export function buildGraph(iv: IvModel, ui: UiModel): { nodes: Node[]; edges: Edge[] } {
     const nodes = iv.functions.flatMap(fn => functionToNode(fn, ui));
-    const edges = iv.connections.map(connectionToEdge);
+    const edges = iv.connections.map(conn => connectionToEdge(conn, ui));
     return { nodes, edges };
 }

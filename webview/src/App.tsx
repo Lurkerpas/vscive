@@ -10,11 +10,13 @@ import '@xyflow/react/dist/style.css';
 
 import {
     DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
-    WebviewMessage, NodeMove, PropertyModel, ParameterModel, EditorOptions, DEFAULT_OPTIONS,
+    NodeMove, PropertyModel, ParameterModel, EditorOptions, DEFAULT_OPTIONS,
 } from '../../src/model/types';
 import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToEdge } from './transform';
 import { FunctionNode } from './components/FunctionNode';
 import { InterfaceNode } from './components/InterfaceNode';
+import { RoutedEdge } from './components/RoutedEdge';
+import { post, vscodeApi } from './vscodeApi';
 import { AttributePanel } from './components/AttributePanel';
 import { OptionsPanel } from './components/OptionsPanel';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
@@ -26,15 +28,9 @@ const nodeTypes = {
     interfaceNode: InterfaceNode,
 };
 
-// VS Code webview API — injected by the host
-declare const acquireVsCodeApi: () => { postMessage: (msg: unknown) => void };
-
-let vscodeApi: ReturnType<typeof acquireVsCodeApi> | null = null;
-try { vscodeApi = acquireVsCodeApi(); } catch { /* running outside VS Code */ }
-
-function post(msg: WebviewMessage): void {
-    vscodeApi?.postMessage(msg);
-}
+const edgeTypes = {
+    routedEdge: RoutedEdge,
+};
 
 function uuid(): string {
     return crypto.randomUUID();
@@ -90,6 +86,12 @@ function DiagramEditor() {
     const [connectSrc, setConnectSrc] = useState<{ id: string; relX: number; relY: number } | null>(null);
 
     const { screenToFlowPosition, zoomIn, zoomOut, fitView, getIntersectingNodes } = useReactFlow();
+
+    // Edges with labelStyle applied reactively (fontSizeConn may change independently of diagram load)
+    const styledEdges = useMemo(
+        () => edges.map(e => ({ ...e, labelStyle: { fontSize: options.fontSizeConn } })),
+        [edges, options.fontSizeConn],
+    );
 
     // ── Receive messages from extension ─────────────────────────────────────
     useEffect(() => {
@@ -219,6 +221,26 @@ function DiagramEditor() {
             type: 'nodesMoved',
             moves: [{ id: node.id, kind, x, y, w, h, parentId: node.parentId }],
         });
+
+        // REQ-0370: reparent a root function when dragged into another function
+        if (node.type === 'functionNode' && !node.parentId) {
+            const center = { x: x + w / 2, y: y + h / 2 };
+            let bestParent: Node | null = null;
+            let bestArea = Infinity;
+            for (const n of nodes) {
+                if (n.type !== 'functionNode' || n.id === node.id || n.parentId) { continue; }
+                const nW = n.measured?.width ?? (n.style?.width as number | undefined) ?? 800;
+                const nH = n.measured?.height ?? (n.style?.height as number | undefined) ?? 560;
+                if (center.x > n.position.x && center.x < n.position.x + nW &&
+                    center.y > n.position.y && center.y < n.position.y + nH) {
+                    const area = nW * nH;
+                    if (area < bestArea) { bestArea = area; bestParent = n; }
+                }
+            }
+            if (bestParent) {
+                post({ type: 'reparentFunction', id: node.id, newParentId: bestParent.id });
+            }
+        }
     }, [locked, nodes, setNodes]);
 
     // ── Node resize → persist new size ──────────────────────────────────────
@@ -595,6 +617,13 @@ function DiagramEditor() {
                     onClick: () => setDialog({ kind: 'addInterface', funcId: fn.id, funcName: fn.name, presetType: 'required' }),
                 },
                 {
+                    label: 'Add Nested Function',
+                    onClick: () => {
+                        const abs = getAbsolutePos(fn.id);
+                        setDialog({ kind: 'addFunction', rfX: abs.x + 100, rfY: abs.y + 100, parentId: fn.id });
+                    },
+                },
+                {
                     label: 'Copy Function',
                     onClick: () => setClipboard({ kind: 'function', data: fn }),
                 },
@@ -608,6 +637,12 @@ function DiagramEditor() {
                 items.push({
                     label: 'Paste Interface',
                     onClick: () => post({ type: 'pasteInterface', newId: uuid(), source: iface, funcId: fn.id, relRfX, relRfY }),
+                });
+            }
+            if (node.parentId) {
+                items.push({
+                    label: 'Move to Root',
+                    onClick: () => post({ type: 'reparentFunction', id: fn.id }),
                 });
             }
             items.push(
@@ -639,7 +674,7 @@ function DiagramEditor() {
         if (items.length > 0) {
             setContextMenu({ x: e.clientX, y: e.clientY, items });
         }
-    }, [diagramData, clipboard]);
+    }, [diagramData, clipboard, getAbsolutePos]);
 
     // ── Attribute panel callbacks ────────────────────────────────────────────
     const updateOptions = useCallback((patch: Partial<EditorOptions>) => {
@@ -738,10 +773,11 @@ function DiagramEditor() {
                     const isConnTarget = connectMode && !connectSrc;
                     return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget, fontSizeFn: options.fontSizeFn } };
                 })}
-                edges={edges}
+                edges={styledEdges}
                 onNodesChange={onNodesChangeWithResize}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 onNodeDragStop={onNodeDragStop}

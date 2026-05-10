@@ -210,4 +210,6 @@ export type WebviewMessage =
     | { type: 'browseAttrFile' }
     | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string }
     | { type: 'pasteFunction'; newId: string; source: FunctionModel; rfX: number; rfY: number }
-    | { type: 'pasteInterface'; newId: string; source: InterfaceModel; funcId: string; relRfX: number; relRfY: number };
+    | { type: 'pasteInterface'; newId: string; source: InterfaceModel; funcId: string; relRfX: number; relRfY: number }
+    | { type: 'reparentFunction'; id: string; newParentId?: string }
+    | { type: 'updateConnectionWaypoints'; id: string; waypoints: Array<{x: number; y: number}> };

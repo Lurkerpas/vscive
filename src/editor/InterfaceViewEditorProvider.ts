@@ -198,6 +198,20 @@ export class InterfaceViewEditorProvider
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
                 }
+                case 'reparentFunction': {
+                    const before = document.snapshot();
+                    document.reparentFunction(msg.id, msg.newParentId);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'updateConnectionWaypoints': {
+                    const before = document.snapshot();
+                    document.updateConnectionWaypoints(msg.id, msg.waypoints);
+                    this.fireEdit(document, before);
+                    // No sendDiagram needed — waypoints are visual-only; local edge state handles display.
+                    break;
+                }
                 case 'exportImage': {
                     const ext = msg.format === 'svg' ? 'svg' : 'png';
                     const defaultUri = vscode.Uri.file(

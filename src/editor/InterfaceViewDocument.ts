@@ -515,7 +515,57 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         this.ui.entities[newId] = { coordinates: [scX, scY] };
     }
 
+    /**
+     * Move function `id` to a new parent (or to root if `newParentId` is undefined).
+     * SC coordinates are already absolute and do not need updating.
+     */
+    reparentFunction(id: string, newParentId?: string): void {
+        const fn = this.removeFnFromTree(id);
+        if (!fn) { return; }
+        if (newParentId) {
+            const parent = this.findFn(this.iv.functions, newParentId);
+            if (parent) { parent.nestedFunctions.push(fn); }
+            else { this.iv.functions.push(fn); } // fallback: root
+        } else {
+            this.iv.functions.push(fn);
+        }
+    }
+
+    /** Store connection waypoints (in RF pixels) in the UiModel as SC units. */
+    updateConnectionWaypoints(id: string, waypoints: Array<{x: number; y: number}>): void {
+        if (waypoints.length > 0) {
+            const coords: number[] = [];
+            for (const wp of waypoints) {
+                coords.push(Math.round(wp.x * SC_INV));
+                coords.push(Math.round(wp.y * SC_INV));
+            }
+            this.ui.entities[id] = { coordinates: coords };
+        } else {
+            delete this.ui.entities[id];
+        }
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────
+
+    private removeFnFromTree(id: string): FunctionModel | undefined {
+        const rootIdx = this.iv.functions.findIndex(fn => fn.id === id);
+        if (rootIdx !== -1) {
+            return this.iv.functions.splice(rootIdx, 1)[0];
+        }
+        return this.removeFnFromNested(this.iv.functions, id);
+    }
+
+    private removeFnFromNested(fns: FunctionModel[], id: string): FunctionModel | undefined {
+        for (const fn of fns) {
+            const idx = fn.nestedFunctions.findIndex(c => c.id === id);
+            if (idx !== -1) {
+                return fn.nestedFunctions.splice(idx, 1)[0];
+            }
+            const found = this.removeFnFromNested(fn.nestedFunctions, id);
+            if (found) { return found; }
+        }
+        return undefined;
+    }
 
     private findFn(fns: FunctionModel[], id: string): FunctionModel | undefined {
         for (const fn of fns) {
