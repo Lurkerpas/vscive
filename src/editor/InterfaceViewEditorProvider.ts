@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { InterfaceViewDocument } from './InterfaceViewDocument';
-import { DiagramData, DEFAULT_OPTIONS, EditorOptions, ExtensionMessage, IvModel, UiModel, WebviewMessage } from '../model/types';
+import { DiagramData, DEFAULT_OPTIONS, EditorOptions, ExtensionMessage, FunctionModel, IvModel, UiModel, WebviewMessage } from '../model/types';
 import { log } from '../logger';
 
 export class InterfaceViewEditorProvider
@@ -32,6 +32,99 @@ export class InterfaceViewEditorProvider
 
     private async saveOptions(options: EditorOptions): Promise<void> {
         await this.context.globalState.update('editorOptions', options);
+    }
+
+    private findFunctionById(functions: IvModel['functions'], id: string): FunctionModel | undefined {
+        for (const fn of functions) {
+            if (fn.id === id) { return fn; }
+            const nested: FunctionModel | undefined = this.findFunctionById(fn.nestedFunctions, id);
+            if (nested) { return nested; }
+        }
+        return undefined;
+    }
+
+    private normalizeFunctionName(name: string): string {
+        return name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+    }
+
+    private resolveSourceLanguage(fn: FunctionModel | undefined): string | undefined {
+        if (!fn) { return undefined; }
+        if (fn.language) {
+            return fn.language;
+        }
+        if (fn.implementations.length > 0) {
+            return fn.implementations[0].language;
+        }
+        return fn.language;
+    }
+
+    private resolveCurrentImplementationName(fn: FunctionModel | undefined): string | undefined {
+        if (!fn) { return undefined; }
+        const matchingImpl = fn.implementations.find((impl: FunctionModel['implementations'][number]) => impl.language === fn.language);
+        if (matchingImpl?.name) { return matchingImpl.name; }
+        if (fn.implementations.length === 1) { return fn.implementations[0].name; }
+        return undefined;
+    }
+
+    private sourceExtensionForLanguage(language: string): string | undefined {
+        switch (language.toUpperCase()) {
+            case 'C':
+                return 'c';
+            case 'CPP':
+                return 'cc';
+            case 'ADA':
+                return 'adb';
+            default:
+                return undefined;
+        }
+    }
+
+    private async openFunctionSource(document: InterfaceViewDocument, functionId: string): Promise<void> {
+        const fn = this.findFunctionById(document.iv.functions, functionId);
+        if (!fn) {
+            void vscode.window.showErrorMessage(`Function ${functionId} was not found in the current Interface View.`);
+            return;
+        }
+
+        const sourceLanguage = this.resolveSourceLanguage(fn);
+        if (!sourceLanguage) {
+            void vscode.window.showErrorMessage(`Function ${fn.name} has no source language configured.`);
+            return;
+        }
+
+        const extension = this.sourceExtensionForLanguage(sourceLanguage);
+        if (!extension) {
+            void vscode.window.showErrorMessage(`Edit Function supports only C, CPP, and Ada. ${fn.name} uses ${sourceLanguage}.`);
+            return;
+        }
+
+        const normalizedName = this.normalizeFunctionName(fn.name);
+        const baseFolder = path.dirname(document.uri.fsPath);
+        const candidateDirs = [
+            sourceLanguage,
+            this.resolveCurrentImplementationName(fn),
+        ].filter((value, index, arr): value is string => !!value && arr.indexOf(value) === index);
+
+        const attemptedPaths: string[] = [];
+        for (const dirName of candidateDirs) {
+            const filePath = path.join(baseFolder, 'work', normalizedName, dirName, 'src', `${normalizedName}.${extension}`);
+            attemptedPaths.push(filePath);
+            try {
+                await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+                const sourceDoc = await vscode.workspace.openTextDocument(filePath);
+                await vscode.window.showTextDocument(sourceDoc, { preview: false, preserveFocus: false });
+                return;
+            } catch {
+                // Try the next candidate path.
+            }
+        }
+
+        void vscode.window.showErrorMessage(
+            `Could not locate source for ${fn.name}. Tried: ${attemptedPaths.join(' ; ')}`,
+        );
     }
 
     async openCustomDocument(uri: vscode.Uri): Promise<InterfaceViewDocument> {
@@ -142,8 +235,7 @@ export class InterfaceViewEditorProvider
                     break;
                 }
                 case 'editFunction': {
-                    // Placeholder — source editing logic to be implemented later
-                    vscode.window.showInformationMessage(`Edit Function: ${msg.id} (not yet implemented)`);
+                    await this.openFunctionSource(document, msg.id);
                     break;
                 }
                 case 'connectFunctions': {
