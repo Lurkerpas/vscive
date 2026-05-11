@@ -8,8 +8,158 @@ const SC_SCALE = 0.05;
 
 function px(v: number): number { return v * SC_SCALE; }
 
+interface Rect {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+}
+
+interface FunctionMaps {
+    parentByFunction: Map<string, string | undefined>;
+    functionByInterface: Map<string, string>;
+}
+
 function layoutOf(ui: UiModel, id: string): EntityLayout | undefined {
     return ui.entities[id];
+}
+
+function rectFromCoords(coords: number[] | undefined): Rect | null {
+    if (!coords || coords.length < 4) { return null; }
+    return { x1: coords[0], y1: coords[1], x2: coords[2], y2: coords[3] };
+}
+
+function rectWidth(rect: Rect): number {
+    return rect.x2 - rect.x1;
+}
+
+function rectHeight(rect: Rect): number {
+    return rect.y2 - rect.y1;
+}
+
+function scaleInto(value: number, srcStart: number, srcEnd: number, dstSpan: number): number {
+    const srcSpan = srcEnd - srcStart;
+    if (Math.abs(srcSpan) < 1e-9) { return 0; }
+    return ((value - srcStart) / srcSpan) * dstSpan;
+}
+
+function mapPointToParentLocalPx(
+    parentLayout: EntityLayout | undefined,
+    scX: number,
+    scY: number,
+): { x: number; y: number } {
+    const outer = rectFromCoords(parentLayout?.coordinates);
+    const inner = rectFromCoords(parentLayout?.rootCoordinates);
+
+    if (outer && inner) {
+        const widthPx = Math.max(px(rectWidth(outer)), 1);
+        const heightPx = Math.max(px(rectHeight(outer)), 1);
+        return {
+            x: scaleInto(scX, inner.x1, inner.x2, widthPx),
+            y: scaleInto(scY, inner.y1, inner.y2, heightPx),
+        };
+    }
+
+    const originX = parentLayout?.coordinates[0] ?? 0;
+    const originY = parentLayout?.coordinates[1] ?? 0;
+    return {
+        x: px(scX - originX),
+        y: px(scY - originY),
+    };
+}
+
+function mapRectToParentLocalPx(
+    parentLayout: EntityLayout | undefined,
+    coords: number[] | undefined,
+): { x: number; y: number; w: number; h: number } | null {
+    const rect = rectFromCoords(coords);
+    if (!rect) { return null; }
+
+    const topLeft = mapPointToParentLocalPx(parentLayout, rect.x1, rect.y1);
+    const bottomRight = mapPointToParentLocalPx(parentLayout, rect.x2, rect.y2);
+    return {
+        x: topLeft.x,
+        y: topLeft.y,
+        w: Math.max(bottomRight.x - topLeft.x, 1),
+        h: Math.max(bottomRight.y - topLeft.y, 1),
+    };
+}
+
+function buildFunctionMaps(
+    functions: FunctionModel[],
+    parentId?: string,
+    maps: FunctionMaps = {
+        parentByFunction: new Map<string, string | undefined>(),
+        functionByInterface: new Map<string, string>(),
+    },
+): FunctionMaps {
+    for (const fn of functions) {
+        maps.parentByFunction.set(fn.id, parentId);
+        for (const iface of [...fn.providedInterfaces, ...fn.requiredInterfaces]) {
+            maps.functionByInterface.set(iface.id, fn.id);
+        }
+        buildFunctionMaps(fn.nestedFunctions, fn.id, maps);
+    }
+    return maps;
+}
+
+function findCommonAncestorFunction(
+    leftId: string | undefined,
+    rightId: string | undefined,
+    parentByFunction: Map<string, string | undefined>,
+): string | undefined {
+    if (!leftId || !rightId) { return undefined; }
+
+    const ancestors = new Set<string>();
+    let current: string | undefined = leftId;
+    while (current) {
+        ancestors.add(current);
+        current = parentByFunction.get(current);
+    }
+
+    current = rightId;
+    while (current) {
+        if (ancestors.has(current)) { return current; }
+        current = parentByFunction.get(current);
+    }
+
+    return undefined;
+}
+
+function absoluteNodePosition(nodeId: string, nodeMap: Map<string, Node>, cache: Map<string, { x: number; y: number }>): { x: number; y: number } {
+    const cached = cache.get(nodeId);
+    if (cached) { return cached; }
+
+    const node = nodeMap.get(nodeId);
+    if (!node) {
+        return { x: 0, y: 0 };
+    }
+
+    const absolute = node.parentId
+        ? (() => {
+            const parent = absoluteNodePosition(node.parentId, nodeMap, cache);
+            return { x: parent.x + node.position.x, y: parent.y + node.position.y };
+        })()
+        : { x: node.position.x, y: node.position.y };
+
+    cache.set(nodeId, absolute);
+    return absolute;
+}
+
+function buildFunctionRectMap(nodes: Node[]): Map<string, { x: number; y: number; w: number; h: number }> {
+    const nodeMap = new Map(nodes.map(node => [node.id, node]));
+    const cache = new Map<string, { x: number; y: number }>();
+    const rects = new Map<string, { x: number; y: number; w: number; h: number }>();
+
+    for (const node of nodes) {
+        if (node.type !== 'functionNode') { continue; }
+        const position = absoluteNodePosition(node.id, nodeMap, cache);
+        const w = node.measured?.width ?? (node.style?.width as number | undefined) ?? DEFAULT_FUNC_W;
+        const h = node.measured?.height ?? (node.style?.height as number | undefined) ?? DEFAULT_FUNC_H;
+        rects.set(node.id, { x: position.x, y: position.y, w, h });
+    }
+
+    return rects;
 }
 
 /** Default size when no UI layout is present */
@@ -56,48 +206,6 @@ export function snapIfaceToEdge(
     return                        { x: clampX(cx - IFACE_W / 2), y: ph,         edge: 'bottom' };
 }
 
-/**
- * Compute the bounding box of a container's children (nested functions + their interfaces)
- * in the container's inner-canvas space (relative to originX/Y from rootCoordinates).
- */
-function computeChildrenBBox(
-    fn: FunctionModel, ui: UiModel, originX: number, originY: number,
-): { w: number; h: number } | null {
-    const PAD = 60;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    const expandFn = (coords: number[]) => {
-        if (coords.length < 4) { return; }
-        maxX = Math.max(maxX, px(coords[2] - originX) + PAD);
-        maxY = Math.max(maxY, px(coords[3] - originY) + PAD);
-    };
-    const expandIface = (coords: number[]) => {
-        if (coords.length < 2) { return; }
-        maxX = Math.max(maxX, px(coords[0] - originX) + IFACE_W + PAD);
-        maxY = Math.max(maxY, px(coords[1] - originY) + IFACE_H + PAD);
-    };
-
-    // Own interfaces: 2-value rootCoordinates = position in inner canvas when present
-    for (const iface of [...fn.providedInterfaces, ...fn.requiredInterfaces]) {
-        const il = layoutOf(ui, iface.id);
-        const ic = (il?.rootCoordinates?.length ?? 0) >= 2 ? il!.rootCoordinates! : il?.coordinates ?? [];
-        expandIface(ic);
-    }
-    // Direct nested function extents and their interfaces (coordinates already in inner canvas space)
-    for (const child of fn.nestedFunctions) {
-        const cl = layoutOf(ui, child.id);
-        if (cl) { expandFn(cl.coordinates); }
-        for (const iface of [...child.providedInterfaces, ...child.requiredInterfaces]) {
-            const il = layoutOf(ui, iface.id);
-            if (il?.coordinates.length) { expandIface(il.coordinates); }
-        }
-    }
-
-    if (maxX === -Infinity) { return null; }
-    return { w: Math.max(maxX, DEFAULT_FUNC_W), h: Math.max(maxY, DEFAULT_FUNC_H) };
-}
-
 function functionToNode(
     fn: FunctionModel,
     ui: UiModel,
@@ -110,47 +218,34 @@ function functionToNode(
     let w = DEFAULT_FUNC_W;
     let h = DEFAULT_FUNC_H;
 
-    // Containers (modern format) have rootCoordinates describing their expanded canvas.
-    // Containers have rootCoordinates (inner canvas) and coordinates (outer canvas position).
-    // Position the node using outer coordinates; size from the children bounding box.
-    if (layout?.rootCoordinates?.length === 4) {
-        const [rc_x1, rc_y1, rc_x2, rc_y2] = layout.rootCoordinates;
-        // Outer-canvas position: where this function appears alongside its siblings
-        if (layout.coordinates.length >= 2) {
-            x = px(layout.coordinates[0]);
-            y = px(layout.coordinates[1]);
-        } else {
-            x = px(rc_x1);
-            y = px(rc_y1);
-        }
-        const bbox = computeChildrenBBox(fn, ui, rc_x1, rc_y1);
-        w = bbox ? bbox.w : Math.max(px(rc_x2 - rc_x1), DEFAULT_FUNC_W);
-        h = bbox ? bbox.h : Math.max(px(rc_y2 - rc_y1), DEFAULT_FUNC_H);
-    } else if (layout && layout.coordinates.length >= 4) {
-        const [x1, y1, x2, y2] = layout.coordinates;
-        x = px(x1);
-        y = px(y1);
-        w = Math.max(px(x2 - x1), DEFAULT_FUNC_W);
-        h = Math.max(px(y2 - y1), DEFAULT_FUNC_H);
-    }
-
-    // React Flow child nodes use positions relative to parent.
-    // For the modern UI XML format the parent's rootCoordinates define the canvas origin;
-    // for legacy (no rootCoordinates) fall back to the first two values of coordinates.
-    let posX = x;
-    let posY = y;
     if (parentId) {
         const parentLayout = layoutOf(ui, parentId);
-        const originX = parentLayout?.rootCoordinates?.[0] ?? parentLayout?.coordinates?.[0] ?? 0;
-        const originY = parentLayout?.rootCoordinates?.[1] ?? parentLayout?.coordinates?.[1] ?? 0;
-        posX = x - px(originX);
-        posY = y - px(originY);
+        const mapped = mapRectToParentLocalPx(parentLayout, layout?.coordinates);
+        if (mapped) {
+            x = mapped.x;
+            y = mapped.y;
+            w = mapped.w;
+            h = mapped.h;
+        }
+    } else if (layout && layout.coordinates.length >= 4) {
+        const outer = rectFromCoords(layout.coordinates);
+        if (outer) {
+            x = px(outer.x1);
+            y = px(outer.y1);
+            if (layout.rootCoordinates?.length === 4) {
+                w = Math.max(px(rectWidth(outer)), 1);
+                h = Math.max(px(rectHeight(outer)), 1);
+            } else {
+                w = Math.max(px(rectWidth(outer)), DEFAULT_FUNC_W);
+                h = Math.max(px(rectHeight(outer)), DEFAULT_FUNC_H);
+            }
+        }
     }
 
     const node: Node = {
         id: fn.id,
         type: 'functionNode',
-        position: { x: posX, y: posY },
+        position: { x, y },
         style: { width: w, height: h },
         data: {
             label: fn.name,
@@ -171,17 +266,10 @@ function ifacePositionFromLayout(
     parentLayout: EntityLayout | undefined,
 ): { x: number; y: number } | null {
     if (!layout || !parentLayout) { return null; }
-    // Origin: parent's rootCoordinates[0,1] when the parent is a container (inner canvas);
-    // otherwise parent's coordinates[0,1] (absolute position in the same canvas).
-    const originX = parentLayout.rootCoordinates?.[0] ?? parentLayout.coordinates[0];
-    const originY = parentLayout.rootCoordinates?.[1] ?? parentLayout.coordinates[1];
-    if (originX === undefined || originY === undefined) { return null; }
-    // Position: 2-value rootCoordinates = position in the parent's inner canvas (modern containers).
-    // Fall back to coordinates for non-container parents or legacy format.
     const posCoords = (layout.rootCoordinates?.length ?? 0) >= 2 ? layout.rootCoordinates! : layout.coordinates;
     if (posCoords.length < 2) { return null; }
-    const [ix, iy] = posCoords;
-    return { x: px(ix - originX) - IFACE_W / 2, y: px(iy - originY) - IFACE_H / 2 };
+    const mapped = mapPointToParentLocalPx(parentLayout, posCoords[0], posCoords[1]);
+    return { x: mapped.x - IFACE_W / 2, y: mapped.y - IFACE_H / 2 };
 }
 
 function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, parentH: number): Node[] {
@@ -218,7 +306,7 @@ function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, pa
     ];
 }
 
-function connectionToEdge(conn: ConnectionModel, ui: UiModel): Edge {
+function connectionToEdge(conn: ConnectionModel, _ui: UiModel): Edge {
     return {
         id: conn.id,
         source: conn.sourceIfaceId,
@@ -229,14 +317,32 @@ function connectionToEdge(conn: ConnectionModel, ui: UiModel): Edge {
     };
 }
 
-function connectionWaypointNodes(conn: ConnectionModel, ui: UiModel): Node[] {
+function connectionWaypointNodes(
+    conn: ConnectionModel,
+    ui: UiModel,
+    maps: FunctionMaps,
+    functionRects: Map<string, { x: number; y: number; w: number; h: number }>,
+): Node[] {
     const layout = ui.entities[conn.id];
     const nodes: Node[] = [];
     if (!layout?.coordinates || layout.coordinates.length < 2) { return nodes; }
 
+    const sourceHostId = maps.functionByInterface.get(conn.sourceIfaceId);
+    const targetHostId = maps.functionByInterface.get(conn.targetIfaceId);
+    const containerId = findCommonAncestorFunction(sourceHostId, targetHostId, maps.parentByFunction);
+    const containerLayout = containerId ? layoutOf(ui, containerId) : undefined;
+    const containerRect = containerId ? functionRects.get(containerId) : undefined;
+
     for (let i = 0; i + 1 < layout.coordinates.length; i += 2) {
-        const centerX = layout.coordinates[i] * SC_SCALE;
-        const centerY = layout.coordinates[i + 1] * SC_SCALE;
+        let centerX = layout.coordinates[i] * SC_SCALE;
+        let centerY = layout.coordinates[i + 1] * SC_SCALE;
+
+        if (containerLayout?.rootCoordinates?.length === 4 && containerRect) {
+            const local = mapPointToParentLocalPx(containerLayout, layout.coordinates[i], layout.coordinates[i + 1]);
+            centerX = containerRect.x + local.x;
+            centerY = containerRect.y + local.y;
+        }
+
         nodes.push({
             id: makeWaypointNodeId(conn.id, i / 2),
             type: 'waypointNode',
@@ -259,9 +365,12 @@ function connectionWaypointNodes(conn: ConnectionModel, ui: UiModel): Node[] {
 }
 
 export function buildGraph(iv: IvModel, ui: UiModel): { nodes: Node[]; edges: Edge[] } {
+    const functionNodes = iv.functions.flatMap(fn => functionToNode(fn, ui));
+    const maps = buildFunctionMaps(iv.functions);
+    const functionRects = buildFunctionRectMap(functionNodes);
     const nodes = [
-        ...iv.functions.flatMap(fn => functionToNode(fn, ui)),
-        ...iv.connections.flatMap(conn => connectionWaypointNodes(conn, ui)),
+        ...functionNodes,
+        ...iv.connections.flatMap(conn => connectionWaypointNodes(conn, ui, maps, functionRects)),
     ];
     const edges = iv.connections.map(conn => connectionToEdge(conn, ui));
     return { nodes, edges };

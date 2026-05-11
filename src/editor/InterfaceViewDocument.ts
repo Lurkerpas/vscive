@@ -22,6 +22,13 @@ const SC_INV = 1 / SC_SCALE; // pixels → SC coords (= 20)
 const IFACE_W = 60;
 const IFACE_H = 80;
 
+interface Rect {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+}
+
 /**
  * Legacy IV files embed coordinates as <Property name="Taste::coordinates"> on each entity
  * instead of using a separate UI XML file. Build a UiModel from those properties so the
@@ -157,19 +164,13 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
     moveNodes(moves: NodeMove[]): void {
         for (const move of moves) {
             if (move.kind === 'function') {
-                let absScX: number, absScY: number;
+                let nextCoords: number[];
                 if (move.parentId) {
-                    const pl = this.ui.entities[move.parentId];
-                    const originX = pl?.rootCoordinates?.[0] ?? pl?.coordinates[0] ?? 0;
-                    const originY = pl?.rootCoordinates?.[1] ?? pl?.coordinates[1] ?? 0;
-                    absScX = Math.round(originX + move.x * SC_INV);
-                    absScY = Math.round(originY + move.y * SC_INV);
+                    nextCoords = this.flowRectToScopedSc(this.ui.entities[move.parentId], move.x, move.y, move.w, move.h);
                 } else {
-                    absScX = Math.round(move.x * SC_INV);
-                    absScY = Math.round(move.y * SC_INV);
+                    nextCoords = this.flowRectToAbsoluteSc(move.x, move.y, move.w, move.h);
                 }
-                const absScX2 = Math.round(absScX + move.w * SC_INV);
-                const absScY2 = Math.round(absScY + move.h * SC_INV);
+                const [absScX, absScY, absScX2, absScY2] = nextCoords;
 
                 // Compute delta to propagate to child interfaces and nested functions
                 const oldLayout = this.ui.entities[move.id];
@@ -193,21 +194,34 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
                 }
             } else if (move.kind === 'interface' && move.parentId) {
                 // Interface position is the SC absolute center of the pill
-                const pl = this.ui.entities[move.parentId];
-                const pX1 = pl?.rootCoordinates?.[0] ?? pl?.coordinates[0] ?? 0;
-                const pY1 = pl?.rootCoordinates?.[1] ?? pl?.coordinates[1] ?? 0;
-                const scX = Math.round(pX1 + (move.x + move.w / 2) * SC_INV);
-                const scY = Math.round(pY1 + (move.y + move.h / 2) * SC_INV);
+                const center = this.flowPointToScopedSc(
+                    this.ui.entities[move.parentId],
+                    move.x + move.w / 2,
+                    move.y + move.h / 2,
+                );
+                const scX = Math.round(center.x);
+                const scY = Math.round(center.y);
                 this.ui.entities[move.id] = { coordinates: [scX, scY] };
             }
         }
     }
 
     addFunction(id: string, name: string, language: string, rfX: number, rfY: number, parentId?: string): void {
-        const scX1 = Math.round(rfX * SC_INV);
-        const scY1 = Math.round(rfY * SC_INV);
-        const scX2 = scX1 + 800 * SC_INV; // 800px default width → 16000 SC units
-        const scY2 = scY1 + 560 * SC_INV;
+        const coords = parentId
+            ? (() => {
+                const parentRect = this.getFunctionFlowRect(parentId);
+                if (!parentRect) {
+                    return this.flowRectToAbsoluteSc(rfX, rfY, 800, 560);
+                }
+                return this.flowRectToScopedSc(
+                    this.ui.entities[parentId],
+                    rfX - parentRect.x,
+                    rfY - parentRect.y,
+                    800,
+                    560,
+                );
+            })()
+            : this.flowRectToAbsoluteSc(rfX, rfY, 800, 560);
 
         const newFn: FunctionModel = {
             id,
@@ -231,16 +245,18 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         } else {
             this.iv.functions.push(newFn);
         }
-        this.ui.entities[id] = { coordinates: [scX1, scY1, scX2, scY2] };
+        this.ui.entities[id] = { coordinates: coords };
     }
 
     addInterface(id: string, funcId: string, name: string, kind: InterfaceKind, ifaceType: 'provided' | 'required', relRfX: number, relRfY: number): void {
-        const pl = this.ui.entities[funcId];
-        const pX1 = pl?.coordinates[0] ?? 0;
-        const pY1 = pl?.coordinates[1] ?? 0;
         // The relRf coords are the TOP-LEFT of the triangle; SC stores the center
-        const scX = Math.round(pX1 + (relRfX + IFACE_W / 2) * SC_INV);
-        const scY = Math.round(pY1 + (relRfY + IFACE_H / 2) * SC_INV);
+        const center = this.flowPointToScopedSc(
+            this.ui.entities[funcId],
+            relRfX + IFACE_W / 2,
+            relRfY + IFACE_H / 2,
+        );
+        const scX = Math.round(center.x);
+        const scY = Math.round(center.y);
 
         const newIface: InterfaceModel = {
             id,
@@ -328,17 +344,15 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         // IFACE_W×IFACE_H box in flow-pixel coords relative to the host function's top-left)
         const riLayout = this.ui.entities[riFuncId];
         const piLayout = this.ui.entities[piFuncId];
-        const riOriginX = riLayout?.rootCoordinates?.[0] ?? riLayout?.coordinates[0] ?? 0;
-        const riOriginY = riLayout?.rootCoordinates?.[1] ?? riLayout?.coordinates[1] ?? 0;
-        const piOriginX = piLayout?.rootCoordinates?.[0] ?? piLayout?.coordinates[0] ?? 0;
-        const piOriginY = piLayout?.rootCoordinates?.[1] ?? piLayout?.coordinates[1] ?? 0;
+        const riCenter = this.flowPointToScopedSc(riLayout, riRelX + IFACE_W / 2, riRelY + IFACE_H / 2);
+        const piCenter = this.flowPointToScopedSc(piLayout, piRelX + IFACE_W / 2, piRelY + IFACE_H / 2);
         this.ui.entities[riId] = { coordinates: [
-            Math.round(riOriginX + (riRelX + IFACE_W / 2) * SC_INV),
-            Math.round(riOriginY + (riRelY + IFACE_H / 2) * SC_INV),
+            Math.round(riCenter.x),
+            Math.round(riCenter.y),
         ] };
         this.ui.entities[piId] = { coordinates: [
-            Math.round(piOriginX + (piRelX + IFACE_W / 2) * SC_INV),
-            Math.round(piOriginY + (piRelY + IFACE_H / 2) * SC_INV),
+            Math.round(piCenter.x),
+            Math.round(piCenter.y),
         ] };
 
         const connId = createUuid();
@@ -466,11 +480,10 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         }
 
         const targetLayout = this.ui.entities[targetFuncId];
-        const originX = targetLayout?.rootCoordinates?.[0] ?? targetLayout?.coordinates[0] ?? 0;
-        const originY = targetLayout?.rootCoordinates?.[1] ?? targetLayout?.coordinates[1] ?? 0;
+        const center = this.flowPointToScopedSc(targetLayout, relRfX + IFACE_W / 2, relRfY + IFACE_H / 2);
         this.ui.entities[newIfaceId] = { coordinates: [
-            Math.round(originX + (relRfX + IFACE_W / 2) * SC_INV),
-            Math.round(originY + (relRfY + IFACE_H / 2) * SC_INV),
+            Math.round(center.x),
+            Math.round(center.y),
         ] };
 
         const riId = newType === 'required' ? newIfaceId : existingIfaceId;
@@ -483,10 +496,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
      * `rfX`, `rfY` are the flow-pixel (React Flow) top-left position for the pasted node.
      */
     pasteFunction(newId: string, source: FunctionModel, rfX: number, rfY: number): void {
-        const scX1 = Math.round(rfX * SC_INV);
-        const scY1 = Math.round(rfY * SC_INV);
-        const scX2 = scX1 + Math.round(800 * SC_INV);
-        const scY2 = scY1 + Math.round(560 * SC_INV);
+        const coords = this.flowRectToAbsoluteSc(rfX, rfY, 800, 560);
 
         const newFn: FunctionModel = {
             ...(JSON.parse(JSON.stringify(source)) as FunctionModel),
@@ -503,7 +513,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         };
 
         this.iv.functions.push(newFn);
-        this.ui.entities[newId] = { coordinates: [scX1, scY1, scX2, scY2] };
+        this.ui.entities[newId] = { coordinates: coords };
         // Interface positions are omitted; buildGraph falls back to stacking on left/right edges.
     }
 
@@ -515,11 +525,13 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         const fn = this.findFn(this.iv.functions, funcId);
         if (!fn) { return; }
 
-        const pl = this.ui.entities[funcId];
-        const pX1 = pl?.coordinates[0] ?? 0;
-        const pY1 = pl?.coordinates[1] ?? 0;
-        const scX = Math.round(pX1 + (relRfX + IFACE_W / 2) * SC_INV);
-        const scY = Math.round(pY1 + (relRfY + IFACE_H / 2) * SC_INV);
+        const center = this.flowPointToScopedSc(
+            this.ui.entities[funcId],
+            relRfX + IFACE_W / 2,
+            relRfY + IFACE_H / 2,
+        );
+        const scX = Math.round(center.x);
+        const scY = Math.round(center.y);
 
         const newIface: InterfaceModel = {
             ...(JSON.parse(JSON.stringify(source)) as InterfaceModel),
@@ -539,6 +551,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
      * SC coordinates are already absolute and do not need updating.
      */
     reparentFunction(id: string, newParentId?: string): void {
+        const currentFlowRect = this.getFunctionFlowRect(id);
         const fn = this.removeFnFromTree(id);
         if (!fn) { return; }
         if (newParentId) {
@@ -548,15 +561,56 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         } else {
             this.iv.functions.push(fn);
         }
+
+        if (!currentFlowRect) { return; }
+
+        if (newParentId) {
+            const parentFlowRect = this.getFunctionFlowRect(newParentId);
+            if (!parentFlowRect) { return; }
+            this.ui.entities[id] = {
+                ...(this.ui.entities[id] ?? { coordinates: [] }),
+                coordinates: this.flowRectToScopedSc(
+                    this.ui.entities[newParentId],
+                    currentFlowRect.x - parentFlowRect.x,
+                    currentFlowRect.y - parentFlowRect.y,
+                    currentFlowRect.w,
+                    currentFlowRect.h,
+                ),
+            };
+        } else {
+            this.ui.entities[id] = {
+                ...(this.ui.entities[id] ?? { coordinates: [] }),
+                coordinates: this.flowRectToAbsoluteSc(
+                    currentFlowRect.x,
+                    currentFlowRect.y,
+                    currentFlowRect.w,
+                    currentFlowRect.h,
+                ),
+            };
+        }
     }
 
     /** Store connection waypoints (in RF pixels) in the UiModel as SC units. */
     updateConnectionWaypoints(id: string, waypoints: Array<{x: number; y: number}>): void {
         if (waypoints.length > 0) {
+            const conn = this.iv.connections.find(item => item.id === id);
+            const containerId = conn ? this.findConnectionContainerId(conn) : undefined;
+            const containerLayout = containerId ? this.ui.entities[containerId] : undefined;
+            const containerRect = containerId ? this.getFunctionFlowRect(containerId) : undefined;
             const coords: number[] = [];
             for (const wp of waypoints) {
-                coords.push(Math.round(wp.x * SC_INV));
-                coords.push(Math.round(wp.y * SC_INV));
+                if (containerLayout?.rootCoordinates?.length === 4 && containerRect) {
+                    const scoped = this.flowPointToScopedSc(
+                        containerLayout,
+                        wp.x - containerRect.x,
+                        wp.y - containerRect.y,
+                    );
+                    coords.push(Math.round(scoped.x));
+                    coords.push(Math.round(scoped.y));
+                } else {
+                    coords.push(Math.round(wp.x * SC_INV));
+                    coords.push(Math.round(wp.y * SC_INV));
+                }
             }
             this.ui.entities[id] = { coordinates: coords };
         } else {
@@ -607,6 +661,156 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             return undefined;
         };
         return search(this.iv.functions);
+    }
+
+    private rectFromCoords(coords: number[] | undefined): Rect | undefined {
+        if (!coords || coords.length < 4) { return undefined; }
+        return { x1: coords[0], y1: coords[1], x2: coords[2], y2: coords[3] };
+    }
+
+    private flowRectToAbsoluteSc(x: number, y: number, w: number, h: number): number[] {
+        return [
+            Math.round(x * SC_INV),
+            Math.round(y * SC_INV),
+            Math.round((x + w) * SC_INV),
+            Math.round((y + h) * SC_INV),
+        ];
+    }
+
+    private flowRectToScopedSc(parentLayout: EntityLayout | undefined, x: number, y: number, w: number, h: number): number[] {
+        const topLeft = this.flowPointToScopedSc(parentLayout, x, y);
+        const bottomRight = this.flowPointToScopedSc(parentLayout, x + w, y + h);
+        return [
+            Math.round(topLeft.x),
+            Math.round(topLeft.y),
+            Math.round(bottomRight.x),
+            Math.round(bottomRight.y),
+        ];
+    }
+
+    private flowPointToScopedSc(parentLayout: EntityLayout | undefined, x: number, y: number): { x: number; y: number } {
+        const outer = this.rectFromCoords(parentLayout?.coordinates);
+        const inner = this.rectFromCoords(parentLayout?.rootCoordinates);
+
+        if (outer && inner) {
+            const widthPx = Math.max((outer.x2 - outer.x1) * SC_SCALE, 1);
+            const heightPx = Math.max((outer.y2 - outer.y1) * SC_SCALE, 1);
+            return {
+                x: inner.x1 + (x / widthPx) * (inner.x2 - inner.x1),
+                y: inner.y1 + (y / heightPx) * (inner.y2 - inner.y1),
+            };
+        }
+
+        const originX = parentLayout?.coordinates[0] ?? 0;
+        const originY = parentLayout?.coordinates[1] ?? 0;
+        return {
+            x: originX + x * SC_INV,
+            y: originY + y * SC_INV,
+        };
+    }
+
+    private scopedScRectToFlow(parentLayout: EntityLayout | undefined, coords: number[] | undefined): { x: number; y: number; w: number; h: number } | undefined {
+        const rect = this.rectFromCoords(coords);
+        if (!rect) { return undefined; }
+
+        const topLeft = this.scopedScPointToFlow(parentLayout, rect.x1, rect.y1);
+        const bottomRight = this.scopedScPointToFlow(parentLayout, rect.x2, rect.y2);
+        return {
+            x: topLeft.x,
+            y: topLeft.y,
+            w: Math.max(bottomRight.x - topLeft.x, 1),
+            h: Math.max(bottomRight.y - topLeft.y, 1),
+        };
+    }
+
+    private scopedScPointToFlow(parentLayout: EntityLayout | undefined, scX: number, scY: number): { x: number; y: number } {
+        const outer = this.rectFromCoords(parentLayout?.coordinates);
+        const inner = this.rectFromCoords(parentLayout?.rootCoordinates);
+
+        if (outer && inner) {
+            const widthPx = Math.max((outer.x2 - outer.x1) * SC_SCALE, 1);
+            const heightPx = Math.max((outer.y2 - outer.y1) * SC_SCALE, 1);
+            return {
+                x: ((scX - inner.x1) / (inner.x2 - inner.x1 || 1)) * widthPx,
+                y: ((scY - inner.y1) / (inner.y2 - inner.y1 || 1)) * heightPx,
+            };
+        }
+
+        const originX = parentLayout?.coordinates[0] ?? 0;
+        const originY = parentLayout?.coordinates[1] ?? 0;
+        return {
+            x: (scX - originX) * SC_SCALE,
+            y: (scY - originY) * SC_SCALE,
+        };
+    }
+
+    private findFnWithParent(fns: FunctionModel[], id: string, parentId?: string): { fn: FunctionModel; parentId?: string } | undefined {
+        for (const fn of fns) {
+            if (fn.id === id) {
+                return { fn, parentId };
+            }
+            const nested = this.findFnWithParent(fn.nestedFunctions, id, fn.id);
+            if (nested) { return nested; }
+        }
+        return undefined;
+    }
+
+    private getFunctionFlowRect(id: string): { x: number; y: number; w: number; h: number } | undefined {
+        const entry = this.findFnWithParent(this.iv.functions, id);
+        if (!entry) { return undefined; }
+
+        const layout = this.ui.entities[id];
+        const ownRect = this.rectFromCoords(layout?.coordinates);
+        if (!ownRect) { return undefined; }
+
+        if (!entry.parentId) {
+            return {
+                x: ownRect.x1 * SC_SCALE,
+                y: ownRect.y1 * SC_SCALE,
+                w: Math.max((ownRect.x2 - ownRect.x1) * SC_SCALE, 1),
+                h: Math.max((ownRect.y2 - ownRect.y1) * SC_SCALE, 1),
+            };
+        }
+
+        const parentRect = this.getFunctionFlowRect(entry.parentId);
+        if (!parentRect) { return undefined; }
+
+        const localRect = this.scopedScRectToFlow(this.ui.entities[entry.parentId], layout?.coordinates);
+        if (!localRect) { return undefined; }
+
+        return {
+            x: parentRect.x + localRect.x,
+            y: parentRect.y + localRect.y,
+            w: localRect.w,
+            h: localRect.h,
+        };
+    }
+
+    private findFunctionParentId(id: string): string | undefined {
+        return this.findFnWithParent(this.iv.functions, id)?.parentId;
+    }
+
+    private findConnectionContainerId(conn: ConnectionModel): string | undefined {
+        const sourceFuncId = this.findIface(conn.sourceIfaceId)?.func.id;
+        const targetFuncId = this.findIface(conn.targetIfaceId)?.func.id;
+        if (!sourceFuncId || !targetFuncId) { return undefined; }
+
+        const sourceAncestors = new Set<string>();
+        let current: string | undefined = sourceFuncId;
+        while (current) {
+            sourceAncestors.add(current);
+            current = this.findFunctionParentId(current);
+        }
+
+        current = targetFuncId;
+        while (current) {
+            if (sourceAncestors.has(current)) {
+                return current;
+            }
+            current = this.findFunctionParentId(current);
+        }
+
+        return undefined;
     }
 
     private syncConnectedRequiredInterfaces(providedIfaceId: string): void {
