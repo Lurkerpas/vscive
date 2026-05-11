@@ -12,7 +12,7 @@ import {
     DiagramData, ExtensionCapabilities, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
     NodeMove, PropertyModel, ParameterModel, EditorOptions, DEFAULT_OPTIONS,
 } from '../../src/model/types';
-import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToEdge } from './transform';
+import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, interfaceDimensions, snapIfaceToEdge } from './transform';
 import { FunctionNode } from './components/FunctionNode';
 import { InterfaceNode } from './components/InterfaceNode';
 import { RoutedEdge } from './components/RoutedEdge';
@@ -70,6 +70,11 @@ function isFunction(e: FunctionModel | InterfaceModel | null): e is FunctionMode
 
 function snapToGrid(value: number, grid: number): number {
     return Math.round(value / grid) * grid;
+}
+
+function nodeInterfaceDimensions(node: Node): { width: number; height: number } {
+    const scale = Math.max(Number((node.data as Record<string, unknown> | undefined)?.fontScale ?? 1), 0.05);
+    return interfaceDimensions(scale);
 }
 
 function collectConnectionWaypoints(nodes: Node[], connectionId: string, overrideNode?: Node): Waypoint[] {
@@ -225,14 +230,15 @@ function DiagramEditor() {
 
     const displayedNodes = useMemo(() => {
         const enhancedNodes = nodes.map(n => {
+            const fontScale = Math.max(Number((n.data as Record<string, unknown> | undefined)?.fontScale ?? 1), 0.05);
             if (n.type !== 'functionNode') {
                 return n.type === 'interfaceNode'
-                    ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface, showInterfaceNames: options.showInterfaceNames } }
+                    ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface * fontScale, showInterfaceNames: options.showInterfaceNames } }
                     : n;
             }
             const isConnSrc = n.id === connectSrc?.id;
             const isConnTarget = connectMode && !connectSrc;
-            return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget, fontSizeFn: options.fontSizeFn } };
+            return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget, fontSizeFn: options.fontSizeFn * fontScale } };
         });
 
         if (!focusVisibility) { return enhancedNodes; }
@@ -313,7 +319,8 @@ function DiagramEditor() {
         const relY_raw = flowClick.y - absPos.y;
         const pw = node.measured?.width ?? (node.style?.width as number | undefined) ?? 800;
         const ph = node.measured?.height ?? (node.style?.height as number | undefined) ?? 560;
-        const { x: relX, y: relY } = snapIfaceToEdge(relX_raw - IFACE_W / 2, relY_raw - IFACE_H / 2, pw, ph);
+        const iface = nodeInterfaceDimensions(node);
+        const { x: relX, y: relY } = snapIfaceToEdge(relX_raw - iface.width / 2, relY_raw - iface.height / 2, pw, ph, iface.width, iface.height);
         return { relX, relY };
     }, [getAbsolutePos, screenToFlowPosition]);
 
@@ -398,7 +405,7 @@ function DiagramEditor() {
             if (parentNode) {
                 const pw = parentNode.measured?.width ?? (parentNode.style?.width as number | undefined) ?? 800;
                 const ph = parentNode.measured?.height ?? (parentNode.style?.height as number | undefined) ?? 560;
-                const snapped = snapIfaceToEdge(x, y, pw, ph);
+                const snapped = snapIfaceToEdge(x, y, pw, ph, w, h);
                 x = snapped.x;
                 y = snapped.y;
                 setNodes(nds => nds.map(n => n.id === node.id
@@ -495,10 +502,12 @@ function DiagramEditor() {
                             };
                         }
                         if (n.parentId !== change.id || n.type !== 'interfaceNode') { return n; }
-                        const snapped = snapIfaceToEdge(n.position.x, n.position.y, w, h);
+                        const ifaceW = n.measured?.width ?? (n.style?.width as number | undefined) ?? IFACE_W;
+                        const ifaceH = n.measured?.height ?? (n.style?.height as number | undefined) ?? IFACE_H;
+                        const snapped = snapIfaceToEdge(n.position.x, n.position.y, w, h, ifaceW, ifaceH);
                         ifaceMoves.push({
                             id: n.id, kind: 'interface',
-                            x: snapped.x, y: snapped.y, w: IFACE_W, h: IFACE_H,
+                            x: snapped.x, y: snapped.y, w: ifaceW, h: ifaceH,
                             parentId: change.id,
                         });
                         return { ...n, position: { x: snapped.x, y: snapped.y }, data: { ...n.data, edge: snapped.edge } };
@@ -923,10 +932,11 @@ function DiagramEditor() {
             });
             if (!locked && clipboard?.kind === 'interface') {
                 const iface = clipboard.data;
+                const ifaceSize = nodeInterfaceDimensions(node);
                 const pw = node.measured?.width ?? 800;
                 const ph = node.measured?.height ?? 560;
-                const relRfX = iface.type === 'provided' ? pw : -IFACE_W;
-                const relRfY = ph / 2 - IFACE_H / 2;
+                const relRfX = iface.type === 'provided' ? pw : -ifaceSize.width;
+                const relRfY = ph / 2 - ifaceSize.height / 2;
                 items.push({
                     label: 'Paste Interface',
                     onClick: () => post({ type: 'pasteInterface', newId: uuid(), source: iface, funcId: fn.id, relRfX, relRfY }),
@@ -1021,11 +1031,12 @@ function DiagramEditor() {
 
     const onConfirmInterface = useCallback((name: string, kind: InterfaceKind, ifaceType: 'provided' | 'required', funcId: string) => {
         const parentNode = nodes.find(n => n.id === funcId);
+        const ifaceSize = parentNode ? nodeInterfaceDimensions(parentNode) : { width: IFACE_W, height: IFACE_H };
         const pw = parentNode?.measured?.width ?? (parentNode?.style?.width as number | undefined) ?? 800;
         const ph = parentNode?.measured?.height ?? (parentNode?.style?.height as number | undefined) ?? 560;
         // PI on right edge, RI on left edge; centered vertically
-        const relRfX = ifaceType === 'provided' ? pw : -IFACE_W;
-        const relRfY = ph / 2 - IFACE_H / 2;
+        const relRfX = ifaceType === 'provided' ? pw : -ifaceSize.width;
+        const relRfY = ph / 2 - ifaceSize.height / 2;
         post({ type: 'addInterface', id: uuid(), funcId, name, kind, ifaceType, relRfX, relRfY });
         setDialog(null);
     }, [nodes]);

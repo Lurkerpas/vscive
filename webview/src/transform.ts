@@ -43,6 +43,19 @@ function scaleInto(value: number, srcStart: number, srcEnd: number, dstSpan: num
     return ((value - srcStart) / srcSpan) * dstSpan;
 }
 
+function localScaleFactor(parentLayout: EntityLayout | undefined): number {
+    const outer = rectFromCoords(parentLayout?.coordinates);
+    const inner = rectFromCoords(parentLayout?.rootCoordinates);
+
+    if (!outer || !inner) {
+        return 1;
+    }
+
+    const scaleX = Math.abs(rectWidth(outer) / (rectWidth(inner) || 1));
+    const scaleY = Math.abs(rectHeight(outer) / (rectHeight(inner) || 1));
+    return Math.max(Math.min(scaleX, scaleY), 0.05);
+}
+
 function mapPointToParentLocalPx(
     parentLayout: EntityLayout | undefined,
     scX: number,
@@ -170,12 +183,27 @@ const DEFAULT_FUNC_H = 560;
 export const IFACE_W = 60;
 export const IFACE_H = 80;
 
+export function interfaceDimensions(scale = 1): { width: number; height: number } {
+    const normalized = Math.max(scale, 0.05);
+    return {
+        width: Math.max(IFACE_W * normalized, 8),
+        height: Math.max(IFACE_H * normalized, 10),
+    };
+}
+
 export type IfaceEdge = 'left' | 'right' | 'top' | 'bottom';
 
 /** Determine which edge of the parent function an interface is on, from its top-left position. */
-export function computeIfaceEdge(x: number, y: number, parentW: number, parentH: number): IfaceEdge {
-    const cx = x + IFACE_W / 2;
-    const cy = y + IFACE_H / 2;
+export function computeIfaceEdge(
+    x: number,
+    y: number,
+    parentW: number,
+    parentH: number,
+    ifaceW = IFACE_W,
+    ifaceH = IFACE_H,
+): IfaceEdge {
+    const cx = x + ifaceW / 2;
+    const cy = y + ifaceH / 2;
     const dLeft = Math.abs(cx);
     const dRight = Math.abs(parentW - cx);
     const dTop = Math.abs(cy);
@@ -189,21 +217,26 @@ export function computeIfaceEdge(x: number, y: number, parentW: number, parentH:
 
 /** Snap an interface (IFACE_W × IFACE_H) to the nearest edge of its parent (pw × ph). */
 export function snapIfaceToEdge(
-    x: number, y: number, pw: number, ph: number,
+    x: number,
+    y: number,
+    pw: number,
+    ph: number,
+    ifaceW = IFACE_W,
+    ifaceH = IFACE_H,
 ): { x: number; y: number; edge: IfaceEdge } {
-    const cx = x + IFACE_W / 2;
-    const cy = y + IFACE_H / 2;
+    const cx = x + ifaceW / 2;
+    const cy = y + ifaceH / 2;
     const dLeft   = Math.abs(cx);
     const dRight  = Math.abs(pw - cx);
     const dTop    = Math.abs(cy);
     const dBottom = Math.abs(ph - cy);
     const min = Math.min(dLeft, dRight, dTop, dBottom);
-    const clampY = (v: number) => Math.max(-IFACE_H / 2, Math.min(ph - IFACE_H / 2, v));
-    const clampX = (v: number) => Math.max(-IFACE_W / 2, Math.min(pw - IFACE_W / 2, v));
-    if (min === dLeft)   { return { x: -IFACE_W, y: clampY(cy - IFACE_H / 2), edge: 'left' }; }
-    if (min === dRight)  { return { x: pw,        y: clampY(cy - IFACE_H / 2), edge: 'right' }; }
-    if (min === dTop)    { return { x: clampX(cx - IFACE_W / 2), y: -IFACE_H,  edge: 'top' }; }
-    return                        { x: clampX(cx - IFACE_W / 2), y: ph,         edge: 'bottom' };
+    const clampY = (v: number) => Math.max(-ifaceH / 2, Math.min(ph - ifaceH / 2, v));
+    const clampX = (v: number) => Math.max(-ifaceW / 2, Math.min(pw - ifaceW / 2, v));
+    if (min === dLeft)   { return { x: -ifaceW, y: clampY(cy - ifaceH / 2), edge: 'left' }; }
+    if (min === dRight)  { return { x: pw,      y: clampY(cy - ifaceH / 2), edge: 'right' }; }
+    if (min === dTop)    { return { x: clampX(cx - ifaceW / 2), y: -ifaceH, edge: 'top' }; }
+    return                        { x: clampX(cx - ifaceW / 2), y: ph,      edge: 'bottom' };
 }
 
 function functionToNode(
@@ -211,12 +244,14 @@ function functionToNode(
     ui: UiModel,
     parentId?: string,
     depth = 0,
+    cumulativeScale = 1,
 ): Node[] {
     const layout = layoutOf(ui, fn.id);
     let x = depth * 30;
     let y = depth * 30;
     let w = DEFAULT_FUNC_W;
     let h = DEFAULT_FUNC_H;
+    let fontScale = cumulativeScale;
 
     if (parentId) {
         const parentLayout = layoutOf(ui, parentId);
@@ -227,6 +262,7 @@ function functionToNode(
             w = mapped.w;
             h = mapped.h;
         }
+        fontScale *= localScaleFactor(parentLayout);
     } else if (layout && layout.coordinates.length >= 4) {
         const outer = rectFromCoords(layout.coordinates);
         if (outer) {
@@ -251,12 +287,13 @@ function functionToNode(
             label: fn.name,
             language: fn.language,
             fn,
+            fontScale,
         },
         ...(parentId ? { parentId, extent: 'parent' as const } : {}),
     };
 
-    const ifaceNodes = buildInterfaceNodes(fn, ui, w, h);
-    const nested = fn.nestedFunctions.flatMap(child => functionToNode(child, ui, fn.id, depth + 1));
+    const ifaceNodes = buildInterfaceNodes(fn, ui, w, h, fontScale);
+    const nested = fn.nestedFunctions.flatMap(child => functionToNode(child, ui, fn.id, depth + 1, fontScale));
 
     return [node, ...ifaceNodes, ...nested];
 }
@@ -264,39 +301,42 @@ function functionToNode(
 function ifacePositionFromLayout(
     layout: EntityLayout | undefined,
     parentLayout: EntityLayout | undefined,
+    ifaceW: number,
+    ifaceH: number,
 ): { x: number; y: number } | null {
     if (!layout || !parentLayout) { return null; }
     const posCoords = (layout.rootCoordinates?.length ?? 0) >= 2 ? layout.rootCoordinates! : layout.coordinates;
     if (posCoords.length < 2) { return null; }
     const mapped = mapPointToParentLocalPx(parentLayout, posCoords[0], posCoords[1]);
-    return { x: mapped.x - IFACE_W / 2, y: mapped.y - IFACE_H / 2 };
+    return { x: mapped.x - ifaceW / 2, y: mapped.y - ifaceH / 2 };
 }
 
-function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, parentH: number): Node[] {
+function buildInterfaceNodes(fn: FunctionModel, ui: UiModel, parentW: number, parentH: number, fontScale: number): Node[] {
     const parentLayout = layoutOf(ui, fn.id);
+    const { width: ifaceW, height: ifaceH } = interfaceDimensions(fontScale);
 
     const makeNode = (iface: InterfaceModel, idx: number, total: number, isProvided: boolean): Node => {
         const layout = layoutOf(ui, iface.id);
-        const fromLayout = ifacePositionFromLayout(layout, parentLayout);
+        const fromLayout = ifacePositionFromLayout(layout, parentLayout, ifaceW, ifaceH);
         let raw: { x: number; y: number };
         if (fromLayout) {
             raw = fromLayout;
         } else {
             // Fallback: PI stack on right edge, RI stack on left edge
             const spacing = parentH / (total + 1);
-            const y = spacing * (idx + 1) - IFACE_H / 2;
-            raw = isProvided ? { x: parentW, y } : { x: -IFACE_W, y };
+            const y = spacing * (idx + 1) - ifaceH / 2;
+            raw = isProvided ? { x: parentW, y } : { x: -ifaceW, y };
         }
         // Always snap to nearest edge so loaded positions stay on the border
-        const { x: posX, y: posY, edge } = snapIfaceToEdge(raw.x, raw.y, parentW, parentH);
+        const { x: posX, y: posY, edge } = snapIfaceToEdge(raw.x, raw.y, parentW, parentH, ifaceW, ifaceH);
         return {
             id: iface.id,
             type: 'interfaceNode',
             position: { x: posX, y: posY },
-            data: { label: iface.name, iface, edge },
+            data: { label: iface.name, iface, edge, fontScale, ifaceWidth: ifaceW, ifaceHeight: ifaceH },
             parentId: fn.id,
             // No extent:'parent' — interfaces live just outside the function border
-            style: { width: IFACE_W, height: IFACE_H },
+            style: { width: ifaceW, height: ifaceH },
         };
     };
 

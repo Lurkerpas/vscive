@@ -10,6 +10,7 @@ interface FunctionNodeData {
     isConnSrc?: boolean;
     isConnTarget?: boolean;
     fontSizeFn?: number;
+    fontScale?: number;
     [key: string]: unknown;
 }
 
@@ -17,11 +18,16 @@ export function FunctionNode({ data, selected }: NodeProps) {
     const d = data as FunctionNodeData;
     const caption = d.language ? `${d.label} [${d.language}]` : d.label;
     const borderColor = d.isConnSrc ? '#a6e3a1' : selected ? '#89b4fa' : '#6c7086';
+    const fontScale = Math.max(d.fontScale ?? 1, 0.05);
+    const headerPaddingY = Math.max(2, 6 * fontScale);
+    const headerPaddingX = Math.max(4, 10 * fontScale);
+    const headerRadius = Math.max(2, 4 * fontScale);
+    const borderWidth = Math.max(1, 2 * fontScale);
     return (
         <div style={{
             width: '100%',
             height: '100%',
-            border: `2px solid ${borderColor}`,
+            border: `${borderWidth}px solid ${borderColor}`,
             borderRadius: 6,
             background: '#1e1e2e',
             color: '#cdd6f4',
@@ -40,15 +46,15 @@ export function FunctionNode({ data, selected }: NodeProps) {
             {/* Header */}
             <div style={{
                 background: '#313244',
-                padding: '6px 10px',
+                padding: `${headerPaddingY}px ${headerPaddingX}px`,
                 borderBottom: '1px solid #6c7086',
-                borderRadius: '4px 4px 0 0',
+                borderRadius: `${headerRadius}px ${headerRadius}px 0 0`,
                 fontWeight: 700,
                 fontSize: d.fontSizeFn ?? 90,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                letterSpacing: 0.3,
+                letterSpacing: 0.3 * fontScale,
             }}>
                 {caption}
             </div>
