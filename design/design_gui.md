@@ -9,12 +9,13 @@ The pallete shall have the following buttons:
 - Zoom Out,
 - Zoom to Fit,
 - Snap to Grid,
-- Show Options,
+- Focus,
 - Add Function,
 - Add Provided Interface (adds to the currently selected Function),
 - Add Required Interface (adds to the currently selected Function),
 - Add Connection,
 - Export Diagram as Image,
+- Show Options,
 - Lock Diagram from Modification.
 
 The buttons shall be illustrated using only an icon, with name shown as a tooltip on mouse hover.
@@ -69,6 +70,10 @@ Right clicking on a Connection shall present a menu with the following options:
 Copy-Paste shall copy the given entity, but wihout any connections, and assigning new UID.
 
 Snap to Grid shall be toggleable. When on, all positions of interfaces and function borders (so it applies also to resizing), shall be aligned to the grid.
+Focus shall be toggleable. When on:
+- if a function is selected, only the selected function, its interfaces, the connections attached to those interfaces, and the directly connected functions and interfaces shall be visible,
+- if an interface is selected, only the selected interface, its host function, the functions connected to that interface, the corresponding opposite-end interfaces, and the corresponding connections shall be visible.
+Untoggling Focus shall make the entire diagram visible again.
 Lock Diagram from Modification shall be toggleable. When on, all positions and sizes shall be locked.
 
 Color picker shall allow to select a color, using:

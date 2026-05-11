@@ -110,6 +110,10 @@ function replaceConnectionWaypointNodes(nodes: Node[], connectionId: string, way
     ];
 }
 
+function edgeConnectsInterface(edge: Edge, interfaceId: string): boolean {
+    return edge.source === interfaceId || edge.target === interfaceId;
+}
+
 // ─── Inner component (needs ReactFlow context for screenToFlowPosition) ─────
 
 function DiagramEditor() {
@@ -124,6 +128,7 @@ function DiagramEditor() {
     } | null>(null);
     const [dialog, setDialog] = useState<DialogState>(null);
     const [locked, setLocked] = useState(false);
+    const [focusEnabled, setFocusEnabled] = useState(false);
     const [optionsVisible, setOptionsVisible] = useState(false);
     const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
     const [pendingExportFormat, setPendingExportFormat] = useState<'png' | 'svg' | null>(null);
@@ -158,6 +163,93 @@ function DiagramEditor() {
         () => isFunction(selected) ? selected : null,
         [selected],
     );
+
+    const focusVisibility = useMemo(() => {
+        if (!focusEnabled || !selected) { return null; }
+
+        const interfaceHost = new Map<string, string>();
+        const functionInterfaces = new Map<string, Set<string>>();
+
+        for (const node of nodes) {
+            if (node.type !== 'interfaceNode' || !node.parentId) { continue; }
+            interfaceHost.set(node.id, node.parentId);
+            const bucket = functionInterfaces.get(node.parentId) ?? new Set<string>();
+            bucket.add(node.id);
+            functionInterfaces.set(node.parentId, bucket);
+        }
+
+        const visibleFunctionIds = new Set<string>();
+        const visibleInterfaceIds = new Set<string>();
+        const visibleEdgeIds = new Set<string>();
+
+        if (isFunction(selected)) {
+            visibleFunctionIds.add(selected.id);
+            for (const ifaceId of functionInterfaces.get(selected.id) ?? new Set<string>()) {
+                visibleInterfaceIds.add(ifaceId);
+            }
+            for (const edge of edges) {
+                const touchesSelectedFunction = visibleInterfaceIds.has(edge.source) || visibleInterfaceIds.has(edge.target);
+                if (!touchesSelectedFunction) { continue; }
+                visibleEdgeIds.add(edge.id);
+                visibleInterfaceIds.add(edge.source);
+                visibleInterfaceIds.add(edge.target);
+                const sourceHost = interfaceHost.get(edge.source);
+                const targetHost = interfaceHost.get(edge.target);
+                if (sourceHost) { visibleFunctionIds.add(sourceHost); }
+                if (targetHost) { visibleFunctionIds.add(targetHost); }
+            }
+        } else {
+            visibleInterfaceIds.add(selected.id);
+            const hostFunctionId = interfaceHost.get(selected.id);
+            if (hostFunctionId) { visibleFunctionIds.add(hostFunctionId); }
+            for (const edge of edges) {
+                if (!edgeConnectsInterface(edge, selected.id)) { continue; }
+                visibleEdgeIds.add(edge.id);
+                visibleInterfaceIds.add(edge.source);
+                visibleInterfaceIds.add(edge.target);
+                const sourceHost = interfaceHost.get(edge.source);
+                const targetHost = interfaceHost.get(edge.target);
+                if (sourceHost) { visibleFunctionIds.add(sourceHost); }
+                if (targetHost) { visibleFunctionIds.add(targetHost); }
+            }
+        }
+
+        return { visibleFunctionIds, visibleInterfaceIds, visibleEdgeIds };
+    }, [edges, focusEnabled, nodes, selected]);
+
+    const displayedNodes = useMemo(() => {
+        const enhancedNodes = nodes.map(n => {
+            if (n.type !== 'functionNode') {
+                return n.type === 'interfaceNode'
+                    ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface, showInterfaceNames: options.showInterfaceNames } }
+                    : n;
+            }
+            const isConnSrc = n.id === connectSrc?.id;
+            const isConnTarget = connectMode && !connectSrc;
+            return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget, fontSizeFn: options.fontSizeFn } };
+        });
+
+        if (!focusVisibility) { return enhancedNodes; }
+
+        return enhancedNodes.filter(node => {
+            if (node.type === 'functionNode') {
+                return focusVisibility.visibleFunctionIds.has(node.id);
+            }
+            if (node.type === 'interfaceNode') {
+                return focusVisibility.visibleInterfaceIds.has(node.id);
+            }
+            if (node.type === 'waypointNode') {
+                const parsed = parseWaypointNodeId(node.id);
+                return parsed ? focusVisibility.visibleEdgeIds.has(parsed.connectionId) : true;
+            }
+            return true;
+        });
+    }, [connectMode, connectSrc, focusVisibility, locked, nodes, options.fontSizeFn, options.fontSizeIface, options.showInterfaceNames]);
+
+    const displayedEdges = useMemo(() => {
+        if (!focusVisibility) { return styledEdges; }
+        return styledEdges.filter(edge => focusVisibility.visibleEdgeIds.has(edge.id));
+    }, [focusVisibility, styledEdges]);
 
     // ── Receive messages from extension ─────────────────────────────────────
     useEffect(() => {
@@ -262,9 +354,11 @@ function DiagramEditor() {
             setConnectSrc(null);
             return;
         }
-        setSelected(null);
+        if (!focusEnabled) {
+            setSelected(null);
+        }
         setContextMenu(null);
-    }, [connectMode]);
+    }, [connectMode, focusEnabled]);
 
     // ── Drag stop → persist positions to extension ───────────────────────────
     const onNodeDragStop: NodeDragHandler = useCallback((_evt, node) => {
@@ -952,6 +1046,9 @@ function DiagramEditor() {
                 onFitView={() => fitView({ padding: 0.1, maxZoom: 1 })}
                 onToggleSnap={() => updateOptions({ snapEnabled: !options.snapEnabled })}
                 snapEnabled={options.snapEnabled}
+                onToggleFocus={() => setFocusEnabled(enabled => !enabled)}
+                focusEnabled={focusEnabled}
+                focusDisabled={!focusEnabled && !selected}
                 onShowOptions={() => setOptionsVisible(v => !v)}
                 onAddFunction={onPaletteAddFunction}
                 onAddProvidedInterface={() => onPaletteAddInterface('provided')}
@@ -965,18 +1062,8 @@ function DiagramEditor() {
                 optionsVisible={optionsVisible}
             />
             <ReactFlow
-                nodes={nodes.map(n => {
-                    if (n.type !== 'functionNode') {
-                        // Pass font size option into interface nodes too
-                        return n.type === 'interfaceNode'
-                            ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface, showInterfaceNames: options.showInterfaceNames } }
-                            : n;
-                    }
-                    const isConnSrc = n.id === connectSrc?.id;
-                    const isConnTarget = connectMode && !connectSrc;
-                    return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget, fontSizeFn: options.fontSizeFn } };
-                })}
-                edges={styledEdges}
+                nodes={displayedNodes}
+                edges={displayedEdges}
                 onNodesChange={onNodesChangeWithResize}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
