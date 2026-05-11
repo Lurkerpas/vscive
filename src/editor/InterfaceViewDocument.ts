@@ -1,7 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import { randomUUID } from 'crypto';
 import { parseIvXml } from '../parsers/IvXmlParser';
 import { parseUiXml, SC_SCALE } from '../parsers/UiXmlParser';
 import { parseAttrXml, EMPTY_SCHEMA } from '../parsers/AttrXmlParser';
@@ -12,6 +9,14 @@ import {
     ConnectionModel, InterfaceKind, NodeMove, PropertyModel, ParameterModel,
 } from '../model/types';
 import { log } from '../logger';
+import {
+    basenameWithoutExtension,
+    createUuid,
+    decodeUtf8,
+    dirnameUri,
+    joinPathSegments,
+    parseStoredUriOrPath,
+} from '../utils/platform';
 
 const SC_INV = 1 / SC_SCALE; // pixels → SC coords (= 20)
 const IFACE_W = 60;
@@ -59,7 +64,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
     }
 
     static async create(uri: vscode.Uri): Promise<InterfaceViewDocument> {
-        log(`InterfaceViewDocument.create: ${uri.fsPath}`);
+        log(`InterfaceViewDocument.create: ${uri.toString()}`);
         const doc = new InterfaceViewDocument(uri);
         await doc.reload();
         await doc.loadSchema();
@@ -68,27 +73,27 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
     }
 
     async reload(): Promise<void> {
-        log(`reload: reading ${this.uri.fsPath}`);
+        log(`reload: reading ${this.uri.toString()}`);
         const xmlBytes = await vscode.workspace.fs.readFile(this.uri);
-        const xmlStr = Buffer.from(xmlBytes).toString('utf8');
+        const xmlStr = decodeUtf8(xmlBytes);
         log(`reload: parsing IV XML (${xmlStr.length} bytes)`);
         this.iv = parseIvXml(xmlStr);
         log(`reload: IV parsed — uiFile=${this.iv.uiFile}`);
 
         if (!this.iv.uiFile) {
             // Legacy format: no separate UI file, coordinates are embedded as Taste::coordinates properties
-            const baseName = path.basename(this.uri.fsPath, path.extname(this.uri.fsPath));
+            const baseName = basenameWithoutExtension(this.uri);
             this.iv.uiFile = `${baseName}_ui.xml`;
             this.ui = buildUiFromIv(this.iv);
             log(`reload: legacy format — extracted ${Object.keys(this.ui.entities).length} entities, generated uiFile=${this.iv.uiFile}`);
             return;
         }
 
-        const uiPath = path.join(path.dirname(this.uri.fsPath), this.iv.uiFile);
-        log(`reload: reading UI XML from ${uiPath}`);
+        const uiUri = joinPathSegments(dirnameUri(this.uri), this.iv.uiFile);
+        log(`reload: reading UI XML from ${uiUri.toString()}`);
         try {
-            const uiBytes = await vscode.workspace.fs.readFile(vscode.Uri.file(uiPath));
-            this.ui = parseUiXml(Buffer.from(uiBytes).toString('utf8'));
+            const uiBytes = await vscode.workspace.fs.readFile(uiUri);
+            this.ui = parseUiXml(decodeUtf8(uiBytes));
             log(`reload: UI parsed — ${Object.keys(this.ui.entities).length} entities`);
         } catch (err) {
             log(`reload: UI XML not found or failed (${err}), using empty UI`);
@@ -103,10 +108,19 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
     async loadSchemaFromPath(attrFilePath: string): Promise<void> {
         const cfgPath = attrFilePath
             || vscode.workspace.getConfiguration('vscive').get<string>('attributesFilePath')
-            || path.join(process.env.HOME ?? '~', '.local', 'default_attributes.xml');
-        log(`loadSchemaFromPath: trying ${cfgPath}`);
+            || (typeof process !== 'undefined' && typeof process.env?.HOME === 'string'
+                ? `${process.env.HOME}/.local/default_attributes.xml`
+                : '');
+        const cfgUri = parseStoredUriOrPath(cfgPath);
+        if (!cfgUri) {
+            log('loadSchemaFromPath: no attributes file configured, using empty schema');
+            this.schema = EMPTY_SCHEMA;
+            return;
+        }
+
+        log(`loadSchemaFromPath: trying ${cfgUri.toString()}`);
         try {
-            const xml = fs.readFileSync(cfgPath, 'utf8');
+            const xml = decodeUtf8(await vscode.workspace.fs.readFile(cfgUri));
             this.schema = parseAttrXml(xml);
             log('loadSchemaFromPath: schema loaded');
         } catch (err) {
@@ -327,7 +341,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             Math.round(piOriginY + (piRelY + IFACE_H / 2) * SC_INV),
         ] };
 
-        const connId = randomUUID();
+        const connId = createUuid();
         this.connect(connId, riId, piId);
     }
 
@@ -480,11 +494,11 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             nestedFunctions: [],
             providedInterfaces: source.providedInterfaces.map(iface => ({
                 ...(JSON.parse(JSON.stringify(iface)) as InterfaceModel),
-                id: randomUUID(),
+                id: createUuid(),
             })),
             requiredInterfaces: source.requiredInterfaces.map(iface => ({
                 ...(JSON.parse(JSON.stringify(iface)) as InterfaceModel),
-                id: randomUUID(),
+                id: createUuid(),
             })),
         };
 

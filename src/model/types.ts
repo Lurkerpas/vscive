@@ -180,9 +180,17 @@ export interface DiagramData {
     schema: AttributeSchema;
 }
 
+export interface ExtensionCapabilities {
+    canBuild: boolean;
+    canBuildSkeletons: boolean;
+    canBrowseAttrFile: boolean;
+    canEditFunction: boolean;
+}
+
 export type ExtensionMessage =
     | { type: 'load'; data: DiagramData }
     | { type: 'options'; options: EditorOptions }
+    | { type: 'capabilities'; capabilities: ExtensionCapabilities }
     | { type: 'requestExport'; format: 'png' | 'svg' };
 
 /** A single node-move record sent from the webview after drag-stop. */

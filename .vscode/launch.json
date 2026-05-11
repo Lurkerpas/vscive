@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Web Extension",
+      "type": "pwa-extensionHost",
+      "request": "launch",
+      "debugWebWorkerHost": true,
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionDevelopmentKind=web"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/extension-web.js",
+        "${workspaceFolder}/out/webview/assets/*.js"
+      ],
+      "preLaunchTask": "npm: debug-web"
+    }
+  ]
+}

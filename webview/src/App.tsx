@@ -9,7 +9,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import {
-    DiagramData, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
+    DiagramData, ExtensionCapabilities, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
     NodeMove, PropertyModel, ParameterModel, EditorOptions, DEFAULT_OPTIONS,
 } from '../../src/model/types';
 import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, snapIfaceToEdge } from './transform';
@@ -120,6 +120,12 @@ function DiagramEditor() {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [diagramData, setDiagramData] = useState<DiagramData | null>(null);
+    const [capabilities, setCapabilities] = useState<ExtensionCapabilities>({
+        canBuild: true,
+        canBuildSkeletons: true,
+        canBrowseAttrFile: true,
+        canEditFunction: true,
+    });
     const [selected, setSelected] = useState<FunctionModel | InterfaceModel | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [waiting, setWaiting] = useState(true);
@@ -255,7 +261,9 @@ function DiagramEditor() {
     useEffect(() => {
         const handler = (event: MessageEvent) => {
             const msg = event.data as ExtensionMessage;
-            if (msg.type === 'options') {
+            if (msg.type === 'capabilities') {
+                setCapabilities(msg.capabilities);
+            } else if (msg.type === 'options') {
                 setOptions(msg.options);
             } else if (msg.type === 'requestExport') {
                 setPendingExportFormat(msg.format);
@@ -840,22 +848,24 @@ function DiagramEditor() {
                 onClick: () => post({ type: 'pasteFunction', newId: uuid(), source: clipboard.data, rfX: rfPos.x, rfY: rfPos.y }),
             });
         }
-        items.push(
-            {
+        if (capabilities.canBuildSkeletons) {
+            items.push({
                 label: 'Build Skeletons',
                 onClick: () => post({ type: 'buildSkeletons' }),
-            },
-            {
+            });
+        }
+        if (capabilities.canBuild) {
+            items.push({
                 label: 'Build',
                 onClick: () => post({ type: 'build' }),
-            },
-            {
-                label: 'Export Diagram as Image',
-                onClick: () => post({ type: 'requestExport' }),
-            },
-        );
+            });
+        }
+        items.push({
+            label: 'Export Diagram as Image',
+            onClick: () => post({ type: 'requestExport' }),
+        });
         setContextMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items });
-    }, [clipboard, locked, screenToFlowPosition]);
+    }, [capabilities.canBuild, capabilities.canBuildSkeletons, clipboard, locked, screenToFlowPosition]);
 
     const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
         e.preventDefault();
@@ -928,12 +938,12 @@ function DiagramEditor() {
                     onClick: () => post({ type: 'reparentFunction', id: fn.id }),
                 });
             }
-            items.push(
-                {
+            if (capabilities.canEditFunction) {
+                items.push({
                     label: 'Edit Function',
                     onClick: () => post({ type: 'editFunction', id: fn.id }),
-                },
-            );
+                });
+            }
             if (!locked) {
                 items.push({
                     label: 'Delete Function',
@@ -959,7 +969,7 @@ function DiagramEditor() {
         if (items.length > 0) {
             setContextMenu({ x: e.clientX, y: e.clientY, items });
         }
-    }, [clipboard, diagramData, getAbsolutePos, locked]);
+    }, [capabilities.canEditFunction, clipboard, diagramData, getAbsolutePos, locked]);
 
     // ── Attribute panel callbacks ────────────────────────────────────────────
     const updateOptions = useCallback((patch: Partial<EditorOptions>) => {
@@ -1108,6 +1118,7 @@ function DiagramEditor() {
                 <OptionsPanel
                     options={options}
                     onChange={updateOptions}
+                    canBrowseAttrFile={capabilities.canBrowseAttrFile}
                     onBrowseAttrFile={() => post({ type: 'browseAttrFile' })}
                 />
             )}

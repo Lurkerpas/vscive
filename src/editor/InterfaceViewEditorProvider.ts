@@ -1,8 +1,27 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { InterfaceViewDocument } from './InterfaceViewDocument';
-import { DiagramData, DEFAULT_OPTIONS, EditorOptions, ExtensionMessage, FunctionModel, IvModel, UiModel, WebviewMessage } from '../model/types';
+import {
+    DiagramData,
+    DEFAULT_OPTIONS,
+    EditorOptions,
+    ExtensionCapabilities,
+    ExtensionMessage,
+    FunctionModel,
+    IvModel,
+    UiModel,
+    WebviewMessage,
+} from '../model/types';
 import { log } from '../logger';
+import {
+    basename,
+    dataUrlToBytes,
+    dirnameUri,
+    displayUri,
+    encodeUtf8,
+    extname,
+    joinPathSegments,
+    serializeUriForSetting,
+} from '../utils/platform';
 
 export class InterfaceViewEditorProvider
     implements vscode.CustomEditorProvider<InterfaceViewDocument> {
@@ -24,6 +43,16 @@ export class InterfaceViewEditorProvider
     constructor(private readonly context: vscode.ExtensionContext) { }
 
     private get extensionUri() { return this.context.extensionUri; }
+
+    private getCapabilities(): ExtensionCapabilities {
+        const isWebUi = vscode.env.uiKind === vscode.UIKind.Web;
+        return {
+            canBuild: !isWebUi,
+            canBuildSkeletons: !isWebUi,
+            canBrowseAttrFile: true,
+            canEditFunction: true,
+        };
+    }
 
     private getOptions(): EditorOptions {
         const saved = this.context.globalState.get<Partial<EditorOptions>>('editorOptions', DEFAULT_OPTIONS);
@@ -102,7 +131,7 @@ export class InterfaceViewEditorProvider
         }
 
         const normalizedName = this.normalizeFunctionName(fn.name);
-        const baseFolder = path.dirname(document.uri.fsPath);
+        const baseFolder = dirnameUri(document.uri);
         const candidateDirs = [
             sourceLanguage,
             this.resolveCurrentImplementationName(fn),
@@ -110,11 +139,11 @@ export class InterfaceViewEditorProvider
 
         const attemptedPaths: string[] = [];
         for (const dirName of candidateDirs) {
-            const filePath = path.join(baseFolder, 'work', normalizedName, dirName, 'src', `${normalizedName}.${extension}`);
-            attemptedPaths.push(filePath);
+            const fileUri = joinPathSegments(baseFolder, 'work', normalizedName, dirName, 'src', `${normalizedName}.${extension}`);
+            attemptedPaths.push(displayUri(fileUri));
             try {
-                await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
-                const sourceDoc = await vscode.workspace.openTextDocument(filePath);
+                await vscode.workspace.fs.stat(fileUri);
+                const sourceDoc = await vscode.workspace.openTextDocument(fileUri);
                 await vscode.window.showTextDocument(sourceDoc, { preview: false, preserveFocus: false });
                 return;
             } catch {
@@ -128,7 +157,7 @@ export class InterfaceViewEditorProvider
     }
 
     async openCustomDocument(uri: vscode.Uri): Promise<InterfaceViewDocument> {
-        log(`openCustomDocument: ${uri.fsPath}`);
+        log(`openCustomDocument: ${uri.toString()}`);
         try {
             const doc = await InterfaceViewDocument.create(uri);
             log(`openCustomDocument OK: ${doc.iv.functions.length} functions, ${doc.iv.connections.length} connections`);
@@ -143,7 +172,7 @@ export class InterfaceViewEditorProvider
         document: InterfaceViewDocument,
         webviewPanel: vscode.WebviewPanel,
     ): Promise<void> {
-        log(`resolveCustomEditor: ${document.uri.fsPath}`);
+        log(`resolveCustomEditor: ${document.uri.toString()}`);
         webviewPanel.webview.options = {
             enableScripts: true,
             localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'out', 'webview')],
@@ -161,6 +190,7 @@ export class InterfaceViewEditorProvider
                 case 'ready': {
                     try {
                         const opts = this.getOptions();
+                        webviewPanel.webview.postMessage({ type: 'capabilities', capabilities: this.getCapabilities() } as ExtensionMessage);
                         // Reload schema from the persisted path now that we know it
                         await document.loadSchemaFromPath(opts.attrFilePath);
                         webviewPanel.webview.postMessage({ type: 'options', options: opts } as ExtensionMessage);
@@ -221,15 +251,19 @@ export class InterfaceViewEditorProvider
                     break;
                 }
                 case 'buildSkeletons': {
-                    const folder = path.dirname(document.uri.fsPath);
-                    const terminal = vscode.window.createTerminal({ name: 'Build Skeletons', cwd: folder });
+                    if (!this.getCapabilities().canBuildSkeletons) {
+                        break;
+                    }
+                    const terminal = vscode.window.createTerminal({ name: 'Build Skeletons', cwd: dirnameUri(document.uri) });
                     terminal.sendText('make skeletons');
                     terminal.show();
                     break;
                 }
                 case 'build': {
-                    const folder = path.dirname(document.uri.fsPath);
-                    const terminal = vscode.window.createTerminal({ name: 'Build', cwd: folder });
+                    if (!this.getCapabilities().canBuild) {
+                        break;
+                    }
+                    const terminal = vscode.window.createTerminal({ name: 'Build', cwd: dirnameUri(document.uri) });
                     terminal.sendText('make');
                     terminal.show();
                     break;
@@ -270,7 +304,7 @@ export class InterfaceViewEditorProvider
                         title: 'Select default attributes file',
                     });
                     if (uris && uris.length > 0) {
-                        const opts: EditorOptions = { ...this.getOptions(), attrFilePath: uris[0].fsPath };
+                        const opts: EditorOptions = { ...this.getOptions(), attrFilePath: serializeUriForSetting(uris[0]) };
                         await this.saveOptions(opts);
                         webviewPanel.webview.postMessage({ type: 'options', options: opts } as ExtensionMessage);
                         await document.loadSchemaFromPath(opts.attrFilePath);
@@ -279,9 +313,7 @@ export class InterfaceViewEditorProvider
                     break;
                 }
                 case 'requestExport': {
-                    const defaultUri = vscode.Uri.file(
-                        path.join(path.dirname(document.uri.fsPath), 'diagram.png'),
-                    );
+                    const defaultUri = joinPathSegments(dirnameUri(document.uri), 'diagram.png');
                     const saveUri = await vscode.window.showSaveDialog({
                         defaultUri,
                         filters: {
@@ -292,7 +324,7 @@ export class InterfaceViewEditorProvider
                     });
                     if (!saveUri) { break; }
 
-                    const ext = path.extname(saveUri.fsPath).toLowerCase();
+                    const ext = extname(saveUri).toLowerCase();
                     const format: 'png' | 'svg' = ext === '.svg' ? 'svg' : 'png';
                     pendingExport = { uri: saveUri, format };
                     webviewPanel.webview.postMessage({ type: 'requestExport', format } as ExtensionMessage);
@@ -328,12 +360,9 @@ export class InterfaceViewEditorProvider
                 }
                 case 'exportImage': {
                     if (!pendingExport) { break; }
-                    // Data URL format: "data:<mime>;base64,<data>"
-                    const comma = msg.dataUrl.indexOf(',');
-                    const base64 = msg.dataUrl.slice(comma + 1);
-                    const bytes = Buffer.from(base64, 'base64');
+                    const bytes = await dataUrlToBytes(msg.dataUrl);
                     await vscode.workspace.fs.writeFile(pendingExport.uri, bytes);
-                    vscode.window.showInformationMessage(`Diagram exported to ${path.basename(pendingExport.uri.fsPath)}`);
+                    vscode.window.showInformationMessage(`Diagram exported to ${basename(pendingExport.uri)}`);
                     pendingExport = null;
                     break;
                 }
@@ -390,13 +419,11 @@ export class InterfaceViewEditorProvider
         document: InterfaceViewDocument,
         _cancellation: vscode.CancellationToken,
     ): Promise<void> {
-        log(`saveCustomDocument: ${document.uri.fsPath}`);
+        log(`saveCustomDocument: ${document.uri.toString()}`);
         const { ivXml, uiXml } = document.serializeToXml();
-        await vscode.workspace.fs.writeFile(document.uri, Buffer.from(ivXml, 'utf8'));
-        const uiUri = vscode.Uri.file(
-            path.join(path.dirname(document.uri.fsPath), document.iv.uiFile),
-        );
-        await vscode.workspace.fs.writeFile(uiUri, Buffer.from(uiXml, 'utf8'));
+        await vscode.workspace.fs.writeFile(document.uri, encodeUtf8(ivXml));
+        const uiUri = joinPathSegments(dirnameUri(document.uri), document.iv.uiFile);
+        await vscode.workspace.fs.writeFile(uiUri, encodeUtf8(uiXml));
         log('saveCustomDocument: done');
     }
 
@@ -405,19 +432,17 @@ export class InterfaceViewEditorProvider
         destination: vscode.Uri,
         _cancellation: vscode.CancellationToken,
     ): Promise<void> {
-        log(`saveCustomDocumentAs: ${destination.fsPath}`);
+        log(`saveCustomDocumentAs: ${destination.toString()}`);
         const { ivXml, uiXml } = document.serializeToXml();
-        await vscode.workspace.fs.writeFile(destination, Buffer.from(ivXml, 'utf8'));
+        await vscode.workspace.fs.writeFile(destination, encodeUtf8(ivXml));
         // Write UI file alongside the destination
-        const uiUri = vscode.Uri.file(
-            path.join(path.dirname(destination.fsPath), document.iv.uiFile),
-        );
-        await vscode.workspace.fs.writeFile(uiUri, Buffer.from(uiXml, 'utf8'));
+        const uiUri = joinPathSegments(dirnameUri(destination), document.iv.uiFile);
+        await vscode.workspace.fs.writeFile(uiUri, encodeUtf8(uiXml));
         log('saveCustomDocumentAs: done');
     }
 
     async revertCustomDocument(document: InterfaceViewDocument): Promise<void> {
-        log(`revertCustomDocument: ${document.uri.fsPath}`);
+        log(`revertCustomDocument: ${document.uri.toString()}`);
         await document.reload();
         const wv = this._webviews.get(document.uri.toString());
         if (wv) { this.sendDiagram(wv, document); }
@@ -428,7 +453,7 @@ export class InterfaceViewEditorProvider
         context: vscode.CustomDocumentBackupContext,
     ): Promise<vscode.CustomDocumentBackup> {
         const { ivXml } = document.serializeToXml();
-        await vscode.workspace.fs.writeFile(context.destination, Buffer.from(ivXml, 'utf8'));
+        await vscode.workspace.fs.writeFile(context.destination, encodeUtf8(ivXml));
         return { id: context.destination.toString(), delete: () => undefined };
     }
 
@@ -436,31 +461,8 @@ export class InterfaceViewEditorProvider
 
     private getHtml(webview: vscode.Webview): string {
         const base = vscode.Uri.joinPath(this.extensionUri, 'out', 'webview');
-        const { jsFiles, cssFiles } = (() => {
-            try {
-                const fs = require('fs') as typeof import('fs');
-                const htmlPath = path.join(base.fsPath, 'index.html');
-                const indexHtml = fs.readFileSync(htmlPath, 'utf8');
-
-                const scriptMatches = [...indexHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map(match => match[1]);
-                const styleMatches = [...indexHtml.matchAll(/<link[^>]+href="([^"]+)"/g)].map(match => match[1]);
-
-                const toWebviewUri = (assetPath: string) => {
-                    const normalized = assetPath.replace(/^\/+/, '');
-                    const segments = normalized.split('/').filter(Boolean);
-                    return webview.asWebviewUri(vscode.Uri.joinPath(base, ...segments));
-                };
-
-                log(`getHtml: resolved JS assets from index.html: ${scriptMatches.join(', ')}`);
-                return {
-                    jsFiles: scriptMatches.map(toWebviewUri),
-                    cssFiles: styleMatches.map(toWebviewUri),
-                };
-            } catch (err) {
-                log(`getHtml: failed to read built index.html: ${err}`);
-                return { jsFiles: [], cssFiles: [] };
-            }
-        })();
+        const jsFiles = [webview.asWebviewUri(vscode.Uri.joinPath(base, 'assets', 'main.js'))];
+        const cssFiles = [webview.asWebviewUri(vscode.Uri.joinPath(base, 'assets', 'main.css'))];
 
         const csp = `default-src 'none'; img-src data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource};`;
         return `<!DOCTYPE html>

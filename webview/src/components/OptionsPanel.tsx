@@ -42,10 +42,11 @@ const INPUT: React.CSSProperties = {
 interface OptionsPanelProps {
     options: EditorOptions;
     onChange: (patch: Partial<EditorOptions>) => void;
+    canBrowseAttrFile: boolean;
     onBrowseAttrFile: () => void;
 }
 
-export function OptionsPanel({ options, onChange, onBrowseAttrFile }: OptionsPanelProps) {
+export function OptionsPanel({ options, onChange, canBrowseAttrFile, onBrowseAttrFile }: OptionsPanelProps) {
     return (
         <div style={PANEL_STYLE}>
             <div style={{ fontWeight: 'bold', color: '#cba6f7', marginBottom: 8 }}>
@@ -63,9 +64,10 @@ export function OptionsPanel({ options, onChange, onBrowseAttrFile }: OptionsPan
                         style={{ ...INPUT, flex: 1 }}
                     />
                     <button
+                        disabled={!canBrowseAttrFile}
                         onClick={onBrowseAttrFile}
                         title="Browse…"
-                        style={{ background: '#313244', color: '#cdd6f4', border: '1px solid #45475a', borderRadius: 3, padding: '2px 6px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ background: '#313244', color: '#cdd6f4', border: '1px solid #45475a', borderRadius: 3, padding: '2px 6px', fontSize: 11, cursor: canBrowseAttrFile ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', opacity: canBrowseAttrFile ? 1 : 0.5 }}
                     >…</button>
                 </div>
                 <span style={{ color: '#6c7086', fontSize: 10 }}>Changing reloads the diagram schema.</span>

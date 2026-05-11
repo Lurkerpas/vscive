@@ -13,7 +13,8 @@
   "activationEvents": [
     "onCustomEditor:vscive.interfaceViewEditor"
   ],
-  "main": "./out/extension.js",
+  "main": "./out/extension-node.js",
+  "browser": "./out/extension-web.js",
   "contributes": {
     "customEditors": [
       {
@@ -33,18 +34,23 @@
         "vscive.attributesFilePath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Attributes file. Defaults to $HOME/.local/default_attributes.xml."
+          "description": "Path or URI to the Attributes file. On desktop, empty defaults to $HOME/.local/default_attributes.xml."
         }
       }
     }
   },
   "scripts": {
-    "compile": "npm run bundle-ext",
-    "bundle-ext": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --target=node18 --sourcemap",
+    "compile": "npm run bundle-ext && npm run bundle-web && npm run compile-webview",
+    "bundle-ext": "esbuild src/extension.ts --bundle --outfile=out/extension-node.js --external:vscode --platform=node --target=node18 --format=cjs --sourcemap",
+    "bundle-web": "esbuild src/extension.ts --bundle --outfile=out/extension-web.js --external:vscode --platform=browser --target=es2020 --format=cjs --sourcemap",
+    "check": "npm run typecheck && npm run bundle-ext && npm run bundle-web && npm run compile-webview",
+    "debug-web": "npm run bundle-web && npm run compile-webview",
     "typecheck": "tsc -p ./ --noEmit",
     "compile-webview": "vite build",
-    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --target=node18 --sourcemap --watch",
+    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension-node.js --external:vscode --platform=node --target=node18 --format=cjs --sourcemap --watch",
+    "watch-web": "esbuild src/extension.ts --bundle --outfile=out/extension-web.js --external:vscode --platform=browser --target=es2020 --format=cjs --sourcemap --watch",
     "package": "vsce package",
+    "vscode:prepublish": "npm run compile",
     "lint": "eslint src"
   },
   "repository": {
