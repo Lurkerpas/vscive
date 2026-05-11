@@ -57,7 +57,54 @@ function buildUiFromIv(iv: IvModel): UiModel {
     // Also extract connection routing coordinates
     iv.connections.forEach(conn => extract(conn.id, conn.properties));
 
-    return { version: '1.0', entities };
+    const ui = { version: '1.0', entities };
+    populateMissingRootCoordinates(iv, ui);
+    return ui;
+}
+
+const ROOT_COORDINATES_MARGIN = 4000;
+
+function isFunctionRect(coords: number[] | undefined): coords is [number, number, number, number] {
+    return Array.isArray(coords) && coords.length >= 4;
+}
+
+function populateMissingRootCoordinates(iv: IvModel, ui: UiModel): void {
+    const visit = (fn: FunctionModel) => {
+        if (fn.nestedFunctions.length > 0) {
+            const layout = ui.entities[fn.id] ?? { coordinates: [] };
+            if (!isFunctionRect(layout.rootCoordinates)) {
+                const childRects = fn.nestedFunctions
+                    .map(child => ui.entities[child.id]?.coordinates)
+                    .filter(isFunctionRect);
+
+                if (childRects.length > 0) {
+                    let minX = childRects[0][0];
+                    let minY = childRects[0][1];
+                    let maxX = childRects[0][2];
+                    let maxY = childRects[0][3];
+
+                    for (const coords of childRects.slice(1)) {
+                        minX = Math.min(minX, coords[0]);
+                        minY = Math.min(minY, coords[1]);
+                        maxX = Math.max(maxX, coords[2]);
+                        maxY = Math.max(maxY, coords[3]);
+                    }
+
+                    layout.rootCoordinates = [
+                        minX - ROOT_COORDINATES_MARGIN,
+                        minY - ROOT_COORDINATES_MARGIN,
+                        maxX + ROOT_COORDINATES_MARGIN,
+                        maxY + ROOT_COORDINATES_MARGIN,
+                    ];
+                    ui.entities[fn.id] = layout;
+                }
+            }
+        }
+
+        fn.nestedFunctions.forEach(visit);
+    };
+
+    iv.functions.forEach(visit);
 }
 
 export class InterfaceViewDocument implements vscode.CustomDocument {
@@ -101,6 +148,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         try {
             const uiBytes = await vscode.workspace.fs.readFile(uiUri);
             this.ui = parseUiXml(decodeUtf8(uiBytes));
+            populateMissingRootCoordinates(this.iv, this.ui);
             log(`reload: UI parsed — ${Object.keys(this.ui.entities).length} entities`);
         } catch (err) {
             log(`reload: UI XML not found or failed (${err}), using empty UI`);
