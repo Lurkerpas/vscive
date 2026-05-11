@@ -96,21 +96,25 @@ function collectConnectionWaypoints(nodes: Node[], connectionId: string, overrid
 }
 
 function replaceConnectionWaypointNodes(nodes: Node[], connectionId: string, waypoints: Waypoint[]): Node[] {
+    const existing = nodes.filter(node => parseWaypointNodeId(node.id)?.connectionId === connectionId);
     const preserved = nodes.filter(node => parseWaypointNodeId(node.id)?.connectionId !== connectionId);
+    const size = existing[0]?.width
+        ?? existing[0]?.measured?.width
+        ?? Number((existing[0]?.data as Record<string, unknown> | undefined)?.waypointSize ?? 20);
     return [
         ...preserved,
         ...waypoints.map((waypoint, index) => ({
             id: `${connectionId}::wp::${index}`,
             type: 'waypointNode',
-            position: { x: waypoint.x - 10, y: waypoint.y - 10 },
-            width: 20,
-            height: 20,
-            measured: { width: 20, height: 20 },
+            position: { x: waypoint.x - size / 2, y: waypoint.y - size / 2 },
+            width: size,
+            height: size,
+            measured: { width: size, height: size },
             draggable: true,
             selectable: true,
             deletable: true,
-            data: { connectionId, waypointIndex: index },
-            style: { width: 20, height: 20 },
+            data: { connectionId, waypointIndex: index, waypointSize: size },
+            style: { width: size, height: size },
         })),
     ];
 }
@@ -162,6 +166,8 @@ function DiagramEditor() {
                 ...(e.data as Record<string, unknown> | undefined),
                 locked,
                 waypoints: collectConnectionWaypoints(nodes, e.id),
+                waypointSize: nodes.find(node => parseWaypointNodeId(node.id)?.connectionId === e.id)?.width
+                    ?? Number((e.data as Record<string, unknown> | undefined)?.waypointSize ?? 20),
                 fontSizeConn: options.fontSizeConn,
                 canvasColor: options.canvasColor,
                 showConnectionLabels: options.showConnectionLabels,
@@ -379,11 +385,14 @@ function DiagramEditor() {
     const onNodeDragStop: NodeDragHandler = useCallback((_evt, node) => {
         if (locked) { return; }
         if (node.type === 'waypointNode') {
+            const waypointSize = node.width
+                ?? node.measured?.width
+                ?? Number((node.data as Record<string, unknown> | undefined)?.waypointSize ?? 20);
             const waypointNode = {
                 ...node,
-                width: node.width ?? 20,
-                height: node.height ?? 20,
-                measured: node.measured ?? { width: 20, height: 20 },
+                width: waypointSize,
+                height: waypointSize,
+                measured: node.measured ?? { width: waypointSize, height: waypointSize },
             };
             const parsed = parseWaypointNodeId(node.id);
             if (!parsed) { return; }

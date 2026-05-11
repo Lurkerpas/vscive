@@ -2,7 +2,7 @@ import React from 'react';
 import { EdgeProps, BaseEdge, useReactFlow } from '@xyflow/react';
 import { post } from '../vscodeApi';
 import { useEdgeMenu } from './EdgeMenuContext';
-import { Waypoint, WAYPOINT_NODE_RADIUS, WAYPOINT_NODE_SIZE, makeWaypointNodeId } from '../waypoints';
+import { Waypoint, WAYPOINT_NODE_SIZE, makeWaypointNodeId } from '../waypoints';
 
 
 function distPointToSegment(p: Waypoint, a: Waypoint, b: Waypoint): number {
@@ -42,12 +42,14 @@ export function RoutedEdge({
         fontSizeConn?: number;
         canvasColor?: string;
         showConnectionLabels?: boolean;
+        waypointSize?: number;
     }) ?? {};
     const waypoints: Waypoint[] = edgeData.waypoints ?? [];
     const locked = edgeData.locked ?? false;
     const labelFontSize = edgeData.fontSizeConn ?? 11;
     const labelBg = edgeData.canvasColor ?? '#1e1e2e';
     const showConnectionLabels = edgeData.showConnectionLabels ?? true;
+    const waypointSize = Math.max(edgeData.waypointSize ?? WAYPOINT_NODE_SIZE, 6);
 
     // Build polyline path: source → waypoints → target
     const allPts = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }];
@@ -84,17 +86,17 @@ export function RoutedEdge({
                             id: makeWaypointNodeId(id, index),
                             type: 'waypointNode',
                             position: {
-                                x: wp.x - WAYPOINT_NODE_RADIUS,
-                                y: wp.y - WAYPOINT_NODE_RADIUS,
+                                x: wp.x - waypointSize / 2,
+                                y: wp.y - waypointSize / 2,
                             },
-                            width: WAYPOINT_NODE_SIZE,
-                            height: WAYPOINT_NODE_SIZE,
-                            measured: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+                            width: waypointSize,
+                            height: waypointSize,
+                            measured: { width: waypointSize, height: waypointSize },
                             draggable: true,
                             selectable: true,
                             deletable: true,
-                            data: { connectionId: id, waypointIndex: index },
-                            style: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+                            data: { connectionId: id, waypointIndex: index, waypointSize },
+                            style: { width: waypointSize, height: waypointSize },
                         })),
                     ]);
                     post({ type: 'updateConnectionWaypoints', id, waypoints: insertedWps });

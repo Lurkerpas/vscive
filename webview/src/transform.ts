@@ -2,7 +2,7 @@ import { Node, Edge } from '@xyflow/react';
 import {
     IvModel, UiModel, FunctionModel, InterfaceModel, ConnectionModel, EntityLayout,
 } from '../../src/model/types';
-import { makeWaypointNodeId, WAYPOINT_NODE_SIZE } from './waypoints';
+import { makeWaypointNodeId, WAYPOINT_NODE_SIZE, waypointNodeSize } from './waypoints';
 
 const SC_SCALE = 0.05;
 
@@ -159,17 +159,18 @@ function absoluteNodePosition(nodeId: string, nodeMap: Map<string, Node>, cache:
     return absolute;
 }
 
-function buildFunctionRectMap(nodes: Node[]): Map<string, { x: number; y: number; w: number; h: number }> {
+function buildFunctionRectMap(nodes: Node[]): Map<string, { x: number; y: number; w: number; h: number; fontScale: number }> {
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
     const cache = new Map<string, { x: number; y: number }>();
-    const rects = new Map<string, { x: number; y: number; w: number; h: number }>();
+    const rects = new Map<string, { x: number; y: number; w: number; h: number; fontScale: number }>();
 
     for (const node of nodes) {
         if (node.type !== 'functionNode') { continue; }
         const position = absoluteNodePosition(node.id, nodeMap, cache);
         const w = node.measured?.width ?? (node.style?.width as number | undefined) ?? DEFAULT_FUNC_W;
         const h = node.measured?.height ?? (node.style?.height as number | undefined) ?? DEFAULT_FUNC_H;
-        rects.set(node.id, { x: position.x, y: position.y, w, h });
+        const fontScale = Math.max(Number((node.data as Record<string, unknown> | undefined)?.fontScale ?? 1), 0.05);
+        rects.set(node.id, { x: position.x, y: position.y, w, h, fontScale });
     }
 
     return rects;
@@ -361,7 +362,7 @@ function connectionWaypointNodes(
     conn: ConnectionModel,
     ui: UiModel,
     maps: FunctionMaps,
-    functionRects: Map<string, { x: number; y: number; w: number; h: number }>,
+    functionRects: Map<string, { x: number; y: number; w: number; h: number; fontScale: number }>,
 ): Node[] {
     const layout = ui.entities[conn.id];
     const nodes: Node[] = [];
@@ -372,6 +373,8 @@ function connectionWaypointNodes(
     const containerId = findCommonAncestorFunction(sourceHostId, targetHostId, maps.parentByFunction);
     const containerLayout = containerId ? layoutOf(ui, containerId) : undefined;
     const containerRect = containerId ? functionRects.get(containerId) : undefined;
+    const waypointScale = (containerRect?.fontScale ?? 1) * localScaleFactor(containerLayout);
+    const size = waypointNodeSize(waypointScale);
 
     for (let i = 0; i + 1 < layout.coordinates.length; i += 2) {
         let centerX = layout.coordinates[i] * SC_SCALE;
@@ -387,17 +390,17 @@ function connectionWaypointNodes(
             id: makeWaypointNodeId(conn.id, i / 2),
             type: 'waypointNode',
             position: {
-                x: centerX - WAYPOINT_NODE_SIZE / 2,
-                y: centerY - WAYPOINT_NODE_SIZE / 2,
+                x: centerX - size / 2,
+                y: centerY - size / 2,
             },
-            width: WAYPOINT_NODE_SIZE,
-            height: WAYPOINT_NODE_SIZE,
-            measured: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+            width: size,
+            height: size,
+            measured: { width: size, height: size },
             draggable: true,
             selectable: true,
             deletable: true,
-            data: { connectionId: conn.id, waypointIndex: i / 2 },
-            style: { width: WAYPOINT_NODE_SIZE, height: WAYPOINT_NODE_SIZE },
+            data: { connectionId: conn.id, waypointIndex: i / 2, waypointSize: size },
+            style: { width: size, height: size },
         });
     }
 

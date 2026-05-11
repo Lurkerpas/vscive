@@ -3,6 +3,10 @@ import { Node } from '@xyflow/react';
 export const WAYPOINT_NODE_SIZE = 20;
 export const WAYPOINT_NODE_RADIUS = WAYPOINT_NODE_SIZE / 2;
 
+export function waypointNodeSize(scale = 1): number {
+    return Math.max(WAYPOINT_NODE_SIZE * Math.max(scale, 0.05), 6);
+}
+
 export interface Waypoint {
     x: number;
     y: number;
