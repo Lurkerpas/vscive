@@ -11,6 +11,7 @@ import '@xyflow/react/dist/style.css';
 import {
     DiagramData, ExtensionCapabilities, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
     NodeMove, PropertyModel, ParameterModel, EditorOptions, DEFAULT_OPTIONS,
+    DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT,
 } from '../../src/model/types';
 import { buildGraph, IFACE_W, IFACE_H, IfaceEdge, computeIfaceEdge, interfaceDimensions, snapIfaceToEdge } from './transform';
 import { FunctionNode } from './components/FunctionNode';
@@ -323,8 +324,8 @@ function DiagramEditor() {
         const flowClick = screenToFlowPosition({ x: evt.clientX, y: evt.clientY });
         const relX_raw = flowClick.x - absPos.x;
         const relY_raw = flowClick.y - absPos.y;
-        const pw = node.measured?.width ?? (node.style?.width as number | undefined) ?? 800;
-        const ph = node.measured?.height ?? (node.style?.height as number | undefined) ?? 560;
+        const pw = node.measured?.width ?? (node.style?.width as number | undefined) ?? DEFAULT_FUNCTION_WIDTH;
+        const ph = node.measured?.height ?? (node.style?.height as number | undefined) ?? DEFAULT_FUNCTION_HEIGHT;
         const iface = nodeInterfaceDimensions(node);
         const { x: relX, y: relY } = snapIfaceToEdge(relX_raw - iface.width / 2, relY_raw - iface.height / 2, pw, ph, iface.width, iface.height);
         return { relX, relY };
@@ -406,14 +407,14 @@ function DiagramEditor() {
         const kind = node.type === 'functionNode' ? 'function' : 'interface';
         let x = node.position.x;
         let y = node.position.y;
-        const w = node.measured?.width ?? (node.style?.width as number | undefined) ?? 800;
-        const h = node.measured?.height ?? (node.style?.height as number | undefined) ?? 560;
+        const w = node.measured?.width ?? (node.style?.width as number | undefined) ?? DEFAULT_FUNCTION_WIDTH;
+        const h = node.measured?.height ?? (node.style?.height as number | undefined) ?? DEFAULT_FUNCTION_HEIGHT;
 
         if (node.type === 'interfaceNode') {
             const parentNode = nodes.find(n => n.id === node.parentId);
             if (parentNode) {
-                const pw = parentNode.measured?.width ?? (parentNode.style?.width as number | undefined) ?? 800;
-                const ph = parentNode.measured?.height ?? (parentNode.style?.height as number | undefined) ?? 560;
+                const pw = parentNode.measured?.width ?? (parentNode.style?.width as number | undefined) ?? DEFAULT_FUNCTION_WIDTH;
+                const ph = parentNode.measured?.height ?? (parentNode.style?.height as number | undefined) ?? DEFAULT_FUNCTION_HEIGHT;
                 const snapped = snapIfaceToEdge(x, y, pw, ph, w, h);
                 x = snapped.x;
                 y = snapped.y;
@@ -436,8 +437,8 @@ function DiagramEditor() {
             let bestArea = Infinity;
             for (const n of nodes) {
                 if (n.type !== 'functionNode' || n.id === node.id || n.parentId) { continue; }
-                const nW = n.measured?.width ?? (n.style?.width as number | undefined) ?? 800;
-                const nH = n.measured?.height ?? (n.style?.height as number | undefined) ?? 560;
+                const nW = n.measured?.width ?? (n.style?.width as number | undefined) ?? DEFAULT_FUNCTION_WIDTH;
+                const nH = n.measured?.height ?? (n.style?.height as number | undefined) ?? DEFAULT_FUNCTION_HEIGHT;
                 if (center.x > n.position.x && center.x < n.position.x + nW &&
                     center.y > n.position.y && center.y < n.position.y + nH) {
                     const area = nW * nH;
@@ -455,8 +456,8 @@ function DiagramEditor() {
         onNodesChange(changes);
         for (const change of changes) {
             if (change.type === 'dimensions' && change.resizing === false) {
-                const rawW = (change as { dimensions?: { width: number; height: number } }).dimensions?.width ?? 800;
-                const rawH = (change as { dimensions?: { width: number; height: number } }).dimensions?.height ?? 560;
+                const rawW = (change as { dimensions?: { width: number; height: number } }).dimensions?.width ?? DEFAULT_FUNCTION_WIDTH;
+                const rawH = (change as { dimensions?: { width: number; height: number } }).dimensions?.height ?? DEFAULT_FUNCTION_HEIGHT;
 
                 setNodes(nds => {
                     const fnNode = nds.find(n => n.id === change.id);
@@ -632,8 +633,8 @@ function DiagramEditor() {
         const absPos = getAbsolutePos(targetFnNode.id);
         const relX_raw = flowPos.x - absPos.x;
         const relY_raw = flowPos.y - absPos.y;
-        const pw = targetFnNode.measured?.width ?? (targetFnNode.style?.width as number | undefined) ?? 800;
-        const ph = targetFnNode.measured?.height ?? (targetFnNode.style?.height as number | undefined) ?? 560;
+        const pw = targetFnNode.measured?.width ?? (targetFnNode.style?.width as number | undefined) ?? DEFAULT_FUNCTION_WIDTH;
+        const ph = targetFnNode.measured?.height ?? (targetFnNode.style?.height as number | undefined) ?? DEFAULT_FUNCTION_HEIGHT;
         const { x: relX, y: relY } = snapIfaceToEdge(relX_raw - IFACE_W / 2, relY_raw - IFACE_H / 2, pw, ph);
 
         post({
@@ -942,8 +943,8 @@ function DiagramEditor() {
             if (!locked && clipboard?.kind === 'interface') {
                 const iface = clipboard.data;
                 const ifaceSize = nodeInterfaceDimensions(node);
-                const pw = node.measured?.width ?? 800;
-                const ph = node.measured?.height ?? 560;
+                const pw = node.measured?.width ?? DEFAULT_FUNCTION_WIDTH;
+                const ph = node.measured?.height ?? DEFAULT_FUNCTION_HEIGHT;
                 const relRfX = iface.type === 'provided' ? pw : -ifaceSize.width;
                 const relRfY = ph / 2 - ifaceSize.height / 2;
                 items.push({
@@ -1041,8 +1042,8 @@ function DiagramEditor() {
     const onConfirmInterface = useCallback((name: string, kind: InterfaceKind, ifaceType: 'provided' | 'required', funcId: string) => {
         const parentNode = nodes.find(n => n.id === funcId);
         const ifaceSize = parentNode ? nodeInterfaceDimensions(parentNode) : { width: IFACE_W, height: IFACE_H };
-        const pw = parentNode?.measured?.width ?? (parentNode?.style?.width as number | undefined) ?? 800;
-        const ph = parentNode?.measured?.height ?? (parentNode?.style?.height as number | undefined) ?? 560;
+        const pw = parentNode?.measured?.width ?? (parentNode?.style?.width as number | undefined) ?? DEFAULT_FUNCTION_WIDTH;
+        const ph = parentNode?.measured?.height ?? (parentNode?.style?.height as number | undefined) ?? DEFAULT_FUNCTION_HEIGHT;
         // PI on right edge, RI on left edge; centered vertically
         const relRfX = ifaceType === 'provided' ? pw : -ifaceSize.width;
         const relRfY = ph / 2 - ifaceSize.height / 2;

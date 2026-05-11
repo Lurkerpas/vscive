@@ -106,6 +106,9 @@ export interface UiModel {
     entities: Record<string, EntityLayout>;
 }
 
+export const DEFAULT_FUNCTION_WIDTH = 270;
+export const DEFAULT_FUNCTION_HEIGHT = 190;
+
 // ── Attribute schema ───────────────────────────────────────────────────────
 
 export type EntityScope = 'Function' | 'Provided_Interface' | 'Required_Interface' | 'ProvidedInterface' | 'RequiredInterface';

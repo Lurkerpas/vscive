@@ -1,6 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import {
     IvModel, UiModel, FunctionModel, InterfaceModel, ConnectionModel, EntityLayout,
+    DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT,
 } from '../../src/model/types';
 import { makeWaypointNodeId, WAYPOINT_NODE_SIZE, waypointNodeSize } from './waypoints';
 
@@ -177,8 +178,8 @@ function buildFunctionRectMap(nodes: Node[]): Map<string, { x: number; y: number
 }
 
 /** Default size when no UI layout is present */
-const DEFAULT_FUNC_W = 800;
-const DEFAULT_FUNC_H = 560;
+export const DEFAULT_FUNC_W = DEFAULT_FUNCTION_WIDTH;
+export const DEFAULT_FUNC_H = DEFAULT_FUNCTION_HEIGHT;
 
 /** Triangle dimensions — must match InterfaceNode SVG constants */
 export const IFACE_W = 60;

@@ -7,6 +7,7 @@ import { serializeUiXml } from '../serializers/UiXmlSerializer';
 import {
     IvModel, UiModel, EntityLayout, AttributeSchema, FunctionModel, InterfaceModel,
     ConnectionModel, InterfaceKind, NodeMove, PropertyModel, ParameterModel,
+    DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT,
 } from '../model/types';
 import { log } from '../logger';
 import {
@@ -259,17 +260,17 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             ? (() => {
                 const parentRect = this.getFunctionFlowRect(parentId);
                 if (!parentRect) {
-                    return this.flowRectToAbsoluteSc(rfX, rfY, 800, 560);
+                    return this.flowRectToAbsoluteSc(rfX, rfY, DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT);
                 }
                 return this.flowRectToScopedSc(
                     this.ui.entities[parentId],
                     rfX - parentRect.x,
                     rfY - parentRect.y,
-                    800,
-                    560,
+                    DEFAULT_FUNCTION_WIDTH,
+                    DEFAULT_FUNCTION_HEIGHT,
                 );
             })()
-            : this.flowRectToAbsoluteSc(rfX, rfY, 800, 560);
+            : this.flowRectToAbsoluteSc(rfX, rfY, DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT);
 
         const newFn: FunctionModel = {
             id,
@@ -544,7 +545,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
      * `rfX`, `rfY` are the flow-pixel (React Flow) top-left position for the pasted node.
      */
     pasteFunction(newId: string, source: FunctionModel, rfX: number, rfY: number): void {
-        const coords = this.flowRectToAbsoluteSc(rfX, rfY, 800, 560);
+        const coords = this.flowRectToAbsoluteSc(rfX, rfY, DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT);
 
         const newFn: FunctionModel = {
             ...(JSON.parse(JSON.stringify(source)) as FunctionModel),
