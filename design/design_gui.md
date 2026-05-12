@@ -87,15 +87,36 @@ Color picker shall allow to select a color, using:
 When Show Options is clicked, the properties panel shall show the following settings:
 - Path to the attributes file,
 - Canvas color,
+- Snap to Grid toggle,
 - Snap grid size,
+- Show minimap toggle,
+- Show interface names toggle,
+- Show connection labels toggle,
 - Function name font size,
 - Interface name font size,
-- Connection name font size.
+- Connection name font size,
+- Undo / redo depth.
 
-When Function is selected, the properties panel shall show, and allow to edit, all function properties, as well as its color.
+When Function is selected, the properties panel shall show:
+- editable typed fields for name, language, default implementation, is type, and fixed system element,
+- a read-only list of available implementations,
+- editable visible schema-driven function attributes,
+- editable Context Parameters,
+- editable function properties.
 
-When Interface is selected, the properties panel shall show, and allow to edit, all interface properties, as well as its color, and arguments.
-Arguments shall be shown for both provided and required interfaces, however, when connected, the arguments of provided interfaces shall be editable, while the arguments of required interfaces shall be locked and inherited from the connected provided interface.
+Context Parameters shall be presented in a list similar to interface arguments, with editable name, type, and value fields, plus buttons to move a context parameter up or down in order, remove it, or add a new one.
+
+When Interface is selected, the properties panel shall show:
+- editable name,
+- read-only type,
+- editable kind,
+- read-only Autonamed value,
+- editable InheritPI checkbox,
+- editable or inherited-and-locked arguments,
+- editable visible schema-driven interface attributes,
+- read-only preserved Property values.
+
+Arguments shall be shown for both provided and required interfaces. When connected, the arguments of provided interfaces shall be editable, while the arguments of required interfaces shall be locked and inherited from the connected provided interface.
 Arguments shall be presented in a grid, with columns for name, type, encoding and direction, as well as buttons to move the given argument up and down in order, as well as remove it. There should also be a button to add a new parameter.
 
 InheritPI property shall be editable via a checkbox.
