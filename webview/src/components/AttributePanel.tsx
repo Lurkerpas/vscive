@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     FunctionModel, InterfaceModel, InterfaceKind, AttributeSchema,
-    ParameterModel, ParameterEncoding, PropertyModel, AttrDef, AttrValidator,
+    ContextParameterModel, ParameterModel, ParameterEncoding, PropertyModel, AttrDef, AttrValidator,
 } from '../../../src/model/types';
 
 type SelectedEntity = FunctionModel | InterfaceModel | null;
@@ -12,7 +12,7 @@ interface Props {
     locked?: boolean;
     /** When set, the selected RI is connected: show these PI params as locked/read-only. */
     connectedPiParams?: ParameterModel[];
-    onUpdateFunction: (id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => void;
+    onUpdateFunction: (id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; contextParameters?: ContextParameterModel[]; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => void;
     onUpdateInterface: (id: string, patch: { name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }) => void;
 }
 
@@ -184,6 +184,9 @@ function AttributePanelInner({ selected, schema, locked = false, connectedPiPara
     const [params, setParams] = useState<ParameterModel[]>(() =>
         selected && isInterface(selected) ? selected.parameters.map(p => ({ ...p })) : [],
     );
+    const [fnContextParameters, setFnContextParameters] = useState<ContextParameterModel[]>(() =>
+        selected && !isInterface(selected) ? ((selected as FunctionModel).contextParameters ?? []).map(p => ({ ...p, extraAttrs: { ...p.extraAttrs } })) : [],
+    );
     const [fnProps, setFnProps] = useState<PropertyModel[]>(() =>
         selected && !isInterface(selected) ? (selected as FunctionModel).properties.map(p => ({ ...p })) : [],
     );
@@ -227,6 +230,31 @@ function AttributePanelInner({ selected, schema, locked = false, connectedPiPara
     const addParam = () => {
         const next = [...params, { name: 'param', type: 'T-Boolean', direction: 'input' as const, encoding: 'NATIVE' as const }];
         setParams(next); postParams(next);
+    };
+
+    // ── Function context parameter helpers ───────────────────────────────────
+
+    const postFnContextParameters = (next: ContextParameterModel[]) => {
+        if (!isInterface(selected)) { onUpdateFunction(selected.id, { contextParameters: next }); }
+    };
+    const updateFnContextParameter = (i: number, patch: Partial<ContextParameterModel>) => {
+        const next = fnContextParameters.map((p, idx) => idx === i ? { ...p, ...patch } : p);
+        setFnContextParameters(next); postFnContextParameters(next);
+    };
+    const removeFnContextParameter = (i: number) => {
+        const next = fnContextParameters.filter((_, idx) => idx !== i);
+        setFnContextParameters(next); postFnContextParameters(next);
+    };
+    const moveFnContextParameter = (i: number, dir: -1 | 1) => {
+        const j = i + dir;
+        if (j < 0 || j >= fnContextParameters.length) { return; }
+        const next = [...fnContextParameters];
+        [next[i], next[j]] = [next[j], next[i]];
+        setFnContextParameters(next); postFnContextParameters(next);
+    };
+    const addFnContextParameter = () => {
+        const next = [...fnContextParameters, { name: 'context_parameter', type: 'Timer', value: '', extraAttrs: {} }];
+        setFnContextParameters(next); postFnContextParameters(next);
     };
 
     // ── Function property helpers ─────────────────────────────────────────────
@@ -455,6 +483,28 @@ function AttributePanelInner({ selected, schema, locked = false, connectedPiPara
                     ))}
                 </>
             )}
+
+            <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Context Parameters</span>
+                <button style={BTN_SMALL} onClick={addFnContextParameter}>+ Add</button>
+            </div>
+            {fnContextParameters.map((p, i) => (
+                <div key={i} style={{ border: '1px solid #313244', borderRadius: 4, padding: '4px 6px', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3, marginBottom: 4 }}>
+                        <button style={BTN_SMALL} disabled={i === 0} onClick={() => moveFnContextParameter(i, -1)} title="Move up">↑</button>
+                        <button style={BTN_SMALL} disabled={i === fnContextParameters.length - 1} onClick={() => moveFnContextParameter(i, 1)} title="Move down">↓</button>
+                        <button style={BTN_DANGER} onClick={() => removeFnContextParameter(i)} title="Remove">✕</button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <span style={LABEL}>name</span>
+                        <input style={INPUT} value={p.name} onChange={e => updateFnContextParameter(i, { name: e.target.value })} />
+                        <span style={LABEL}>type</span>
+                        <input style={INPUT} value={p.type} onChange={e => updateFnContextParameter(i, { type: e.target.value })} />
+                        <span style={LABEL}>value</span>
+                        <input style={INPUT} value={p.value} onChange={e => updateFnContextParameter(i, { value: e.target.value })} />
+                    </div>
+                </div>
+            ))}
 
             {/* Properties — editable list */}
             <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

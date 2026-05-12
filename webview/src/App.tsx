@@ -9,7 +9,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import {
-    DiagramData, ExtensionCapabilities, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
+    ContextParameterModel, DiagramData, ExtensionCapabilities, ExtensionMessage, FunctionModel, InterfaceModel, InterfaceKind,
     NodeMove, PropertyModel, ParameterModel, EditorOptions, DEFAULT_OPTIONS,
     DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT,
 } from '../../src/model/types';
@@ -887,7 +887,7 @@ function DiagramEditor() {
         });
     }, []);
 
-    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => {
+    const onUpdateFunction = useCallback((id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; contextParameters?: ContextParameterModel[]; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }) => {
         if (locked) { return; }
         post({ type: 'updateFunction', id, ...patch });
     }, [locked]);

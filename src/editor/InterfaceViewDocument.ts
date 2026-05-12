@@ -6,7 +6,7 @@ import { serializeIvXml } from '../serializers/IvXmlSerializer';
 import { serializeUiXml } from '../serializers/UiXmlSerializer';
 import {
     IvModel, UiModel, EntityLayout, AttributeSchema, FunctionModel, InterfaceModel,
-    ConnectionModel, InterfaceKind, NodeMove, PropertyModel, ParameterModel,
+    ConnectionModel, ContextParameterModel, InterfaceKind, NodeMove, PropertyModel, ParameterModel,
     DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT,
 } from '../model/types';
 import { log } from '../logger';
@@ -453,7 +453,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         for (const id of toRemove) { delete this.ui.entities[id]; }
     }
 
-    updateFunction(id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }): void {
+    updateFunction(id: string, patch: { name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; contextParameters?: ContextParameterModel[]; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }): void {
         const fn = this.findFn(this.iv.functions, id);
         if (!fn) { return; }
         if (patch.name !== undefined) {
@@ -469,6 +469,7 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         if (patch.defaultImplementation !== undefined) { fn.defaultImplementation = patch.defaultImplementation; }
         if (patch.isType !== undefined) { fn.isType = patch.isType; }
         if (patch.fixedSystemElement !== undefined) { fn.fixedSystemElement = patch.fixedSystemElement; }
+        if (patch.contextParameters !== undefined) { fn.contextParameters = patch.contextParameters; }
         if (patch.properties !== undefined) { fn.properties = patch.properties; }
         if (patch.extraAttrs !== undefined) {
             fn.extraAttrs = { ...fn.extraAttrs, ...patch.extraAttrs };

@@ -245,7 +245,7 @@ export type WebviewMessage =
     | { type: 'addInterface'; id: string; funcId: string; name: string; kind: InterfaceKind; ifaceType: 'provided' | 'required'; relRfX: number; relRfY: number }
     | { type: 'connect'; id: string; sourceIfaceId: string; targetIfaceId: string }
     | { type: 'delete'; ids: string[] }
-    | { type: 'updateFunction'; id: string; name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }
+    | { type: 'updateFunction'; id: string; name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; contextParameters?: ContextParameterModel[]; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }
     | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }
     | { type: 'buildSkeletons' }
     | { type: 'build' }

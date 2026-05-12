@@ -46,7 +46,7 @@
     "bundle-web": "esbuild src/extension.ts --bundle --outfile=out/extension-web.js --external:vscode --platform=browser --target=es2020 --format=cjs --sourcemap",
     "check": "npm run typecheck && npm run test && npm run bundle-ext && npm run bundle-web && npm run compile-webview",
     "debug-web": "npm run bundle-web && npm run compile-webview",
-    "test": "npm run build-tests && node --test .test-out/test",
+    "test": "npm run build-tests && node --test --test-reporter=spec .test-out/test/*.test.js",
     "typecheck": "tsc -p ./ --noEmit",
     "compile-webview": "vite build",
     "watch": "esbuild src/extension.ts --bundle --outfile=out/extension-node.js --external:vscode --platform=node --target=node18 --format=cjs --sourcemap --watch",
