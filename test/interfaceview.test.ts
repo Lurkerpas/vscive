@@ -1,16 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseIvXml } from '../src/parsers/IvXmlParser';
-import { serializeIvXml } from '../src/serializers/IvXmlSerializer';
-import { normalizeXml, readUtf8 } from './helpers';
+import { readUtf8 } from './helpers';
 
 const REFERENCE_INTERFACE_VIEWS = [
-    'references/opus2/demo/ar/taste-components/egse/interfaceview.xml',
-    'references/opus2/data/decoder/space-packet-decoder/interfaceview.xml',
     'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-interfaces/TEST-SAMV71-INTERFACES/interfaceview.xml',
     'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-parameter-encoding/TEST-SAMV71-PARAMETER-ENCODING/interfaceview.xml',
     'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-can/samv71-rtems-can-simple/interfaceview.xml',
     'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-cpp/interfaceview.xml',
+    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-queue-overflow/TEST-SAMV71-QUEUE-OVERFLOW/interfaceview.xml',
+    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-time-resolution/TEST-SAMV71-TIME-RESOLUTION/interfaceview.xml',
 ];
 
 test('loads various reference interfaceview.xml files', async (context) => {

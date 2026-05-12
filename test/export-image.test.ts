@@ -8,8 +8,8 @@ import { buildGraph } from '../webview/src/transform';
 import { decodeDataUrl, parseXmlDocument, readUtf8 } from './helpers';
 import { encodePngRgba, parsePng } from './png';
 
-const EXPORT_IV = 'references/opus2/demo/ar/taste-components/egse/interfaceview.xml';
-const EXPORT_UI = 'references/opus2/demo/ar/taste-components/egse/interfaceview.ui.xml';
+const EXPORT_IV = 'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-interfaces/TEST-SAMV71-INTERFACES/interfaceview.xml';
+const EXPORT_UI = 'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-interfaces/TEST-SAMV71-INTERFACES/interfaceview.ui.xml';
 
 function parseHexColor(value: string | undefined, fallback: [number, number, number, number]): [number, number, number, number] {
     if (!value) {
