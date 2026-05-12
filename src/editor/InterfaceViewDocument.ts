@@ -333,9 +333,14 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         const src = this.findIface(sourceIfaceId);
         const tgt = this.findIface(targetIfaceId);
         if (!src || !tgt) { return; }
-        if (src.iface.type !== 'required' || tgt.iface.type !== 'provided') { return; }
+        const isStandardConnection = src.iface.type === 'required' && tgt.iface.type === 'provided';
+        const isProxyConnection = src.iface.type === tgt.iface.type
+            && this.areFunctionsInProxyRelation(src.func.id, tgt.func.id);
+        if (!isStandardConnection && !isProxyConnection) { return; }
 
-        this.syncRequiredInterfaceFromProvided(src.iface, tgt.iface);
+        if (isStandardConnection) {
+            this.syncRequiredInterfaceFromSource(src.iface, tgt.iface);
+        }
 
         const conn: ConnectionModel = {
             id,
@@ -481,16 +486,17 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             result.iface.name = patch.name;
             // Propagate to connection endpoint name fields (REQ-0050)
             for (const conn of this.iv.connections) {
-                if (result.iface.type === 'required') {
-                    if (conn.sourceIfaceId === id && conn.sourceRiName === oldName) {
-                        conn.sourceRiName = patch.name;
-                        conn.name = `${patch.name}_to_${conn.targetPiName}`;
-                    }
-                } else {
-                    if (conn.targetIfaceId === id && conn.targetPiName === oldName) {
-                        conn.targetPiName = patch.name;
-                        conn.name = `${conn.sourceRiName}_to_${patch.name}`;
-                    }
+                let changed = false;
+                if (conn.sourceIfaceId === id && conn.sourceRiName === oldName) {
+                    conn.sourceRiName = patch.name;
+                    changed = true;
+                }
+                if (conn.targetIfaceId === id && conn.targetPiName === oldName) {
+                    conn.targetPiName = patch.name;
+                    changed = true;
+                }
+                if (changed) {
+                    conn.name = `${conn.sourceRiName}_to_${conn.targetPiName}`;
                 }
             }
         }
@@ -509,14 +515,17 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         if (!existingResult || !targetFn) { return; }
         const { iface: existing } = existingResult;
 
-        const newType: 'provided' | 'required' = existing.type === 'required' ? 'provided' : 'required';
+        const keepSameType = this.areFunctionsInProxyRelation(existingResult.func.id, targetFuncId);
+        const newType: 'provided' | 'required' = keepSameType
+            ? existing.type
+            : existing.type === 'required' ? 'provided' : 'required';
         const newIface: InterfaceModel = {
             id: newIfaceId,
             name: existing.name,
             type: newType,
             kind: existing.kind,
             parameters: JSON.parse(JSON.stringify(existing.parameters)) as typeof existing.parameters,
-            inheritPI: newType === 'required',
+            inheritPI: keepSameType ? existing.inheritPI : newType === 'required',
             autonamed: true,
             properties: [],
             extraAttrs: { layer: 'default', enable_multicast: 'true', required_system_element: 'NO' },
@@ -535,9 +544,13 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             Math.round(center.y),
         ] };
 
-        const riId = newType === 'required' ? newIfaceId : existingIfaceId;
-        const piId = newType === 'provided' ? newIfaceId : existingIfaceId;
-        this.connect(connId, riId, piId);
+        if (keepSameType) {
+            this.connect(connId, existingIfaceId, newIfaceId);
+        } else {
+            const riId = newType === 'required' ? newIfaceId : existingIfaceId;
+            const piId = newType === 'provided' ? newIfaceId : existingIfaceId;
+            this.connect(connId, riId, piId);
+        }
     }
 
     /**
@@ -839,6 +852,20 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         return this.findFnWithParent(this.iv.functions, id)?.parentId;
     }
 
+    private isAncestorFunction(ancestorId: string, descendantId: string): boolean {
+        let current: string | undefined = descendantId;
+        while (current) {
+            if (current === ancestorId) { return true; }
+            current = this.findFunctionParentId(current);
+        }
+        return false;
+    }
+
+    private areFunctionsInProxyRelation(leftFuncId: string, rightFuncId: string): boolean {
+        return leftFuncId !== rightFuncId
+            && (this.isAncestorFunction(leftFuncId, rightFuncId) || this.isAncestorFunction(rightFuncId, leftFuncId));
+    }
+
     private findConnectionContainerId(conn: ConnectionModel): string | undefined {
         const sourceFuncId = this.findIface(conn.sourceIfaceId)?.func.id;
         const targetFuncId = this.findIface(conn.targetIfaceId)?.func.id;
@@ -866,43 +893,89 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         const provided = this.findIface(providedIfaceId);
         if (!provided || provided.iface.type !== 'provided') { return; }
 
+        const queue: string[] = [];
+        const visited = new Set<string>();
+
         for (const conn of this.iv.connections) {
             if (conn.targetIfaceId !== providedIfaceId) { continue; }
             const required = this.findIface(conn.sourceIfaceId);
-            if (!required || required.iface.type !== 'required' || !required.iface.inheritPI) { continue; }
-            this.syncRequiredInterfaceFromProvided(required.iface, provided.iface);
-            conn.sourceRiName = required.iface.name;
-            conn.targetPiName = provided.iface.name;
-            conn.name = `${required.iface.name}_to_${provided.iface.name}`;
+            if (!required || required.iface.type !== 'required') { continue; }
+            this.syncRequiredInterfaceFromSource(required.iface, provided.iface);
+            this.refreshConnectionNames(conn);
+            if (!visited.has(required.iface.id)) {
+                visited.add(required.iface.id);
+                queue.push(required.iface.id);
+            }
+        }
+
+        while (queue.length > 0) {
+            const sourceRequiredId = queue.shift()!;
+            const sourceRequired = this.findIface(sourceRequiredId);
+            if (!sourceRequired || sourceRequired.iface.type !== 'required') { continue; }
+
+            for (const conn of this.iv.connections) {
+                let candidateRequiredId: string | undefined;
+                if (conn.sourceIfaceId === sourceRequiredId) {
+                    candidateRequiredId = conn.targetIfaceId;
+                } else if (conn.targetIfaceId === sourceRequiredId) {
+                    candidateRequiredId = conn.sourceIfaceId;
+                } else {
+                    continue;
+                }
+
+                const candidateRequired = this.findIface(candidateRequiredId);
+                if (!candidateRequired || candidateRequired.iface.type !== 'required') { continue; }
+                if (!this.areFunctionsInProxyRelation(sourceRequired.func.id, candidateRequired.func.id)) { continue; }
+
+                this.syncRequiredInterfaceFromSource(candidateRequired.iface, sourceRequired.iface);
+                this.refreshConnectionNames(conn);
+
+                if (!visited.has(candidateRequired.iface.id)) {
+                    visited.add(candidateRequired.iface.id);
+                    queue.push(candidateRequired.iface.id);
+                }
+            }
         }
     }
 
-    private syncRequiredInterfaceFromProvided(requiredIface: InterfaceModel, providedIface: InterfaceModel): void {
+    private syncRequiredInterfaceFromSource(requiredIface: InterfaceModel, sourceIface: InterfaceModel): void {
         const shouldRename = requiredIface.autonamed || requiredIface.name.trim() === '';
         const shouldCopyParams = requiredIface.inheritPI || requiredIface.parameters.length === 0;
 
         requiredIface.inheritPI = true;
-        requiredIface.kind = providedIface.kind;
+        requiredIface.kind = sourceIface.kind;
 
         if (shouldRename) {
-            requiredIface.name = providedIface.name;
+            requiredIface.name = sourceIface.name;
         }
         if (shouldCopyParams) {
-            requiredIface.parameters = JSON.parse(JSON.stringify(providedIface.parameters)) as ParameterModel[];
+            requiredIface.parameters = JSON.parse(JSON.stringify(sourceIface.parameters)) as ParameterModel[];
         }
 
         const requiredPropNames = new Set(requiredIface.properties.map(prop => prop.name));
-        for (const prop of providedIface.properties) {
+        for (const prop of sourceIface.properties) {
             if (!requiredPropNames.has(prop.name)) {
                 requiredIface.properties.push(JSON.parse(JSON.stringify(prop)) as PropertyModel);
             }
         }
 
-        for (const [name, value] of Object.entries(providedIface.extraAttrs)) {
+        for (const [name, value] of Object.entries(sourceIface.extraAttrs)) {
             if (!(name in requiredIface.extraAttrs) || requiredIface.extraAttrs[name] === '') {
                 requiredIface.extraAttrs[name] = value;
             }
         }
+    }
+
+    private refreshConnectionNames(conn: ConnectionModel): void {
+        const source = this.findIface(conn.sourceIfaceId);
+        const target = this.findIface(conn.targetIfaceId);
+        if (source) {
+            conn.sourceRiName = source.iface.name;
+        }
+        if (target) {
+            conn.targetPiName = target.iface.name;
+        }
+        conn.name = `${conn.sourceRiName}_to_${conn.targetPiName}`;
     }
 
     /** Shift all SC coordinates of a function's interfaces and nested children by (dX, dY). */

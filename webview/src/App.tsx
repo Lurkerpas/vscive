@@ -124,6 +124,21 @@ function edgeConnectsInterface(edge: Edge, interfaceId: string): boolean {
     return edge.source === interfaceId || edge.target === interfaceId;
 }
 
+function isAncestorFunctionNode(nodes: Node[], ancestorId: string, descendantId: string): boolean {
+    let currentId: string | undefined = descendantId;
+    while (currentId) {
+        if (currentId === ancestorId) { return true; }
+        const currentNode = nodes.find(node => node.id === currentId);
+        currentId = currentNode?.parentId;
+    }
+    return false;
+}
+
+function areFunctionNodesInProxyRelation(nodes: Node[], leftId?: string, rightId?: string): boolean {
+    if (!leftId || !rightId || leftId === rightId) { return false; }
+    return isAncestorFunctionNode(nodes, leftId, rightId) || isAncestorFunctionNode(nodes, rightId, leftId);
+}
+
 // ─── Inner component (needs ReactFlow context for screenToFlowPosition) ─────
 
 function DiagramEditor() {
@@ -546,12 +561,19 @@ function DiagramEditor() {
         const srcIface = srcEntity as InterfaceModel;
         const tgtIface = tgtEntity as InterfaceModel;
 
+        const srcNode = nodes.find(node => node.id === srcIface.id);
+        const tgtNode = nodes.find(node => node.id === tgtIface.id);
+        const isProxyConnection = srcIface.type === tgtIface.type
+            && areFunctionNodesInProxyRelation(nodes, srcNode?.parentId, tgtNode?.parentId);
+
         // Swap direction if user connected backwards (PI→RI)
         let riId: string, piId: string;
         if (srcIface.type === 'required' && tgtIface.type === 'provided') {
             riId = srcIface.id; piId = tgtIface.id;
         } else if (srcIface.type === 'provided' && tgtIface.type === 'required') {
             riId = tgtIface.id; piId = srcIface.id;
+        } else if (isProxyConnection) {
+            riId = srcIface.id; piId = tgtIface.id;
         } else {
             return; // both same type — invalid
         }
@@ -562,7 +584,7 @@ function DiagramEditor() {
         if (srcIface.kind !== tgtIface.kind) { return; }
 
         post({ type: 'connect', id: uuid(), sourceIfaceId: riId, targetIfaceId: piId });
-    }, [diagramData, locked]);
+    }, [diagramData, locked, nodes]);
 
     // ── Delete key → remove selected nodes/edges ─────────────────────────────
     const onNodesDelete = useCallback((deletedNodes: Node[]) => {
@@ -1013,11 +1035,39 @@ function DiagramEditor() {
     // ── Compute PI params for connected RI (for parameter locking) ───────────
     const connectedPiParams = useMemo(() => {
         if (!selected || !isInterface(selected) || selected.type !== 'required' || !diagramData) { return undefined; }
-        const conn = diagramData.iv.connections.find(c => c.sourceIfaceId === selected.id);
-        if (!conn) { return undefined; }
-        const pi = findEntity(diagramData.iv, conn.targetIfaceId);
-        if (!pi || !isInterface(pi)) { return undefined; }
-        return (pi as InterfaceModel).parameters;
+        const visited = new Set<string>();
+        const queue = [selected.id];
+
+        while (queue.length > 0) {
+            const currentId = queue.shift()!;
+            if (visited.has(currentId)) { continue; }
+            visited.add(currentId);
+
+            for (const conn of diagramData.iv.connections) {
+                let neighborId: string | undefined;
+                let currentIsSource = false;
+                if (conn.sourceIfaceId === currentId) {
+                    neighborId = conn.targetIfaceId;
+                    currentIsSource = true;
+                } else if (conn.targetIfaceId === currentId) {
+                    neighborId = conn.sourceIfaceId;
+                } else {
+                    continue;
+                }
+
+                const neighbor = findEntity(diagramData.iv, neighborId);
+                if (!neighbor || !isInterface(neighbor)) { continue; }
+
+                if (neighbor.type === 'provided' && currentIsSource) {
+                    return neighbor.parameters;
+                }
+                if (neighbor.type === 'required' && !visited.has(neighbor.id)) {
+                    queue.push(neighbor.id);
+                }
+            }
+        }
+
+        return undefined;
     }, [selected, diagramData]);
 
     // ── Palette actions ──────────────────────────────────────────────────────
