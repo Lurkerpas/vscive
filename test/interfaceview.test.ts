@@ -31,3 +31,10 @@ test('round-trips samv71-rtems-fpu interfaceview.xml ignoring whitespace only', 
     const serialized = serializeIvXml(parseIvXml(xml));
     assert.equal(normalizeXml(serialized), normalizeXml(xml));
 });
+
+test('round-trips samv71-rtems-c interfaceview.xml ignoring whitespace only', async () => {
+    const relativePath = 'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-c/TEST-SAMV71-FUNCTION-C-IMPLEMENTATION/interfaceview.xml';
+    const xml = await readUtf8(relativePath);
+    const serialized = serializeIvXml(parseIvXml(xml));
+    assert.equal(normalizeXml(serialized), normalizeXml(xml));
+});
