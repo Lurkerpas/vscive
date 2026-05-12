@@ -99,7 +99,6 @@ When Show Options is clicked, the properties panel shall show the following sett
 
 When Function is selected, the properties panel shall show:
 - editable typed fields for name, language, default implementation, is type, and fixed system element,
-- a read-only list of available implementations,
 - editable visible schema-driven function attributes,
 - editable Context Parameters,
 - editable function properties.
