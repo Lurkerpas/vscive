@@ -1,5 +1,5 @@
 import {
-    IvModel, FunctionModel, InterfaceModel, ConnectionModel, ParameterModel,
+    IvModel, FunctionModel, InterfaceModel, ConnectionModel, ParameterModel, CommentModel, ContextParameterModel,
 } from '../model/types';
 
 function esc(s: string): string {
@@ -34,18 +34,14 @@ function serializeInterface(iface: InterfaceModel, indent: string): string {
         ...inputs.map(p => serializeParam(p, `${indent}  `)),
         ...outputs.map(p => serializeParam(p, `${indent}  `)),
     ];
-    if (iface.inheritPI) {
-        children.push(`${indent}  <Property name="Taste::InheritPI" value="true"/>`);
+    if (iface.inheritPIExplicit ?? iface.inheritPI) {
+        children.push(`${indent}  <Property name="Taste::InheritPI" value="${iface.inheritPI ? 'true' : 'false'}"/>`);
     }
-    if (iface.autonamed) {
-        children.push(`${indent}  <Property name="Taste::Autonamed" value="true"/>`);
+    if (iface.autonamedExplicit ?? iface.autonamed) {
+        children.push(`${indent}  <Property name="Taste::Autonamed" value="${iface.autonamed ? 'true' : 'false'}"/>`);
     }
     for (const prop of iface.properties) {
         children.push(`${indent}  <Property name="${esc(prop.name)}" value="${esc(prop.value)}"/>`);
-    }
-
-    if (children.length === 0) {
-        return `${indent}<${tag}${toAttrStr(attrs)}/>`;
     }
     return [`${indent}<${tag}${toAttrStr(attrs)}>`, ...children, `${indent}</${tag}>`].join('\n');
 }
@@ -104,6 +100,9 @@ function serializeFunction(
     for (const prop of fn.properties) {
         lines.push(`${indent}  <Property name="${esc(prop.name)}" value="${esc(prop.value)}"/>`);
     }
+    for (const contextParameter of fn.contextParameters ?? []) {
+        lines.push(serializeContextParameter(contextParameter, `${indent}  `));
+    }
     for (const iface of fn.providedInterfaces) {
         lines.push(serializeInterface(iface, `${indent}  `));
     }
@@ -128,15 +127,52 @@ function serializeFunction(
 }
 
 function serializeConnection(conn: ConnectionModel, indent: string): string {
-    const attrs: Record<string, string> = { id: conn.id, name: conn.name, ...conn.extraAttrs };
+    const attrs: Record<string, string> = { id: conn.id };
+    if (conn.nameExplicit ?? conn.name.length > 0) {
+        attrs.name = conn.name;
+    }
+    Object.assign(attrs, conn.extraAttrs);
     const lines: string[] = [`${indent}<Connection${toAttrStr(attrs)}>`];
-    lines.push(`${indent}  <Source iface_id="${esc(conn.sourceIfaceId)}" func_name="${esc(conn.sourceFuncName)}" ri_name="${esc(conn.sourceRiName)}"/>`);
-    lines.push(`${indent}  <Target iface_id="${esc(conn.targetIfaceId)}" func_name="${esc(conn.targetFuncName)}" pi_name="${esc(conn.targetPiName)}"/>`);
+    const sourceAttrs: string[] = [];
+    if (conn.sourceIfaceIdExplicit ?? conn.sourceIfaceId.length > 0) {
+        sourceAttrs.push(`iface_id="${esc(conn.sourceIfaceId)}"`);
+    }
+    sourceAttrs.push(`func_name="${esc(conn.sourceFuncName)}"`);
+    sourceAttrs.push(`${conn.sourceNameAttr ?? 'ri_name'}="${esc(conn.sourceRiName)}"`);
+    lines.push(`${indent}  <Source ${sourceAttrs.join(' ')}/>`);
+
+    const targetAttrs: string[] = [];
+    if (conn.targetIfaceIdExplicit ?? conn.targetIfaceId.length > 0) {
+        targetAttrs.push(`iface_id="${esc(conn.targetIfaceId)}"`);
+    }
+    targetAttrs.push(`func_name="${esc(conn.targetFuncName)}"`);
+    targetAttrs.push(`${conn.targetNameAttr ?? 'pi_name'}="${esc(conn.targetPiName)}"`);
+    lines.push(`${indent}  <Target ${targetAttrs.join(' ')}/>`);
     for (const prop of conn.properties) {
         lines.push(`${indent}  <Property name="${esc(prop.name)}" value="${esc(prop.value)}"/>`);
     }
     lines.push(`${indent}</Connection>`);
     return lines.join('\n');
+}
+
+function serializeContextParameter(contextParameter: ContextParameterModel, indent: string): string {
+    const attrs: Record<string, string> = {
+        name: contextParameter.name,
+        type: contextParameter.type,
+        value: contextParameter.value,
+        ...contextParameter.extraAttrs,
+    };
+    return `${indent}<ContextParameter${toAttrStr(attrs)}/>`;
+}
+
+function serializeComment(comment: CommentModel, indent: string): string {
+    const attrs: Record<string, string> = {
+        id: comment.id,
+        name: comment.name,
+        required_system_element: comment.requiredSystemElement ? 'YES' : 'NO',
+        ...comment.extraAttrs,
+    };
+    return `${indent}<Comment${toAttrStr(attrs)}></Comment>`;
 }
 
 export function serializeIvXml(iv: IvModel): string {
@@ -164,6 +200,9 @@ export function serializeIvXml(iv: IvModel): string {
     }
     for (const conn of connectionsByOwner.get(undefined) ?? []) {
         lines.push(serializeConnection(conn, '  '));
+    }
+    for (const comment of iv.comments ?? []) {
+        lines.push(serializeComment(comment, '  '));
     }
     for (const layer of iv.layers) {
         lines.push(`  <Layer name="${esc(layer.name)}" is_visible="${layer.isVisible}"/>`);

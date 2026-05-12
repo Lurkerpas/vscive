@@ -1,7 +1,7 @@
 import { DOMParser, Element as XmlElement, Document as XmlDocument } from '@xmldom/xmldom';
 import {
     IvModel, FunctionModel, InterfaceModel, ConnectionModel,
-    LayerModel, PropertyModel, ParameterModel, ImplementationModel,
+    LayerModel, PropertyModel, ParameterModel, ImplementationModel, CommentModel, ContextParameterModel,
     ParameterEncoding,
 } from '../model/types';
 
@@ -52,18 +52,28 @@ const KNOWN_FUNC_ATTRS = new Set([
 ]);
 const KNOWN_IFACE_ATTRS = new Set(['id', 'name', 'kind']);
 
-function parseProperties(el: XmlElement): { properties: PropertyModel[]; inheritPI: boolean; autonamed: boolean } {
+function parseProperties(el: XmlElement): { properties: PropertyModel[]; inheritPI: boolean; inheritPIExplicit: boolean; autonamed: boolean; autonamedExplicit: boolean } {
     const properties: PropertyModel[] = [];
     let inheritPI = false;
+    let inheritPIExplicit = false;
     let autonamed = false;
+    let autonamedExplicit = false;
     for (const p of childElements(el, 'Property')) {
         const name = attr(p, 'name');
         const value = attr(p, 'value');
-        if (name === 'Taste::InheritPI') { inheritPI = value === 'true'; continue; }
-        if (name === 'Taste::Autonamed') { autonamed = value === 'true'; continue; }
+        if (name === 'Taste::InheritPI') {
+            inheritPI = value === 'true';
+            inheritPIExplicit = true;
+            continue;
+        }
+        if (name === 'Taste::Autonamed') {
+            autonamed = value === 'true';
+            autonamedExplicit = true;
+            continue;
+        }
         properties.push({ name, value });
     }
-    return { properties, inheritPI, autonamed };
+    return { properties, inheritPI, inheritPIExplicit, autonamed, autonamedExplicit };
 }
 
 function parseParams(el: XmlElement, direction: 'input' | 'output', tag: string): ParameterModel[] {
@@ -76,7 +86,7 @@ function parseParams(el: XmlElement, direction: 'input' | 'output', tag: string)
 }
 
 function parseInterface(el: XmlElement, type: 'provided' | 'required'): InterfaceModel {
-    const { properties, inheritPI, autonamed } = parseProperties(el);
+    const { properties, inheritPI, inheritPIExplicit, autonamed, autonamedExplicit } = parseProperties(el);
     const parameters: ParameterModel[] = [
         ...parseParams(el, 'input', 'Input_Parameter'),
         ...parseParams(el, 'output', 'Output_Parameter'),
@@ -88,7 +98,9 @@ function parseInterface(el: XmlElement, type: 'provided' | 'required'): Interfac
         kind: attr(el, 'kind', 'Sporadic') as InterfaceModel['kind'],
         parameters,
         inheritPI,
+        inheritPIExplicit,
         autonamed,
+        autonamedExplicit,
         properties,
         extraAttrs: unknownAttrs(el, KNOWN_IFACE_ATTRS),
     };
@@ -99,6 +111,12 @@ function parseFunction(el: XmlElement): FunctionModel {
     const impls: ImplementationModel[] = childElements(el, 'Implementations')
         .flatMap(impl => childElements(impl, 'Implementation'))
         .map(i => ({ name: attr(i, 'name'), language: attr(i, 'language') }));
+    const contextParameters: ContextParameterModel[] = childElements(el, 'ContextParameter').map(param => ({
+        name: attr(param, 'name'),
+        type: attr(param, 'type'),
+        value: attr(param, 'value'),
+        extraAttrs: unknownAttrs(param, new Set(['name', 'type', 'value'])),
+    }));
 
     return {
         id: attr(el, 'id') || attr(el, 'name'),
@@ -112,6 +130,7 @@ function parseFunction(el: XmlElement): FunctionModel {
         requiredInterfaces: childElements(el, 'Required_Interface').map(e => parseInterface(e, 'required')),
         nestedFunctions: childElements(el, 'Function').map(parseFunction),
         implementations: impls,
+        contextParameters,
         properties,
         extraAttrs: unknownAttrs(el, KNOWN_FUNC_ATTRS),
     };
@@ -158,10 +177,14 @@ export function parseIvXml(xml: string): IvModel {
         const { properties } = parseProperties(c);
 
         const sourceFuncName = src ? attr(src, 'func_name') : '';
-        const sourceRiName   = src ? (attr(src, 'ri_name') || '') : '';
+        const sourceNameAttr: 'ri_name' | 'pi_name' = src?.hasAttribute('pi_name') ? 'pi_name' : 'ri_name';
+        const sourceRiName   = src ? (attr(src, 'ri_name') || attr(src, 'pi_name') || '') : '';
         const targetFuncName = tgt ? attr(tgt, 'func_name') : '';
-        const targetPiName   = tgt ? (attr(tgt, 'pi_name') || '') : '';
+        const targetNameAttr: 'ri_name' | 'pi_name' = tgt?.hasAttribute('ri_name') ? 'ri_name' : 'pi_name';
+        const targetPiName   = tgt ? (attr(tgt, 'pi_name') || attr(tgt, 'ri_name') || '') : '';
 
+        const sourceIfaceIdExplicit = src ? src.hasAttribute('iface_id') : false;
+        const targetIfaceIdExplicit = tgt ? tgt.hasAttribute('iface_id') : false;
         let sourceIfaceId = src ? attr(src, 'iface_id') : '';
         let targetIfaceId = tgt ? attr(tgt, 'iface_id') : '';
 
@@ -175,21 +198,34 @@ export function parseIvXml(xml: string): IvModel {
 
         // Legacy format: no id or name — generate stable ones from endpoint names
         const fallbackId   = `${sourceFuncName}_${sourceRiName}__${targetFuncName}_${targetPiName}`;
+        const nameExplicit = c.hasAttribute('name');
         const fallbackName = sourceRiName || targetPiName;
 
         return {
             id:   attr(c, 'id')   || fallbackId,
             name: attr(c, 'name') || fallbackName,
+            nameExplicit,
             sourceIfaceId,
+            sourceIfaceIdExplicit,
             sourceFuncName,
             sourceRiName,
+            sourceNameAttr,
             targetIfaceId,
+            targetIfaceIdExplicit,
             targetFuncName,
             targetPiName,
+            targetNameAttr,
             properties,
             extraAttrs: unknownAttrs(c, new Set(['id', 'name'])),
         };
     });
+
+    const comments: CommentModel[] = childElements(root, 'Comment').map(comment => ({
+        id: attr(comment, 'id'),
+        name: attr(comment, 'name'),
+        requiredSystemElement: boolAttr(comment, 'required_system_element'),
+        extraAttrs: unknownAttrs(comment, new Set(['id', 'name', 'required_system_element'])),
+    }));
 
     const layers: LayerModel[] = childElements(root, 'Layer').map(l => ({
         name: attr(l, 'name'),
@@ -203,6 +239,7 @@ export function parseIvXml(xml: string): IvModel {
         modifierHash: attr(root, 'modifierHash'),
         functions,
         connections,
+        comments,
         layers,
         unknownXmlAttrs: unknownAttrs(root, KNOWN_IV_ATTRS),
     };

@@ -26,8 +26,12 @@ export interface InterfaceModel {
     parameters: ParameterModel[];
     /** Taste::InheritPI property */
     inheritPI: boolean;
+    /** Whether Taste::InheritPI was explicitly present in source XML. */
+    inheritPIExplicit?: boolean;
     /** Taste::Autonamed property */
     autonamed: boolean;
+    /** Whether Taste::Autonamed was explicitly present in source XML. */
+    autonamedExplicit?: boolean;
     /** All other <Property> children — round-trip */
     properties: PropertyModel[];
     /** All unknown XML attributes on the element — round-trip */
@@ -37,6 +41,13 @@ export interface InterfaceModel {
 export interface ImplementationModel {
     name: string;
     language: string;
+}
+
+export interface ContextParameterModel {
+    name: string;
+    type: string;
+    value: string;
+    extraAttrs: Record<string, string>;
 }
 
 export interface FunctionModel {
@@ -51,6 +62,7 @@ export interface FunctionModel {
     requiredInterfaces: InterfaceModel[];
     nestedFunctions: FunctionModel[];
     implementations: ImplementationModel[];
+    contextParameters?: ContextParameterModel[];
     /** All <Property> children — round-trip */
     properties: PropertyModel[];
     /** All unknown XML attributes on the element — round-trip */
@@ -60,13 +72,28 @@ export interface FunctionModel {
 export interface ConnectionModel {
     id: string;
     name: string;
+    /** Whether the name attribute was explicitly present in source XML. */
+    nameExplicit?: boolean;
     sourceIfaceId: string;
+    /** Whether Source iface_id was explicitly present in source XML. */
+    sourceIfaceIdExplicit?: boolean;
     sourceFuncName: string;
     sourceRiName: string;
+    sourceNameAttr?: 'ri_name' | 'pi_name';
     targetIfaceId: string;
+    /** Whether Target iface_id was explicitly present in source XML. */
+    targetIfaceIdExplicit?: boolean;
     targetFuncName: string;
     targetPiName: string;
+    targetNameAttr?: 'ri_name' | 'pi_name';
     properties: PropertyModel[];
+    extraAttrs: Record<string, string>;
+}
+
+export interface CommentModel {
+    id: string;
+    name: string;
+    requiredSystemElement: boolean;
     extraAttrs: Record<string, string>;
 }
 
@@ -82,6 +109,7 @@ export interface IvModel {
     modifierHash: string;
     functions: FunctionModel[];
     connections: ConnectionModel[];
+    comments: CommentModel[];
     layers: LayerModel[];
     /** All unknown XML attributes on <InterfaceView> — round-trip */
     unknownXmlAttrs: Record<string, string>;

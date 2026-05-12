@@ -2,39 +2,44 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseIvXml } from '../src/parsers/IvXmlParser';
 import { serializeIvXml } from '../src/serializers/IvXmlSerializer';
-import { normalizeXml, readUtf8 } from './helpers';
+import { findRelativeFiles, normalizeXml, readUtf8 } from './helpers';
 
-const REFERENCE_INTERFACE_VIEWS = [
-    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-interfaces/TEST-SAMV71-INTERFACES/interfaceview.xml',
-    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-parameter-encoding/TEST-SAMV71-PARAMETER-ENCODING/interfaceview.xml',
-    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-can/samv71-rtems-can-simple/interfaceview.xml',
-    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-cpp/interfaceview.xml',
-    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-queue-overflow/TEST-SAMV71-QUEUE-OVERFLOW/interfaceview.xml',
-    'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-time-resolution/TEST-SAMV71-TIME-RESOLUTION/interfaceview.xml',
-];
+const TASTE_TESTS_ROOT = 'references/TASTE-SAMV71-RTEMS-Tests/tests';
 
-test('loads various reference interfaceview.xml files', async (context) => {
-    for (const relativePath of REFERENCE_INTERFACE_VIEWS) {
+async function getReferenceInterfaceViews(): Promise<string[]> {
+    return findRelativeFiles(TASTE_TESTS_ROOT, 'interfaceview.xml');
+}
+
+async function assertLoads(relativePath: string): Promise<void> {
+    const xml = await readUtf8(relativePath);
+    const iv = parseIvXml(xml);
+    assert.ok(iv.functions.length > 0);
+    assert.notEqual(iv.version, '');
+    assert.ok(iv.connections.length >= 0);
+}
+
+async function assertRoundTrips(relativePath: string): Promise<void> {
+    const xml = await readUtf8(relativePath);
+    const serialized = serializeIvXml(parseIvXml(xml));
+    assert.equal(normalizeXml(serialized), normalizeXml(xml));
+}
+
+test('loads all TASTE reference interfaceview.xml files', async (context) => {
+    const referenceInterfaceViews = await getReferenceInterfaceViews();
+    assert.ok(referenceInterfaceViews.length > 0);
+    for (const relativePath of referenceInterfaceViews) {
         await context.test(relativePath, async () => {
-            const xml = await readUtf8(relativePath);
-            const iv = parseIvXml(xml);
-            assert.ok(iv.functions.length > 0);
-            assert.notEqual(iv.version, '');
-            assert.ok(iv.connections.length >= 0);
+            await assertLoads(relativePath);
         });
     }
 });
 
-test('round-trips samv71-rtems-fpu interfaceview.xml ignoring whitespace only', async () => {
-    const relativePath = 'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-fpu/TEST-SAMV71-FPU/interfaceview.xml';
-    const xml = await readUtf8(relativePath);
-    const serialized = serializeIvXml(parseIvXml(xml));
-    assert.equal(normalizeXml(serialized), normalizeXml(xml));
-});
-
-test('round-trips samv71-rtems-c interfaceview.xml ignoring whitespace only', async () => {
-    const relativePath = 'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-c/TEST-SAMV71-FUNCTION-C-IMPLEMENTATION/interfaceview.xml';
-    const xml = await readUtf8(relativePath);
-    const serialized = serializeIvXml(parseIvXml(xml));
-    assert.equal(normalizeXml(serialized), normalizeXml(xml));
+test('round-trips all TASTE reference interfaceview.xml files ignoring whitespace only', async (context) => {
+    const referenceInterfaceViews = await getReferenceInterfaceViews();
+    assert.ok(referenceInterfaceViews.length > 0);
+    for (const relativePath of referenceInterfaceViews) {
+        await context.test(relativePath, async () => {
+            await assertRoundTrips(relativePath);
+        });
+    }
 });
