@@ -1,4 +1,4 @@
-import { Node, Edge } from '@xyflow/react';
+import type { Node, Edge } from '@xyflow/react';
 import {
     IvModel, UiModel, FunctionModel, InterfaceModel, ConnectionModel, EntityLayout,
     DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT,

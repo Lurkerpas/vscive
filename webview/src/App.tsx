@@ -26,6 +26,7 @@ import { EdgeMenuContext } from './components/EdgeMenuContext';
 import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
 import { SearchFunctionDialog } from './components/SearchFunctionDialog';
 import { Palette } from './components/Palette';
+import { renderDiagramImage } from './exportImage';
 import { Waypoint, isWaypointNodeId, parseWaypointNodeId, waypointCenterFromNode } from './waypoints';
 
 const nodeTypes = {
@@ -688,193 +689,37 @@ function DiagramEditor() {
 
     // ── Export image ─────────────────────────────────────────────────────────
     const onExportImage = useCallback(async (format: 'png' | 'svg') => {
-        if (nodes.length === 0) { return; }
-
-        const IFACE_W_EX = 60, IFACE_H_EX = 80;
-        const KIND_COLORS: Record<string, string> = {
-            Cyclic: '#a6e3a1', Sporadic: '#89b4fa', Protected: '#fab387', Unprotected: '#f38ba8',
-        };
-        const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-        // Resolve absolute flow-coordinate position for any node
-        const nodeMap = new Map(nodes.map(n => [n.id, n]));
-        const absPos = (n: Node): { x: number; y: number } => {
-            if (!n.parentId) { return { x: n.position.x, y: n.position.y }; }
-            const parent = nodeMap.get(n.parentId);
-            if (!parent) { return { x: n.position.x, y: n.position.y }; }
-            const pp = absPos(parent);
-            return { x: pp.x + n.position.x, y: pp.y + n.position.y };
-        };
-
-        // Compute bounding box over all nodes
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const n of nodes) {
-            const p = absPos(n);
-            const w = n.measured?.width ?? IFACE_W_EX;
-            const h = n.measured?.height ?? IFACE_H_EX;
-            if (p.x < minX) { minX = p.x; }
-            if (p.y < minY) { minY = p.y; }
-            if (p.x + w > maxX) { maxX = p.x + w; }
-            if (p.y + h > maxY) { maxY = p.y + h; }
-        }
-
-        const pad = 60;
-        const svgW = Math.max(maxX - minX + pad * 2, 400);
-        const svgH = Math.max(maxY - minY + pad * 2, 300);
-        const ox = pad - minX;
-        const oy = pad - minY;
-
-        const parts: string[] = [];
-        // viewBox lets us scale for PNG without losing precision in SVG export
-        parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}">`);
-        parts.push(`<rect width="100%" height="100%" fill="${options.canvasColor}"/>`);
-
-        // Edges (drawn below nodes)
-        for (const e of edges) {
-            const src = nodeMap.get(e.source);
-            const tgt = nodeMap.get(e.target);
-            if (!src || !tgt) { continue; }
-            const sp = absPos(src), tp = absPos(tgt);
-            const srcEdge = (src.data as Record<string,unknown>).edge as string ?? 'left';
-            const tgtEdge = (tgt.data as Record<string,unknown>).edge as string ?? 'left';
-            // Handle = outside midpoint of the triangle
-            const hx = (n: Node, p: {x:number;y:number}, edge: string) => {
-                const w = n.measured?.width ?? IFACE_W_EX;
-                switch (edge) {
-                    case 'right': return p.x + ox + w;
-                    case 'top':   return p.x + ox + w / 2;
-                    case 'bottom':return p.x + ox + w / 2;
-                    default:      return p.x + ox;
+        const rendered = await renderDiagramImage({
+            nodes,
+            edges,
+            options,
+            format,
+            rasterizeSvgToPngDataUrl: async ({ svg, canvasWidth, canvasHeight }) => {
+                const svgDataUrl = `data:image/svg+xml;base64,${btoa(Array.from(new TextEncoder().encode(svg), byte => String.fromCharCode(byte)).join(''))}`;
+                const canvas = document.createElement('canvas');
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    return null;
                 }
-            };
-            const hy = (n: Node, p: {x:number;y:number}, edge: string) => {
-                const h = n.measured?.height ?? IFACE_H_EX;
-                switch (edge) {
-                    case 'top':    return p.y + oy;
-                    case 'bottom': return p.y + oy + h;
-                    default:       return p.y + oy + h / 2;
-                }
-            };
-            const sx = hx(src, sp, srcEdge), sy = hy(src, sp, srcEdge);
-            const tx2 = hx(tgt, tp, tgtEdge), ty2 = hy(tgt, tp, tgtEdge);
-            const dx = Math.abs(tx2 - sx) * 0.5;
-            // Stroke width relative to iface size
-            const sw = Math.max(2, IFACE_W_EX * 0.05);
-            parts.push(`<path d="M${sx},${sy} C${sx+dx},${sy} ${tx2-dx},${ty2} ${tx2},${ty2}" stroke="#6c7086" stroke-width="${sw}" fill="none"/>`);
-            if (options.showConnectionLabels && e.label) {
-                const lx = (sx + tx2) / 2, ly = (sy + ty2) / 2;
-                const labelFs = Math.max(6, options.fontSizeConn);
-                const labelW = String(e.label).length * labelFs * 0.6 + 12;
-                parts.push(`<rect x="${lx - labelW/2}" y="${ly - labelFs - 2}" width="${labelW}" height="${labelFs + 6}" fill="${options.canvasColor}" rx="3"/>`);
-                parts.push(`<text x="${lx}" y="${ly}" text-anchor="middle" fill="#cdd6f4" font-size="${labelFs}" font-family="sans-serif">${esc(String(e.label))}</text>`);
-            }
-        }
 
-        // Function nodes
-        for (const n of nodes.filter(n => n.type === 'functionNode')) {
-            const p = absPos(n);
-            const x = p.x + ox, y = p.y + oy;
-            const w = n.measured?.width ?? 200;
-            const h = n.measured?.height ?? 100;
-            const d = n.data as Record<string, unknown>;
-            const caption = d.language ? `${d.label} [${d.language}]` : String(d.label ?? '');
-            const fs = (d.fontSizeFn as number | undefined) ?? 90;
-            // Header height matches FunctionNode: font-size * line-height + top/bottom padding
-            const headerH = Math.round(fs * 1.2 + 12);
-            parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#1e1e2e" stroke="#6c7086" stroke-width="3" rx="6"/>`);
-            parts.push(`<rect x="${x+2}" y="${y+2}" width="${w-4}" height="${headerH}" fill="#313244" rx="4"/>`);
-            // Square off the bottom corners of the header bar
-            parts.push(`<rect x="${x+2}" y="${y+2+headerH/2}" width="${w-4}" height="${headerH/2}" fill="#313244"/>`);
-            parts.push(`<line x1="${x}" y1="${y+headerH+2}" x2="${x+w}" y2="${y+headerH+2}" stroke="#6c7086" stroke-width="1"/>`);
-            // Vertically center text in header
-            const textY = y + 2 + headerH * 0.7;
-            parts.push(`<text x="${x+10}" y="${textY}" fill="#cdd6f4" font-size="${fs}" font-weight="bold" font-family="sans-serif">${esc(caption)}</text>`);
-        }
+                await new Promise<void>(resolve => {
+                    const img = new Image();
+                    img.onload = () => {
+                        ctx.drawImage(img, 0, 0);
+                        resolve();
+                    };
+                    img.onerror = () => resolve();
+                    img.src = svgDataUrl;
+                });
 
-        // Interface nodes
-        for (const n of nodes.filter(n => n.type === 'interfaceNode')) {
-            const p = absPos(n);
-            const x = p.x + ox, y = p.y + oy;
-            const d = n.data as Record<string, unknown>;
-            const iface = d.iface as { kind: string; type: string; name: string };
-            const edge = (d.edge as string) ?? 'left';
-            const color = KIND_COLORS[iface.kind] ?? '#cdd6f4';
-            const fs = (d.fontSizeIface as number | undefined) ?? 45;
-
-            const tipDir = iface.type === 'provided'
-                ? (edge === 'left' ? 'right' : edge === 'right' ? 'left' : edge === 'top' ? 'down' : 'up')
-                : edge;
-
-            let pts: string;
-            const W = IFACE_W_EX, H = IFACE_H_EX;
-            switch (tipDir) {
-                case 'right': pts = `${x},${y} ${x},${y+H} ${x+W},${y+H/2}`; break;
-                case 'left':  pts = `${x+W},${y} ${x+W},${y+H} ${x},${y+H/2}`; break;
-                case 'down':  pts = `${x},${y} ${x+W},${y} ${x+W/2},${y+H}`; break;
-                default:      pts = `${x},${y+H} ${x+W},${y+H} ${x+W/2},${y}`; break; // up
-            }
-            parts.push(`<polygon points="${pts}" fill="${color}" fill-opacity="0.3" stroke="${color}" stroke-width="2"/>`);
-
-            // Label inside function body, matching InterfaceNode label placement
-            const GAP = 8;
-            let lx: number, ly: number, anchor: string;
-            switch (edge) {
-                case 'left':   lx = x + W + GAP; ly = y + H / 2 + fs * 0.35; anchor = 'start'; break;
-                case 'right':  lx = x - GAP;     ly = y + H / 2 + fs * 0.35; anchor = 'end';   break;
-                case 'top':    lx = x + W / 2;   ly = y + H + GAP + fs;      anchor = 'middle'; break;
-                default:       lx = x + W / 2;   ly = y - GAP;                anchor = 'middle'; break;
-            }
-            if (options.showInterfaceNames) {
-                parts.push(`<text x="${lx}" y="${ly}" text-anchor="${anchor}" fill="#cdd6f4" font-size="${fs}" font-family="sans-serif">${esc(iface.name)}</text>`);
-            }
-        }
-
-        parts.push('</svg>');
-        const svgStr = parts.join('\n');
-        // base64-encode so the extension handler (Buffer.from(...,'base64')) and
-        // canvas Image loading both work correctly with the data: CSP directive
-        const svgB64 = btoa(Array.from(new TextEncoder().encode(svgStr), b => String.fromCharCode(b)).join(''));
-        const svgDataUrl = `data:image/svg+xml;base64,${svgB64}`;
-
-        if (format === 'svg') {
-            post({ type: 'exportImage', format, dataUrl: svgDataUrl });
-            return;
-        }
-
-        // PNG: Chromium canvas max area is ~268 Mpx. Scale down to fit within 8192px
-        // on the longest side, then render a new SVG at that pixel size.
-        const MAX_PNG_PX = 8192;
-        const pngScale = Math.min(1, MAX_PNG_PX / Math.max(svgW, svgH));
-        const canvasW = Math.max(1, Math.round(svgW * pngScale));
-        const canvasH = Math.max(1, Math.round(svgH * pngScale));
-
-        // Replace width/height in the SVG so the browser renders it at canvas size
-        const scaledSvgStr = svgStr.replace(
-            `width="${svgW}" height="${svgH}"`,
-            `width="${canvasW}" height="${canvasH}"`,
-        );
-        const scaledB64 = btoa(Array.from(new TextEncoder().encode(scaledSvgStr), b => String.fromCharCode(b)).join(''));
-        const scaledDataUrl = `data:image/svg+xml;base64,${scaledB64}`;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = canvasW;
-        canvas.height = canvasH;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { post({ type: 'exportImage', format: 'png', dataUrl: svgDataUrl }); return; }
-        await new Promise<void>(resolve => {
-            const img = new Image();
-            img.onload = () => { ctx.drawImage(img, 0, 0); resolve(); };
-            img.onerror = () => resolve();
-            img.src = scaledDataUrl;
+                return canvas.toDataURL('image/png');
+            },
         });
-        const pngDataUrl = canvas.toDataURL('image/png');
-        // 'data:,' means canvas backing store failed — fall back to SVG bytes
-        if (pngDataUrl === 'data:,') {
-            post({ type: 'exportImage', format: 'png', dataUrl: svgDataUrl });
-        } else {
-            post({ type: 'exportImage', format: 'png', dataUrl: pngDataUrl });
-        }
-    }, [nodes, edges, options.canvasColor, options.fontSizeConn, options.showConnectionLabels, options.showInterfaceNames]);
+        if (!rendered) { return; }
+        post({ type: 'exportImage', format, dataUrl: rendered.dataUrl });
+    }, [nodes, edges, options]);
 
     useEffect(() => {
         if (!pendingExportFormat) { return; }

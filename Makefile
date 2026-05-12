@@ -1,4 +1,4 @@
-.PHONY: all build build-ext build-web build-webview check watch watch-web package install clean
+.PHONY: all build build-ext build-web build-webview check test watch watch-web package install clean
 
 VSIX := $(wildcard *.vsix)
 
@@ -22,6 +22,10 @@ typecheck: node_modules
 # Run the compatibility checks used for CI and packaging
 check: node_modules
 	npm run check
+
+# Run automated tests
+test: node_modules
+	npm run test
 
 # Build React webview → out/webview/
 build-webview: node_modules
@@ -53,5 +57,5 @@ install: package
 
 # Remove build artifacts
 clean:
-	rm -rf out/ *.vsix
+	rm -rf out/ .test-out/ *.vsix
 

@@ -1,4 +1,4 @@
-import { Node } from '@xyflow/react';
+import type { Node } from '@xyflow/react';
 
 export const WAYPOINT_NODE_SIZE = 20;
 export const WAYPOINT_NODE_RADIUS = WAYPOINT_NODE_SIZE / 2;
