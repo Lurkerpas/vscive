@@ -39,12 +39,15 @@ Add Connection shall invoke a mode in which clicking two functions will connecte
 If there is an interface, sporadic, protected or unprotected, once its connection point is clicked, dragged and dropped onto another interface, they shall be connected. If the connection is dragged and dropped onto a function, not interface, a corresponding compatible interface shall be created and connected. It's location should be the closest to the drop point.
 
 Right clicking on the canvas shall present a menu with the following options:
+- Search Function,
 - Add Function,
 - Add Connection,
 - Paste (if Function has been copied),
 - Build Skeletons (invoking make skeletons in the folder of the interfaceview.xml),
 - Build (invoking make in the folder of the interfaceview.xml),
 - Export Diagram as Image.
+
+Search Function shall open a dialog with a list of all functions in the diagram, including nested functions. The dialog shall provide a regexp filter, matched case-insensitively against the displayed function caption. Once a function is selected, the dialog shall close, that function shall become selected on the canvas, and the view shall be centered on it.
 
 Right clicking on a function shall present a menu with the following options:
 - Add Provided Interface,

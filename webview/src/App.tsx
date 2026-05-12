@@ -24,6 +24,7 @@ import { OptionsPanel } from './components/OptionsPanel';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { EdgeMenuContext } from './components/EdgeMenuContext';
 import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
+import { SearchFunctionDialog } from './components/SearchFunctionDialog';
 import { Palette } from './components/Palette';
 import { Waypoint, isWaypointNodeId, parseWaypointNodeId, waypointCenterFromNode } from './waypoints';
 
@@ -139,6 +140,16 @@ function areFunctionNodesInProxyRelation(nodes: Node[], leftId?: string, rightId
     return isAncestorFunctionNode(nodes, leftId, rightId) || isAncestorFunctionNode(nodes, rightId, leftId);
 }
 
+function flattenFunctions(functions: FunctionModel[]): FunctionModel[] {
+    const flat: FunctionModel[] = [];
+    const visit = (fn: FunctionModel) => {
+        flat.push(fn);
+        fn.nestedFunctions.forEach(visit);
+    };
+    functions.forEach(visit);
+    return flat;
+}
+
 // ─── Inner component (needs ReactFlow context for screenToFlowPosition) ─────
 
 function DiagramEditor() {
@@ -172,7 +183,7 @@ function DiagramEditor() {
     const [connectMode, setConnectMode] = useState(false);
     const [connectSrc, setConnectSrc] = useState<{ id: string; relX: number; relY: number } | null>(null);
 
-    const { screenToFlowPosition, zoomIn, zoomOut, fitView, getIntersectingNodes } = useReactFlow();
+    const { screenToFlowPosition, zoomIn, zoomOut, fitView, getIntersectingNodes, setCenter, getZoom } = useReactFlow();
 
     // Edges with derived render data applied reactively (options may change independently of diagram load)
     const styledEdges = useMemo(
@@ -195,6 +206,11 @@ function DiagramEditor() {
     const selectedFunction = useMemo(
         () => isFunction(selected) ? selected : null,
         [selected],
+    );
+
+    const allFunctions = useMemo(
+        () => diagramData ? flattenFunctions(diagramData.iv.functions) : [],
+        [diagramData],
     );
 
     const focusVisibility = useMemo(() => {
@@ -871,6 +887,10 @@ function DiagramEditor() {
         e.preventDefault();
         const rfPos = screenToFlowPosition({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY });
         const items: ContextMenuItem[] = [];
+        items.push({
+            label: 'Search Function',
+            onClick: () => setDialog({ kind: 'searchFunction' }),
+        });
         if (!locked) {
             items.push(
                 {
@@ -1101,6 +1121,25 @@ function DiagramEditor() {
         setDialog(null);
     }, [nodes]);
 
+    const onSelectFunctionFromSearch = useCallback((functionId: string) => {
+        if (!diagramData) { return; }
+
+        const functionEntity = findEntity(diagramData.iv, functionId);
+        const functionNode = nodes.find(node => node.id === functionId && node.type === 'functionNode');
+        if (!functionEntity || !isFunction(functionEntity) || !functionNode) {
+            setDialog(null);
+            return;
+        }
+
+        const absolute = getAbsolutePos(functionId);
+        const width = functionNode.measured?.width ?? (functionNode.style?.width as number | undefined) ?? DEFAULT_FUNCTION_WIDTH;
+        const height = functionNode.measured?.height ?? (functionNode.style?.height as number | undefined) ?? DEFAULT_FUNCTION_HEIGHT;
+
+        setSelected(functionEntity);
+        setDialog(null);
+        setCenter(absolute.x + width / 2, absolute.y + height / 2, { zoom: getZoom(), duration: 250 });
+    }, [diagramData, getAbsolutePos, getZoom, nodes, setCenter]);
+
     // ── Render ───────────────────────────────────────────────────────────────
     if (waiting) {
         return (
@@ -1219,6 +1258,13 @@ function DiagramEditor() {
                 schema={diagramData?.schema}
                 onConfirmFunction={onConfirmFunction}
                 onConfirmInterface={onConfirmInterface}
+                onCancel={() => setDialog(null)}
+            />
+
+            <SearchFunctionDialog
+                open={dialog?.kind === 'searchFunction'}
+                functions={allFunctions.map(fn => ({ id: fn.id, name: fn.name, language: fn.language }))}
+                onSelect={onSelectFunctionFromSearch}
                 onCancel={() => setDialog(null)}
             />
 

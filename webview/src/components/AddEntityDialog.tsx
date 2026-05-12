@@ -15,7 +15,11 @@ interface AddInterfaceState {
     presetType?: 'provided' | 'required';
 }
 
-export type DialogState = AddFunctionState | AddInterfaceState | null;
+export interface SearchFunctionState {
+    kind: 'searchFunction';
+}
+
+export type DialogState = AddFunctionState | AddInterfaceState | SearchFunctionState | null;
 
 interface Props {
     state: DialogState;
@@ -90,7 +94,7 @@ export function AddEntityDialog({ state, schema, onConfirmFunction, onConfirmInt
         setName(''); setLanguage(defaultLang); setKind('Sporadic'); setIfaceType('provided');
     }, [state, name, language, kind, ifaceType, defaultLang, onConfirmFunction, onConfirmInterface]);
 
-    if (!state) { return null; }
+    if (!state || state.kind === 'searchFunction') { return null; }
 
     return (
         <div style={OVERLAY} onMouseDown={e => { if (e.target === e.currentTarget) { resetAndCancel(); } }}>
