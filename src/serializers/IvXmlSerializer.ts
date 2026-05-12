@@ -88,17 +88,22 @@ function serializeFunction(
     const knownAttrs: Record<string, string> = {
         id: fn.id,
         name: fn.name,
-        language: fn.language,
         is_type: fn.isType ? 'YES' : 'NO',
-        fixed_system_element: fn.fixedSystemElement ? 'YES' : 'NO',
-        required_system_element: fn.requiredSystemElement ? 'YES' : 'NO',
+        language: fn.language,
     };
     if (fn.defaultImplementation) {
         knownAttrs.default_implementation = fn.defaultImplementation;
     }
+    Object.assign(knownAttrs, {
+        fixed_system_element: fn.fixedSystemElement ? 'YES' : 'NO',
+        required_system_element: fn.requiredSystemElement ? 'YES' : 'NO',
+    });
     const attrs = { ...knownAttrs, ...fn.extraAttrs };
 
     const lines: string[] = [`${indent}<Function${toAttrStr(attrs)}>`];
+    for (const prop of fn.properties) {
+        lines.push(`${indent}  <Property name="${esc(prop.name)}" value="${esc(prop.value)}"/>`);
+    }
     for (const iface of fn.providedInterfaces) {
         lines.push(serializeInterface(iface, `${indent}  `));
     }
@@ -117,9 +122,6 @@ function serializeFunction(
             lines.push(`${indent}    <Implementation name="${esc(impl.name)}" language="${esc(impl.language)}"/>`);
         }
         lines.push(`${indent}  </Implementations>`);
-    }
-    for (const prop of fn.properties) {
-        lines.push(`${indent}  <Property name="${esc(prop.name)}" value="${esc(prop.value)}"/>`);
     }
     lines.push(`${indent}</Function>`);
     return lines.join('\n');

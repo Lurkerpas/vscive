@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseIvXml } from '../src/parsers/IvXmlParser';
-import { readUtf8 } from './helpers';
+import { serializeIvXml } from '../src/serializers/IvXmlSerializer';
+import { normalizeXml, readUtf8 } from './helpers';
 
 const REFERENCE_INTERFACE_VIEWS = [
     'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-interfaces/TEST-SAMV71-INTERFACES/interfaceview.xml',
@@ -22,4 +23,11 @@ test('loads various reference interfaceview.xml files', async (context) => {
             assert.ok(iv.connections.length >= 0);
         });
     }
+});
+
+test('round-trips samv71-rtems-fpu interfaceview.xml ignoring whitespace only', async () => {
+    const relativePath = 'references/TASTE-SAMV71-RTEMS-Tests/tests/samv71-rtems-fpu/TEST-SAMV71-FPU/interfaceview.xml';
+    const xml = await readUtf8(relativePath);
+    const serialized = serializeIvXml(parseIvXml(xml));
+    assert.equal(normalizeXml(serialized), normalizeXml(xml));
 });
