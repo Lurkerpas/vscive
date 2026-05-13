@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { InterfaceViewEditorProvider } from './editor/InterfaceViewEditorProvider';
 import { log, showLog } from './logger';
 import { serializeIvXml } from './serializers/IvXmlSerializer';
-import { IvModel } from './model/types';
+import { DEFAULT_OPTIONS, EditorOptions, IvModel } from './model/types';
 import { basename, dirnameUri, extname, joinPathSegments } from './utils/platform';
 
 function createEmptyIvModel(): IvModel {
@@ -69,6 +69,45 @@ async function createIvInDirectory(resource?: vscode.Uri): Promise<void> {
     await vscode.window.showTextDocument(document, { preview: false });
 }
 
+function shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function getUseTasteCliShForCommands(context: vscode.ExtensionContext): boolean {
+    const saved = context.globalState.get<Partial<EditorOptions> & { useDockerWrapperForCommands?: boolean }>('editorOptions', DEFAULT_OPTIONS);
+    const configured = vscode.workspace
+        .getConfiguration('vscive')
+        .get<boolean>(
+            'useTasteCliShForCommands',
+            vscode.workspace
+                .getConfiguration('vscive')
+                .get<boolean>('useDockerWrapperForCommands', DEFAULT_OPTIONS.useTasteCliShForCommands),
+        );
+    return saved.useTasteCliShForCommands ?? saved.useDockerWrapperForCommands ?? configured;
+}
+
+function getTasteInitCommand(context: vscode.ExtensionContext): string {
+    const tasteInitHerePath = joinPathSegments(context.extensionUri, 'scripts', 'taste-init-here.sh').fsPath;
+    if (!getUseTasteCliShForCommands(context)) {
+        return `bash ${shellQuote(tasteInitHerePath)}`;
+    }
+
+    const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    return `bash ${shellQuote(tasteCliPath)} bash -s -- < ${shellQuote(tasteInitHerePath)}`;
+}
+
+async function runTasteInitHere(context: vscode.ExtensionContext, resource?: vscode.Uri): Promise<void> {
+    const targetDir = await resolveTargetDirectory(resource);
+    if (!targetDir) {
+        void vscode.window.showErrorMessage('No target directory is available for taste-init-here.sh.');
+        return;
+    }
+
+    const terminal = vscode.window.createTerminal({ name: 'TASTE Init Here', cwd: targetDir });
+    terminal.sendText(getTasteInitCommand(context));
+    terminal.show();
+}
+
 export function activate(context: vscode.ExtensionContext): void {
     showLog();
     log(`activate — extensionUri: ${context.extensionUri.fsPath}`);
@@ -81,6 +120,9 @@ export function activate(context: vscode.ExtensionContext): void {
             ),
             vscode.commands.registerCommand('vscive.createIv', async (resource?: vscode.Uri) => {
                 await createIvInDirectory(resource);
+            }),
+            vscode.commands.registerCommand('vscive.tasteInitHere', async (resource?: vscode.Uri) => {
+                await runTasteInitHere(context, resource);
             }),
         );
         log('registerCustomEditorProvider OK');

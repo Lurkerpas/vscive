@@ -12,7 +12,8 @@
   ],
   "activationEvents": [
     "onCustomEditor:vscive.interfaceViewEditor",
-    "onCommand:vscive.createIv"
+    "onCommand:vscive.createIv",
+    "onCommand:vscive.tasteInitHere"
   ],
   "main": "./out/extension-node.js",
   "browser": "./out/extension-web.js",
@@ -21,12 +22,20 @@
       {
         "command": "vscive.createIv",
         "title": "vscive: create iv"
+      },
+      {
+        "command": "vscive.tasteInitHere",
+        "title": "vscive: taste init here"
       }
     ],
     "menus": {
       "explorer/context": [
         {
           "command": "vscive.createIv",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vscive.tasteInitHere",
           "when": "explorerResourceIsFolder"
         }
       ]
