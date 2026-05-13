@@ -35,6 +35,7 @@ fi
     --user "${HOST_UID}:${HOST_GID}" \
     -e APPIMAGE_EXTRACT_AND_RUN=1 \
     -e HOME=/tmp/taste-home \
+    -e PYTHONUSERBASE=${CONTAINER_HOME}/.local \
     -e USER=taste \
     -e LOGNAME=taste \
     -e TASTE_IN_DOCKER=1 \
@@ -46,6 +47,7 @@ fi
         export PS1="taste-cli:\w\\$ "
         export TASTE_IN_DOCKER=1
         export QT_QPA_PLATFORM=offscreen
+        export PYTHONUSERBASE=/home/taste/.local
         [ -f /home/taste/.bashrc.taste ] && . /home/taste/.bashrc.taste
         if [ "$#" -eq 0 ] ; then
             exec bash -i
