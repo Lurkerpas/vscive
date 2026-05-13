@@ -25,7 +25,7 @@ fi
 tty_args=()
 if [ -t 0 ] && [ -t 1 ] ; then
     tty_args=(-it)
-elif [ -t 0 ] ; then
+else
     tty_args=(-i)
 fi
 
