@@ -23,6 +23,25 @@ import {
     serializeUriForSetting,
 } from '../utils/platform';
 
+function shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function getProjectCommand(
+    useTasteCliShForCommands: boolean,
+    action: 'make' | 'skeletons',
+    extensionUri: vscode.Uri,
+): string {
+    if (useTasteCliShForCommands) {
+        const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+        return action === 'make'
+            ? `bash ${shellQuote(scriptPath)} make`
+            : `bash ${shellQuote(scriptPath)} make skeletons`;
+    }
+
+    return action === 'make' ? 'make' : 'make skeletons';
+}
+
 export class InterfaceViewEditorProvider
     implements vscode.CustomEditorProvider<InterfaceViewDocument> {
 
@@ -55,8 +74,19 @@ export class InterfaceViewEditorProvider
     }
 
     private getOptions(): EditorOptions {
-        const saved = this.context.globalState.get<Partial<EditorOptions>>('editorOptions', DEFAULT_OPTIONS);
-        return { ...DEFAULT_OPTIONS, ...saved };
+        const saved = this.context.globalState.get<Partial<EditorOptions> & { useDockerWrapperForCommands?: boolean }>('editorOptions', DEFAULT_OPTIONS);
+        const configuredUseTasteCliShForCommands = vscode.workspace
+            .getConfiguration('vscive')
+            .get<boolean>(
+                'useTasteCliShForCommands',
+                vscode.workspace
+                    .getConfiguration('vscive')
+                    .get<boolean>('useDockerWrapperForCommands', DEFAULT_OPTIONS.useTasteCliShForCommands),
+            );
+        const useTasteCliShForCommands = saved.useTasteCliShForCommands
+            ?? saved.useDockerWrapperForCommands
+            ?? configuredUseTasteCliShForCommands;
+        return { ...DEFAULT_OPTIONS, ...saved, useTasteCliShForCommands };
     }
 
     private async saveOptions(options: EditorOptions): Promise<void> {
@@ -255,7 +285,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build Skeletons', cwd: dirnameUri(document.uri) });
-                    terminal.sendText('make skeletons');
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'skeletons', this.extensionUri));
                     terminal.show();
                     break;
                 }
@@ -264,7 +294,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build', cwd: dirnameUri(document.uri) });
-                    terminal.sendText('make');
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'make', this.extensionUri));
                     terminal.show();
                     break;
                 }

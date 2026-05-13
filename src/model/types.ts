@@ -185,6 +185,7 @@ export interface EditorOptions {
     fontSizeIface: number;
     fontSizeConn: number;
     attrFilePath: string;
+    useTasteCliShForCommands: boolean;
     /** Maximum number of undo steps retained per document. */
     undoDepth: number;
 }
@@ -200,6 +201,7 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     fontSizeIface: 45,
     fontSizeConn: 11,
     attrFilePath: '',
+    useTasteCliShForCommands: false,
     undoDepth: 100,
 };
 

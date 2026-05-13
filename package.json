@@ -2,7 +2,7 @@
   "name": "vscive",
   "displayName": "vscive",
   "description": "Interface View Editor",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "vscive",
   "engines": {
     "vscode": "^1.90.0"
@@ -11,11 +11,26 @@
     "Other"
   ],
   "activationEvents": [
-    "onCustomEditor:vscive.interfaceViewEditor"
+    "onCustomEditor:vscive.interfaceViewEditor",
+    "onCommand:vscive.createIv"
   ],
   "main": "./out/extension-node.js",
   "browser": "./out/extension-web.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "vscive.createIv",
+        "title": "vscive: create iv"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "vscive.createIv",
+          "when": "explorerResourceIsFolder"
+        }
+      ]
+    },
     "customEditors": [
       {
         "viewType": "vscive.interfaceViewEditor",
@@ -35,6 +50,11 @@
           "type": "string",
           "default": "",
           "description": "Path or URI to the Attributes file. On desktop, empty defaults to $HOME/.local/default_attributes.xml."
+        },
+        "vscive.useTasteCliShForCommands": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use taste-cli.sh to run Build and Build Skeletons commands instead of invoking make directly."
         }
       }
     }
