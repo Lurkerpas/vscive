@@ -44,6 +44,7 @@ fi
     "${IMAGE}" \
     bash -lc '
         mkdir -p "$HOME"
+        ln -sfn /home/taste/tool-inst "$HOME/tool-inst"
         export PS1="taste-cli:\w\\$ "
         export TASTE_IN_DOCKER=1
         export QT_QPA_PLATFORM=offscreen
