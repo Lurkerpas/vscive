@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Background,
     Controls,
@@ -67,17 +67,64 @@ const BTN: React.CSSProperties = { background: '#313244', color: '#cdd6f4', bord
 const BTN_PRIMARY: React.CSSProperties = { ...BTN, background: '#89b4fa', color: '#1e1e2e', borderColor: '#89b4fa' };
 const LIST: React.CSSProperties = { border: '1px solid #313244', borderRadius: 6, overflow: 'auto', maxHeight: 260 };
 
+const DV_NODE_HEADER_FONT_SIZE = 12;
+const DV_NODE_BODY_FONT_SIZE = 11;
+const DV_DEVICE_FONT_SIZE = 10;
+
 function uuid(): string {
     return crypto.randomUUID();
 }
 
-function DvNodeRenderer({ data }: { data: { node: DvNodeModel; summary: string; overflow: number } }) {
+function scaleDvFont(baseSize: number, configuredSize: number, defaultSize: number, minSize: number): number {
+    return Math.max(minSize, (baseSize * configuredSize) / defaultSize);
+}
+
+function dvNodeHeaderFontSize(options: EditorOptions): number {
+    return scaleDvFont(DV_NODE_HEADER_FONT_SIZE, options.fontSizeFn, DEFAULT_OPTIONS.fontSizeFn, 9);
+}
+
+function dvNodeBodyFontSize(options: EditorOptions): number {
+    return scaleDvFont(DV_NODE_BODY_FONT_SIZE, options.fontSizeFn, DEFAULT_OPTIONS.fontSizeFn, 8);
+}
+
+function dvDeviceFontSize(options: EditorOptions): number {
+    return scaleDvFont(DV_DEVICE_FONT_SIZE, options.fontSizeIface, DEFAULT_OPTIONS.fontSizeIface, 7);
+}
+
+function applyDvNodePresentation(nodes: Node[], options: EditorOptions): Node[] {
+    const headerFontSize = dvNodeHeaderFontSize(options);
+    const bodyFontSize = dvNodeBodyFontSize(options);
+    const deviceFontSize = dvDeviceFontSize(options);
+
+    return nodes.map(node => {
+        if (node.type === 'dvNode') {
+            return {
+                ...node,
+                data: { ...(node.data as object), headerFontSize, bodyFontSize },
+            };
+        }
+
+        if (node.type === 'dvDevice') {
+            return {
+                ...node,
+                data: { ...(node.data as object), showName: options.showDeviceNames, fontSizeDevice: deviceFontSize },
+            };
+        }
+
+        return node;
+    });
+}
+
+function DvNodeRenderer({ data }: { data: { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number } }) {
+    const headerFontSize = data.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
+    const bodyFontSize = data.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
+
     return (
         <div style={{ width: '100%', height: '100%', background: '#1e1e2e', border: '2px solid #6c7086', borderRadius: 8, color: '#cdd6f4', boxSizing: 'border-box' }}>
-            <div style={{ background: '#313244', padding: '8px 10px', borderTopLeftRadius: 6, borderTopRightRadius: 6, fontWeight: 'bold', fontFamily: 'sans-serif', fontSize: 12 }}>
+            <div style={{ background: '#313244', padding: '8px 10px', borderTopLeftRadius: 6, borderTopRightRadius: 6, fontWeight: 'bold', fontFamily: 'sans-serif', fontSize: headerFontSize, lineHeight: 1.2 }}>
                 {data.node.name} [{data.node.type || data.node.namespace || 'Board'}]
             </div>
-            <div style={{ padding: 10, fontSize: 11, fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ padding: 10, fontSize: bodyFontSize, fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', gap: 6, lineHeight: 1.25 }}>
                 <div>Partition: {data.node.partition.name || 'Partition_1'}</div>
                 <div>Functions: {data.node.partition.functions.length}</div>
                 <div style={{ color: '#a6adc8' }}>{data.summary || 'No deployed functions'}</div>
@@ -87,11 +134,11 @@ function DvNodeRenderer({ data }: { data: { node: DvNodeModel; summary: string; 
     );
 }
 
-function DvDeviceRenderer({ data }: { data: { device: DvDeviceModel; edge: string; showName?: boolean } }) {
+function DvDeviceRenderer({ data }: { data: { device: DvDeviceModel; edge: string; showName?: boolean; fontSizeDevice?: number } }) {
     return (
         <>
             <Handle type="target" position={Position.Left} style={{ background: '#89b4fa', width: 8, height: 8 }} />
-            <div style={{ width: '100%', height: '100%', background: '#313244', border: '1px solid #6c7086', borderRadius: 14, color: '#cdd6f4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontFamily: 'sans-serif', padding: '0 8px', boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ width: '100%', height: '100%', background: '#313244', border: '1px solid #6c7086', borderRadius: 14, color: '#cdd6f4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: data.fontSizeDevice ?? DV_DEVICE_FONT_SIZE, fontFamily: 'sans-serif', padding: '0 8px', boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {data.showName === false ? data.device.port || data.device.name : `${data.device.name}${data.device.port && data.device.port !== data.device.name ? ` (${data.device.port})` : ''}`}
             </div>
             <Handle type="source" position={Position.Right} style={{ background: '#89b4fa', width: 8, height: 8 }} />
@@ -227,6 +274,11 @@ function DvDiagramEditor() {
     const [checkedFunctionIds, setCheckedFunctionIds] = useState<string[]>([]);
     const [checkedMessageKeys, setCheckedMessageKeys] = useState<string[]>([]);
     const reactFlow = useReactFlow();
+    const optionsRef = useRef(options);
+
+    useEffect(() => {
+        optionsRef.current = options;
+    }, [options]);
 
     useEffect(() => {
         const handler = (event: MessageEvent) => {
@@ -234,7 +286,7 @@ function DvDiagramEditor() {
             if (message.type === 'loadDv') {
                 setDiagramData(message.data);
                 const graph = buildDvGraph(message.data.dv, message.data.ui);
-                setNodes(graph.nodes.map(node => node.type === 'dvDevice' ? { ...node, data: { ...node.data, showName: options.showDeviceNames } } : node));
+                setNodes(applyDvNodePresentation(graph.nodes, optionsRef.current));
                 setEdges(graph.edges);
                 setWaiting(false);
                 setSelection(current => current && resolveSelection(message.data.dv, current) ? current : null);
@@ -257,8 +309,8 @@ function DvDiagramEditor() {
     }, [options.showDeviceNames, setEdges, setNodes]);
 
     useEffect(() => {
-        setNodes(existing => existing.map(node => node.type === 'dvDevice' ? { ...node, data: { ...(node.data as object), showName: options.showDeviceNames } } : node));
-    }, [options.showDeviceNames, setNodes]);
+        setNodes(existing => applyDvNodePresentation(existing, options));
+    }, [options, setNodes]);
 
     useEffect(() => {
         if (!pendingExportFormat) {
@@ -514,6 +566,7 @@ function DvDiagramEditor() {
 
     const selectedFunctionIds = new Set(checkedFunctionIds);
     const selectedMessageKeySet = new Set(checkedMessageKeys);
+    const panelVisible = optionsVisible || !!selection;
 
     return (
         <div style={{ width: '100%', height: '100%', position: 'relative', background: options.canvasColor }}>
@@ -559,7 +612,7 @@ function DvDiagramEditor() {
 
             {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
 
-            <div style={PANEL_STYLE}>
+            {panelVisible && <div style={PANEL_STYLE}>
                 {optionsVisible && !selection && (
                     <div>
                         <div style={SECTION_TITLE}>Options</div>
@@ -577,17 +630,6 @@ function DvDiagramEditor() {
                         <div style={ROW}><span style={LABEL}>Node Font Size</span><input style={INPUT} type="number" value={options.fontSizeFn} onChange={event => updateOptions({ fontSizeFn: Math.max(20, Number(event.target.value) || 90) })} /></div>
                         <div style={ROW}><span style={LABEL}>Device Font Size</span><input style={INPUT} type="number" value={options.fontSizeIface} onChange={event => updateOptions({ fontSizeIface: Math.max(8, Number(event.target.value) || 45) })} /></div>
                         <div style={ROW}><span style={LABEL}>Connection Font Size</span><input style={INPUT} type="number" value={options.fontSizeConn} onChange={event => updateOptions({ fontSizeConn: Math.max(6, Number(event.target.value) || 11) })} /></div>
-                    </div>
-                )}
-
-                {!selection && !optionsVisible && (
-                    <div>
-                        <div style={SECTION_TITLE}>Deployment View</div>
-                        <div style={{ color: '#a6adc8', fontSize: 11, lineHeight: 1.6 }}>
-                            <div>Nodes: {diagramData?.dv.nodes.length ?? 0}</div>
-                            <div>Connections: {diagramData?.dv.connections.length ?? 0}</div>
-                            <div>Undeployed Functions: {(diagramData?.availableFunctions.filter(item => !item.deployedNodeId).length) ?? 0}</div>
-                        </div>
                     </div>
                 )}
 
@@ -686,14 +728,18 @@ function DvDiagramEditor() {
                         </div>
                     </div>
                 )}
-            </div>
+            </div>}
 
             {waiting && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#cdd6f4' }}>Loading Deployment View…</div>}
             {loadError && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#f38ba8' }}>{loadError}</div>}
 
             <ReactFlow
                 nodes={displayedNodes}
-                edges={displayedEdges.map(edge => ({ ...edge, label: options.showConnectionLabels ? edge.label : '' }))}
+                edges={displayedEdges.map(edge => ({
+                    ...edge,
+                    label: options.showConnectionLabels ? edge.label : '',
+                    labelStyle: { fontSize: Math.max(6, options.fontSizeConn) },
+                }))}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStop={onNodeDragStop}
@@ -782,7 +828,7 @@ function buildSvg(nodes: Node[], edges: Edge[], options: EditorOptions): string 
         const ty = targetPosition.y + DV_DEVICE_HEIGHT / 2;
         parts.push(`<path d="M${sx},${sy} C${sx + 60},${sy} ${tx - 60},${ty} ${tx},${ty}" stroke="#89b4fa" stroke-width="2" fill="none"/>`);
         if (options.showConnectionLabels && edge.label) {
-            parts.push(`<text x="${(sx + tx) / 2}" y="${(sy + ty) / 2 - 6}" text-anchor="middle" fill="#a6adc8" font-size="11" font-family="sans-serif">${escapeXml(String(edge.label))}</text>`);
+            parts.push(`<text x="${(sx + tx) / 2}" y="${(sy + ty) / 2 - 6}" text-anchor="middle" fill="#a6adc8" font-size="${Math.max(6, options.fontSizeConn)}" font-family="sans-serif">${escapeXml(String(edge.label))}</text>`);
         }
     }
     for (const node of nodes) {
@@ -790,15 +836,17 @@ function buildSvg(nodes: Node[], edges: Edge[], options: EditorOptions): string 
         if (node.type === 'dvNode') {
             const widthPx = Number(node.width ?? node.style?.width ?? DV_NODE_WIDTH);
             const heightPx = Number(node.height ?? node.style?.height ?? DV_NODE_HEIGHT);
-            const data = node.data as { node: DvNodeModel; summary: string; overflow: number };
+            const data = node.data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number };
+            const headerFontSize = data.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
+            const bodyFontSize = data.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
             parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="${heightPx}" rx="8" fill="#1e1e2e" stroke="#6c7086" stroke-width="2"/>`);
             parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="34" rx="8" fill="#313244"/>`);
-            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 22}" fill="#cdd6f4" font-size="12" font-family="sans-serif">${escapeXml(`${data.node.name} [${data.node.type || data.node.namespace || 'Board'}]`)}</text>`);
-            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 56}" fill="#a6adc8" font-size="11" font-family="sans-serif">Functions: ${data.node.partition.functions.length}</text>`);
+            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 22}" fill="#cdd6f4" font-size="${headerFontSize}" font-family="sans-serif">${escapeXml(`${data.node.name} [${data.node.type || data.node.namespace || 'Board'}]`)}</text>`);
+            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 56}" fill="#a6adc8" font-size="${bodyFontSize}" font-family="sans-serif">Functions: ${data.node.partition.functions.length}</text>`);
         } else {
-            const data = node.data as { device: DvDeviceModel; showName?: boolean };
+            const data = node.data as { device: DvDeviceModel; showName?: boolean; fontSizeDevice?: number };
             parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${DV_DEVICE_WIDTH}" height="${DV_DEVICE_HEIGHT}" rx="14" fill="#313244" stroke="#6c7086" stroke-width="1"/>`);
-            parts.push(`<text x="${pos.x + 8}" y="${pos.y + 18}" fill="#cdd6f4" font-size="10" font-family="sans-serif">${escapeXml(data.showName === false ? data.device.port || data.device.name : data.device.name)}</text>`);
+            parts.push(`<text x="${pos.x + 8}" y="${pos.y + 18}" fill="#cdd6f4" font-size="${data.fontSizeDevice ?? DV_DEVICE_FONT_SIZE}" font-family="sans-serif">${escapeXml(data.showName === false ? data.device.port || data.device.name : data.device.name)}</text>`);
         }
     }
     parts.push('</svg>');
