@@ -2,12 +2,13 @@ import * as vscode from 'vscode';
 import { parseBoardsXml } from '../parsers/BoardsXmlParser';
 import { parseDvXml } from '../parsers/DvXmlParser';
 import { parseIvXml } from '../parsers/IvXmlParser';
-import { parseUiXml, SC_SCALE } from '../parsers/UiXmlParser';
+import { parseUiXml } from '../parsers/UiXmlParser';
 import { serializeDvXml } from '../serializers/DvXmlSerializer';
 import { serializeUiXml } from '../serializers/UiXmlSerializer';
 import {
     BoardModel,
     BoardsFileModel,
+    DV_LAYOUT_SCALE,
     DvAvailableFunction,
     DvAvailableMessage,
     DvConnectionModel,
@@ -20,7 +21,7 @@ import {
 import { decodeUtf8 } from '../utils/platform';
 import { basenameWithoutExtension, createUuid, dirnameUri, joinPathSegments, parseStoredUriOrPath } from '../utils/platform';
 
-const SC_INV = 1 / SC_SCALE;
+const DV_SC_INV = 1 / DV_LAYOUT_SCALE;
 const DEFAULT_NODE_WIDTH = 320;
 const DEFAULT_NODE_HEIGHT = 220;
 const DEFAULT_DEVICE_WIDTH = 92;
@@ -356,7 +357,7 @@ export class DeploymentViewDocument implements vscode.CustomDocument {
                 continue;
             }
             const nodeLayout = this.ui.entities[nodeId];
-            const width = this.scRectWidth(nodeLayout.coordinates) * SC_SCALE || DEFAULT_NODE_WIDTH;
+            const width = this.scRectWidth(nodeLayout.coordinates) * DV_LAYOUT_SCALE || DEFAULT_NODE_WIDTH;
             const localX = width - DEFAULT_DEVICE_WIDTH;
             const localY = 36 + index * 38;
             const center = this.flowPointToScopedSc(nodeLayout, localX + DEFAULT_DEVICE_WIDTH / 2, localY + DEFAULT_DEVICE_HEIGHT / 2);
@@ -378,10 +379,14 @@ export class DeploymentViewDocument implements vscode.CustomDocument {
         const iv = parseIvXml(xml);
 
         const flattenedFunctions: DvAvailableFunction[] = [];
-        const visit = (functions: typeof iv.functions): void => {
+        const visit = (functions: typeof iv.functions, parentPath = ''): void => {
             for (const fn of functions) {
-                flattenedFunctions.push({ id: fn.id, name: fn.name, path: fn.name });
-                visit(fn.nestedFunctions);
+                const path = parentPath ? `${parentPath}/${fn.name}` : fn.name;
+                if (fn.nestedFunctions.length === 0) {
+                    flattenedFunctions.push({ id: fn.id, name: fn.name, path });
+                    continue;
+                }
+                visit(fn.nestedFunctions, path);
             }
         };
         visit(iv.functions);
@@ -401,17 +406,39 @@ export class DeploymentViewDocument implements vscode.CustomDocument {
     }
 
     private refreshAvailableFunctionAssignments(): void {
-        const deployedByFunctionId = new Map<string, { nodeId: string; nodeName: string }>();
-        for (const node of this.dv.nodes) {
-            for (const fn of node.partition.functions) {
-                deployedByFunctionId.set(fn.id, { nodeId: node.id, nodeName: node.name });
+        const deployedFunctions = this.dv.nodes.flatMap(node =>
+            node.partition.functions.map(fn => ({
+                fn,
+                nodeId: node.id,
+                nodeName: node.name,
+                assigned: false,
+            })),
+        );
+
+        const assignDeployment = (candidate: Pick<DvAvailableFunction, 'id' | 'name' | 'path'>, keyOf: (item: Pick<DvAvailableFunction, 'id' | 'name' | 'path'>) => string | undefined) => {
+            const candidateKey = keyOf(candidate);
+            if (!candidateKey) {
+                return undefined;
             }
-        }
-        this.availableFunctions = this.availableFunctions.map(candidate => ({
-            ...candidate,
-            deployedNodeId: deployedByFunctionId.get(candidate.id)?.nodeId,
-            deployedNodeName: deployedByFunctionId.get(candidate.id)?.nodeName,
-        }));
+            const match = deployedFunctions.find(entry => !entry.assigned && keyOf(entry.fn) === candidateKey);
+            if (!match) {
+                return undefined;
+            }
+            match.assigned = true;
+            return match;
+        };
+
+        this.availableFunctions = this.availableFunctions.map(candidate => {
+            const deployment = assignDeployment(candidate, item => this.normalizeFunctionIdentity(item.id))
+                ?? assignDeployment(candidate, item => this.normalizeFunctionIdentity(item.path))
+                ?? assignDeployment(candidate, item => this.normalizeFunctionIdentity(item.name));
+
+            return {
+                ...candidate,
+                deployedNodeId: deployment?.nodeId,
+                deployedNodeName: deployment?.nodeName,
+            };
+        });
     }
 
     private refreshAvailableMessageAssignments(): void {
@@ -454,10 +481,10 @@ export class DeploymentViewDocument implements vscode.CustomDocument {
 
     private flowRectToAbsoluteSc(x: number, y: number, w: number, h: number): number[] {
         return [
-            Math.round(x * SC_INV),
-            Math.round(y * SC_INV),
-            Math.round((x + w) * SC_INV),
-            Math.round((y + h) * SC_INV),
+            Math.round(x * DV_SC_INV),
+            Math.round(y * DV_SC_INV),
+            Math.round((x + w) * DV_SC_INV),
+            Math.round((y + h) * DV_SC_INV),
         ];
     }
 
@@ -465,13 +492,21 @@ export class DeploymentViewDocument implements vscode.CustomDocument {
         const originX = parentLayout?.coordinates[0] ?? 0;
         const originY = parentLayout?.coordinates[1] ?? 0;
         return {
-            x: originX + x * SC_INV,
-            y: originY + y * SC_INV,
+            x: originX + x * DV_SC_INV,
+            y: originY + y * DV_SC_INV,
         };
     }
 
     private scRectWidth(coords: number[] | undefined): number {
         if (!coords || coords.length < 4) { return 0; }
         return coords[2] - coords[0];
+    }
+
+    private normalizeFunctionIdentity(value: string | undefined): string | undefined {
+        const normalized = value?.trim().toLowerCase();
+        if (!normalized) {
+            return undefined;
+        }
+        return normalized.replace(/^\{/, '').replace(/\}$/, '');
     }
 }

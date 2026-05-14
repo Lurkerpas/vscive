@@ -1,7 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
-import { DvConnectionModel, DvDeviceModel, DvModel, UiModel } from '../../src/model/types';
+import { DV_LAYOUT_SCALE, DvConnectionModel, DvDeviceModel, DvModel, UiModel } from '../../src/model/types';
 
-const SC_SCALE = 0.05;
 export const DV_NODE_WIDTH = 320;
 export const DV_NODE_HEIGHT = 220;
 export const DV_DEVICE_WIDTH = 92;
@@ -49,10 +48,10 @@ export function buildDvGraph(dv: DvModel, ui: UiModel): { nodes: Node[]; edges: 
 
     for (const node of dv.nodes) {
         const layout = rectFromCoords(ui.entities[node.id]?.coordinates);
-        const x = layout ? layout.x1 * SC_SCALE : 80 + nodes.length * 360;
-        const y = layout ? layout.y1 * SC_SCALE : 120;
-        const width = layout ? Math.max((layout.x2 - layout.x1) * SC_SCALE, 180) : DV_NODE_WIDTH;
-        const height = layout ? Math.max((layout.y2 - layout.y1) * SC_SCALE, 140) : DV_NODE_HEIGHT;
+        const x = layout ? layout.x1 * DV_LAYOUT_SCALE : 80 + nodes.length * 360;
+        const y = layout ? layout.y1 * DV_LAYOUT_SCALE : 120;
+        const width = layout ? Math.max((layout.x2 - layout.x1) * DV_LAYOUT_SCALE, 180) : DV_NODE_WIDTH;
+        const height = layout ? Math.max((layout.y2 - layout.y1) * DV_LAYOUT_SCALE, 140) : DV_NODE_HEIGHT;
 
         nodes.push({
             id: node.id,
@@ -71,8 +70,8 @@ export function buildDvGraph(dv: DvModel, ui: UiModel): { nodes: Node[]; edges: 
             let localX = width - DV_DEVICE_WIDTH;
             let localY = 36 + deviceIndex * 38;
             if (deviceLayout && deviceLayout.length >= 2) {
-                localX = (deviceLayout[0] - (ui.entities[node.id]?.coordinates?.[0] ?? 0)) * SC_SCALE - DV_DEVICE_WIDTH / 2;
-                localY = (deviceLayout[1] - (ui.entities[node.id]?.coordinates?.[1] ?? 0)) * SC_SCALE - DV_DEVICE_HEIGHT / 2;
+                localX = (deviceLayout[0] - (ui.entities[node.id]?.coordinates?.[0] ?? 0)) * DV_LAYOUT_SCALE - DV_DEVICE_WIDTH / 2;
+                localY = (deviceLayout[1] - (ui.entities[node.id]?.coordinates?.[1] ?? 0)) * DV_LAYOUT_SCALE - DV_DEVICE_HEIGHT / 2;
             }
             const snapped = snapDeviceToEdge(localX, localY, width, height);
             nodes.push({

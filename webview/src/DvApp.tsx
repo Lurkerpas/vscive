@@ -547,7 +547,7 @@ function DvDiagramEditor() {
                 optionsVisible={optionsVisible}
                 onZoomIn={() => void reactFlow.zoomIn()}
                 onZoomOut={() => void reactFlow.zoomOut()}
-                onFitView={() => void reactFlow.fitView()}
+                onFitView={() => void reactFlow.fitView({ padding: 0.12, duration: 200 })}
                 onToggleSnap={() => updateOptions({ snapEnabled: !options.snapEnabled })}
                 onToggleFocus={() => setFocusEnabled(value => !value)}
                 onAddNode={() => setBoardPickerOpen(true)}
@@ -713,6 +713,9 @@ function DvDiagramEditor() {
                 elementsSelectable
                 deleteKeyCode={null}
                 style={{ background: options.canvasColor }}
+                fitViewOptions={{ padding: 0.12, includeHiddenNodes: true }}
+                minZoom={0.001}
+                maxZoom={6}
             >
                 <Background color="#313244" gap={options.snapGridSize} />
                 <Controls showInteractive={false} />

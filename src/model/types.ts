@@ -261,6 +261,8 @@ export interface UiModel {
     entities: Record<string, EntityLayout>;
 }
 
+export const DV_LAYOUT_SCALE = 0.02;
+
 export const DEFAULT_FUNCTION_WIDTH = 270;
 export const DEFAULT_FUNCTION_HEIGHT = 190;
 
