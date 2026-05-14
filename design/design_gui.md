@@ -45,6 +45,8 @@ Right clicking on the canvas shall present a menu with the following options:
 - Paste (if Function has been copied),
 - Build Skeletons (invoking make skeletons in the folder of the interfaceview.xml),
 - Build (invoking make in the folder of the interfaceview.xml),
+- Run Debug (invoking make debug run in the folder of the interfaceview.xml),
+- Run Release (invoking make release run in the folder of the interfaceview.xml),
 - Export Diagram as Image.
 
 Search Function shall open a dialog with a list of all functions in the diagram, including nested functions. The dialog shall provide a regexp filter, matched case-insensitively against the displayed function caption. Once a function is selected, the dialog shall close, that function shall become selected on the canvas, and the view shall be centered on it.

@@ -765,6 +765,14 @@ function DiagramEditor() {
                 label: 'Build',
                 onClick: () => post({ type: 'build' }),
             });
+            items.push({
+                label: 'Run Debug',
+                onClick: () => post({ type: 'runDebug' }),
+            });
+            items.push({
+                label: 'Run Release',
+                onClick: () => post({ type: 'runRelease' }),
+            });
         }
         items.push({
             label: 'Export Diagram as Image',

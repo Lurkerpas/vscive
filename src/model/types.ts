@@ -251,6 +251,8 @@ export type WebviewMessage =
     | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }
     | { type: 'buildSkeletons' }
     | { type: 'build' }
+    | { type: 'runDebug' }
+    | { type: 'runRelease' }
     | { type: 'editFunction'; id: string }
     | { type: 'connectFunctions'; riId: string; piId: string; riFuncId: string; piFuncId: string; riRelX: number; riRelY: number; piRelX: number; piRelY: number }
     | { type: 'connectToFunction'; id: string; connId: string; existingIfaceId: string; targetFuncId: string; relRfX: number; relRfY: number }
