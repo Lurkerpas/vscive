@@ -186,11 +186,12 @@ export class DeploymentViewDocument implements vscode.CustomDocument {
         this.refreshAvailableMessageAssignments();
     }
 
-    updateNode(id: string, patch: { name?: string; nodeLabel?: string; extraAttrs?: Record<string, string> }): void {
+    updateNode(id: string, patch: { name?: string; nodeLabel?: string; partitionName?: string; extraAttrs?: Record<string, string> }): void {
         const node = this.dv.nodes.find(candidate => candidate.id === id);
         if (!node) { return; }
         if (patch.name !== undefined) { node.name = patch.name; }
         if (patch.nodeLabel !== undefined) { node.nodeLabel = patch.nodeLabel; }
+        if (patch.partitionName !== undefined) { node.partition.name = patch.partitionName; }
         if (patch.extraAttrs) { node.extraAttrs = { ...node.extraAttrs, ...patch.extraAttrs }; }
         this.refreshAvailableFunctionAssignments();
     }

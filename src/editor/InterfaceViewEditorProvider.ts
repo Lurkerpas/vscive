@@ -29,7 +29,7 @@ function shellQuote(value: string): string {
 
 function getProjectCommand(
     useTasteCliShForCommands: boolean,
-    action: 'make' | 'skeletons' | 'debugRun' | 'releaseRun',
+    action: 'make' | 'clean' | 'skeletons' | 'debugBuild' | 'releaseBuild' | 'debugRun' | 'releaseRun',
     extensionUri: vscode.Uri,
 ): string {
     if (useTasteCliShForCommands) {
@@ -37,8 +37,14 @@ function getProjectCommand(
         switch (action) {
             case 'make':
                 return `bash ${shellQuote(scriptPath)} make`;
+            case 'clean':
+                return `bash ${shellQuote(scriptPath)} make clean`;
             case 'skeletons':
                 return `bash ${shellQuote(scriptPath)} make skeletons`;
+            case 'debugBuild':
+                return `bash ${shellQuote(scriptPath)} make debug`;
+            case 'releaseBuild':
+                return `bash ${shellQuote(scriptPath)} make release`;
             case 'debugRun':
                 return `bash ${shellQuote(scriptPath)} make debug run`;
             case 'releaseRun':
@@ -49,8 +55,14 @@ function getProjectCommand(
     switch (action) {
         case 'make':
             return 'make';
+        case 'clean':
+            return 'make clean';
         case 'skeletons':
             return 'make skeletons';
+        case 'debugBuild':
+            return 'make debug';
+        case 'releaseBuild':
+            return 'make release';
         case 'debugRun':
             return 'make debug run';
         case 'releaseRun':
@@ -302,6 +314,33 @@ export class InterfaceViewEditorProvider
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build Skeletons', cwd: dirnameUri(document.uri) });
                     terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'skeletons', this.extensionUri));
+                    terminal.show();
+                    break;
+                }
+                case 'buildClean': {
+                    if (!this.getCapabilities().canBuild) {
+                        break;
+                    }
+                    const terminal = vscode.window.createTerminal({ name: 'Build Clean', cwd: dirnameUri(document.uri) });
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'clean', this.extensionUri));
+                    terminal.show();
+                    break;
+                }
+                case 'buildDebug': {
+                    if (!this.getCapabilities().canBuild) {
+                        break;
+                    }
+                    const terminal = vscode.window.createTerminal({ name: 'Build Debug', cwd: dirnameUri(document.uri) });
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'debugBuild', this.extensionUri));
+                    terminal.show();
+                    break;
+                }
+                case 'buildRelease': {
+                    if (!this.getCapabilities().canBuild) {
+                        break;
+                    }
+                    const terminal = vscode.window.createTerminal({ name: 'Build Release', cwd: dirnameUri(document.uri) });
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'releaseBuild', this.extensionUri));
                     terminal.show();
                     break;
                 }

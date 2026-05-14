@@ -255,7 +255,7 @@ function DvDiagramEditor() {
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [diagramData, setDiagramData] = useState<DvDiagramData | null>(null);
     const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
-    const [capabilities, setCapabilities] = useState<DvExtensionCapabilities>({ canBrowseBoardsFile: true });
+    const [capabilities, setCapabilities] = useState<DvExtensionCapabilities>({ canBrowseBoardsFile: true, canBuild: true });
     const [selection, setSelection] = useState<Selection>(null);
     const [waiting, setWaiting] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -515,14 +515,26 @@ function DvDiagramEditor() {
     const handlePaneContext = (event: React.MouseEvent) => {
         event.preventDefault();
         setPendingAddPosition(reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+        const items: ContextMenuItem[] = [
+            { label: 'Search Node', onClick: () => setSearchNodeOpen(true) },
+            { label: 'Add Node', onClick: () => setBoardPickerOpen(true) },
+        ];
+        if (capabilities.canBuild) {
+            items.push({
+                label: 'Build',
+                children: [
+                    { label: 'Clean', onClick: () => post({ type: 'buildDv', mode: 'clean' } satisfies DvWebviewMessage) },
+                    { label: 'Build Debug', onClick: () => post({ type: 'buildDv', mode: 'debug' } satisfies DvWebviewMessage) },
+                    { label: 'Build Release', onClick: () => post({ type: 'buildDv', mode: 'release' } satisfies DvWebviewMessage) },
+                    { label: 'Build Skeletons', onClick: () => post({ type: 'buildDv', mode: 'skeletons' } satisfies DvWebviewMessage) },
+                ],
+            });
+        }
+        items.push({ label: 'Export Diagram as Image', onClick: () => post({ type: 'requestExport' } satisfies DvWebviewMessage) });
         setContextMenu({
             x: event.clientX,
             y: event.clientY,
-            items: [
-                { label: 'Search Node', onClick: () => setSearchNodeOpen(true) },
-                { label: 'Add Node', onClick: () => setBoardPickerOpen(true) },
-                { label: 'Export Diagram as Image', onClick: () => post({ type: 'requestExport' } satisfies DvWebviewMessage) },
-            ],
+            items,
         });
     };
 
@@ -627,6 +639,10 @@ function DvDiagramEditor() {
                         <div style={ROW}><span style={LABEL}>Show Minimap</span><label><input type="checkbox" checked={options.showMinimap} onChange={event => updateOptions({ showMinimap: event.target.checked })} /> Enabled</label></div>
                         <div style={ROW}><span style={LABEL}>Show Device Names</span><label><input type="checkbox" checked={options.showDeviceNames} onChange={event => updateOptions({ showDeviceNames: event.target.checked })} /> Enabled</label></div>
                         <div style={ROW}><span style={LABEL}>Show Connection Labels</span><label><input type="checkbox" checked={options.showConnectionLabels} onChange={event => updateOptions({ showConnectionLabels: event.target.checked })} /> Enabled</label></div>
+                        <div style={ROW}>
+                            <span style={LABEL}>Use taste-cli.sh for Commands</span>
+                            <label><input type="checkbox" checked={options.useTasteCliShForCommands} onChange={event => updateOptions({ useTasteCliShForCommands: event.target.checked })} /> Run Build commands through taste-cli.sh</label>
+                        </div>
                         <div style={ROW}><span style={LABEL}>Node Font Size</span><input style={INPUT} type="number" value={options.fontSizeFn} onChange={event => updateOptions({ fontSizeFn: Math.max(20, Number(event.target.value) || 90) })} /></div>
                         <div style={ROW}><span style={LABEL}>Device Font Size</span><input style={INPUT} type="number" value={options.fontSizeIface} onChange={event => updateOptions({ fontSizeIface: Math.max(8, Number(event.target.value) || 45) })} /></div>
                         <div style={ROW}><span style={LABEL}>Connection Font Size</span><input style={INPUT} type="number" value={options.fontSizeConn} onChange={event => updateOptions({ fontSizeConn: Math.max(6, Number(event.target.value) || 11) })} /></div>
@@ -636,8 +652,9 @@ function DvDiagramEditor() {
                 {selectedNode && (
                     <div>
                         <div style={SECTION_TITLE}>Node</div>
-                        <div style={ROW}><span style={LABEL}>Name</span><input style={INPUT} value={selectedNode.name} onChange={event => post({ type: 'updateDvNode', id: selectedNode.id, name: event.target.value } satisfies DvWebviewMessage)} /></div>
                         <div style={ROW}><span style={LABEL}>Node Label</span><input style={INPUT} value={selectedNode.nodeLabel} onChange={event => post({ type: 'updateDvNode', id: selectedNode.id, nodeLabel: event.target.value } satisfies DvWebviewMessage)} /></div>
+                        <div style={ROW}><span style={LABEL}>Partition Name</span><input style={INPUT} value={selectedNode.partition.name} onChange={event => post({ type: 'updateDvNode', id: selectedNode.id, partitionName: event.target.value } satisfies DvWebviewMessage)} /></div>
+                        <div style={ROW}><span style={LABEL}>Node</span><input style={INPUT} value={selectedNode.name} onChange={event => post({ type: 'updateDvNode', id: selectedNode.id, name: event.target.value } satisfies DvWebviewMessage)} /></div>
                         <div style={ROW}><span style={LABEL}>Board Type</span><input style={INPUT} value={selectedNode.type} readOnly /></div>
                         <div style={ROW}><span style={LABEL}>Namespace</span><input style={INPUT} value={selectedNode.namespace} readOnly /></div>
                         <div style={SECTION_TITLE}>Devices</div>
@@ -765,7 +782,7 @@ function DvDiagramEditor() {
             >
                 <Background color="#313244" gap={options.snapGridSize} />
                 <Controls showInteractive={false} />
-                {options.showMinimap && <MiniMap pannable zoomable />}
+                {options.showMinimap && <MiniMap pannable zoomable position="top-right" style={{ background: '#181825' }} />}
             </ReactFlow>
         </div>
     );

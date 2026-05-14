@@ -363,6 +363,7 @@ export interface ExtensionCapabilities {
 
 export interface DvExtensionCapabilities {
     canBrowseBoardsFile: boolean;
+    canBuild: boolean;
 }
 
 export type ExtensionMessage =
@@ -411,6 +412,9 @@ export type WebviewMessage =
     | { type: 'updateFunction'; id: string; name?: string; language?: string; defaultImplementation?: string; isType?: boolean; fixedSystemElement?: boolean; contextParameters?: ContextParameterModel[]; properties?: PropertyModel[]; extraAttrs?: Record<string, string> }
     | { type: 'updateInterface'; id: string; name?: string; kind?: InterfaceKind; inheritPI?: boolean; parameters?: ParameterModel[]; extraAttrs?: Record<string, string> }
     | { type: 'buildSkeletons' }
+    | { type: 'buildClean' }
+    | { type: 'buildDebug' }
+    | { type: 'buildRelease' }
     | { type: 'build' }
     | { type: 'runDebug' }
     | { type: 'runRelease' }
@@ -431,7 +435,7 @@ export type DvWebviewMessage =
     | { type: 'nodesMoved'; moves: DvNodeMove[] }
     | { type: 'addDvNode'; id: string; boardType: string; boardName: string; rfX: number; rfY: number }
     | { type: 'deleteDvEntities'; nodeIds?: string[]; deviceIds?: string[]; connectionIds?: string[] }
-    | { type: 'updateDvNode'; id: string; name?: string; nodeLabel?: string; extraAttrs?: Record<string, string> }
+    | { type: 'updateDvNode'; id: string; name?: string; nodeLabel?: string; partitionName?: string; extraAttrs?: Record<string, string> }
     | { type: 'updateDvDevice'; nodeId: string; id: string; patch: Partial<Omit<DvDeviceModel, 'id' | 'properties' | 'extraAttrs' | 'attrOrder'>> & { extraAttrs?: Record<string, string> } }
     | { type: 'updateDvConnection'; id: string; patch: Partial<Pick<DvConnectionModel, 'name' | 'toBus'>> & { extraAttrs?: Record<string, string> } }
     | { type: 'connectDvDevices'; id: string; fromNodeId: string; fromDeviceId: string; toNodeId: string; toDeviceId: string }
@@ -439,6 +443,7 @@ export type DvWebviewMessage =
     | { type: 'undeployDvFunctions'; nodeId: string; functionIds: string[] }
     | { type: 'deployDvMessages'; connectionId: string; messageIds: string[] }
     | { type: 'undeployDvMessages'; connectionId: string; messageIds: string[] }
+    | { type: 'buildDv'; mode: 'clean' | 'skeletons' | 'debug' | 'release' }
     | { type: 'updateOptions'; options: EditorOptions }
     | { type: 'browseBoardsFile' }
     | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };

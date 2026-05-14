@@ -14,7 +14,14 @@
     "onCustomEditor:vscive.interfaceViewEditor",
     "onCustomEditor:vscive.deploymentViewEditor",
     "onCommand:vscive.createIv",
-    "onCommand:vscive.tasteInitHere"
+    "onCommand:vscive.createDv",
+    "onCommand:vscive.tasteInitHere",
+    "onCommand:vscive.tasteBuildRelease",
+    "onCommand:vscive.tasteBuildDebug",
+    "onCommand:vscive.tasteBuildClean",
+    "onCommand:vscive.tasteBuildDvRelease",
+    "onCommand:vscive.tasteBuildDvDebug",
+    "onCommand:vscive.tasteBuildSkeletons"
   ],
   "main": "./out/extension-node.js",
   "browser": "./out/extension-web.js",
@@ -25,8 +32,36 @@
         "title": "vscive: create iv"
       },
       {
+        "command": "vscive.createDv",
+        "title": "vscive: create dv"
+      },
+      {
         "command": "vscive.tasteInitHere",
         "title": "vscive: taste init here"
+      },
+      {
+        "command": "vscive.tasteBuildRelease",
+        "title": "vscive: taste build release"
+      },
+      {
+        "command": "vscive.tasteBuildDebug",
+        "title": "vscive: taste build debug"
+      },
+      {
+        "command": "vscive.tasteBuildClean",
+        "title": "vscive: taste build clean"
+      },
+      {
+        "command": "vscive.tasteBuildDvRelease",
+        "title": "vscive: taste build dv release"
+      },
+      {
+        "command": "vscive.tasteBuildDvDebug",
+        "title": "vscive: taste build dv debug"
+      },
+      {
+        "command": "vscive.tasteBuildSkeletons",
+        "title": "vscive: taste build skeletons"
       }
     ],
     "menus": {
@@ -36,7 +71,35 @@
           "when": "explorerResourceIsFolder"
         },
         {
+          "command": "vscive.createDv",
+          "when": "explorerResourceIsFolder"
+        },
+        {
           "command": "vscive.tasteInitHere",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vscive.tasteBuildRelease",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vscive.tasteBuildDebug",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vscive.tasteBuildClean",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vscive.tasteBuildDvRelease",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vscive.tasteBuildDvDebug",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vscive.tasteBuildSkeletons",
           "when": "explorerResourceIsFolder"
         }
       ]

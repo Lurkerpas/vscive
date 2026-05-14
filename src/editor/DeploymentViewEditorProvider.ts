@@ -1,8 +1,38 @@
 import * as vscode from 'vscode';
 import { log } from '../logger';
 import { DvDiagramData, DvExtensionMessage, DvWebviewMessage, EditorOptions, DEFAULT_OPTIONS } from '../model/types';
-import { dataUrlToBytes, dirnameUri, encodeUtf8, extname, joinPathSegments, serializeUriForSetting } from '../utils/platform';
+import { basename, dataUrlToBytes, dirnameUri, encodeUtf8, extname, joinPathSegments, serializeUriForSetting } from '../utils/platform';
 import { DeploymentViewDocument } from './DeploymentViewDocument';
+
+function shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function getDvBuildTarget(document: DeploymentViewDocument): string {
+    const filename = basename(document.uri);
+    if (/\.dv\.xml$/iu.test(filename)) {
+        return filename.replace(/\.dv\.xml$/iu, '');
+    }
+    if (/\.xml$/iu.test(filename)) {
+        return filename.replace(/\.xml$/iu, '');
+    }
+    return filename;
+}
+
+function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, mode: 'clean' | 'skeletons' | 'debug' | 'release', extensionUri: vscode.Uri): string {
+    const target = getDvBuildTarget(document);
+    const command = mode === 'clean'
+        ? 'make clean'
+        : mode === 'skeletons'
+            ? 'make skeletons'
+            : `make ${shellQuote(target)} ${mode}`;
+    if (!useTasteCliShForCommands) {
+        return command;
+    }
+
+    const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    return `bash ${shellQuote(scriptPath)} ${command}`;
+}
 
 export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider<DeploymentViewDocument> {
     static readonly viewType = 'vscive.deploymentViewEditor';
@@ -13,6 +43,14 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
     private readonly webviews = new Map<string, vscode.Webview>();
 
     constructor(private readonly context: vscode.ExtensionContext) {}
+
+    private getCapabilities(): { canBrowseBoardsFile: boolean; canBuild: boolean } {
+        const isWebUi = vscode.env.uiKind === vscode.UIKind.Web;
+        return {
+            canBrowseBoardsFile: true,
+            canBuild: !isWebUi,
+        };
+    }
 
     async openCustomDocument(uri: vscode.Uri): Promise<DeploymentViewDocument> {
         return DeploymentViewDocument.create(uri);
@@ -36,7 +74,7 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                 case 'ready': {
                     const options = this.getOptions();
                     await document.loadBoardsFromPath(options.boardsFilePath);
-                    webviewPanel.webview.postMessage({ type: 'capabilitiesDv', capabilities: { canBrowseBoardsFile: true } } satisfies DvExtensionMessage);
+                    webviewPanel.webview.postMessage({ type: 'capabilitiesDv', capabilities: this.getCapabilities() } satisfies DvExtensionMessage);
                     webviewPanel.webview.postMessage({ type: 'options', options } satisfies DvExtensionMessage);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
@@ -63,7 +101,7 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                 }
                 case 'updateDvNode': {
                     const before = document.snapshot();
-                    document.updateNode(message.id, { name: message.name, nodeLabel: message.nodeLabel, extraAttrs: message.extraAttrs });
+                    document.updateNode(message.id, { name: message.name, nodeLabel: message.nodeLabel, partitionName: message.partitionName, extraAttrs: message.extraAttrs });
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
                     break;
@@ -115,6 +153,24 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                     document.undeployMessages(message.connectionId, message.messageIds);
                     this.fireEdit(document, before);
                     this.sendDiagram(webviewPanel.webview, document);
+                    break;
+                }
+                case 'buildDv': {
+                    if (!this.getCapabilities().canBuild) {
+                        break;
+                    }
+                    const terminal = vscode.window.createTerminal({
+                        name: message.mode === 'release'
+                            ? 'Build Release'
+                            : message.mode === 'debug'
+                                ? 'Build Debug'
+                                : message.mode === 'clean'
+                                    ? 'Build Clean'
+                                    : 'Build Skeletons',
+                        cwd: dirnameUri(document.uri),
+                    });
+                    terminal.sendText(getDvBuildCommand(document, this.getOptions().useTasteCliShForCommands, message.mode, this.context.extensionUri));
+                    terminal.show();
                     break;
                 }
                 case 'updateOptions': {

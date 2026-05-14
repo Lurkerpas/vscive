@@ -754,24 +754,24 @@ function DiagramEditor() {
                 onClick: () => post({ type: 'pasteFunction', newId: uuid(), source: clipboard.data, rfX: rfPos.x, rfY: rfPos.y }),
             });
         }
+        const buildItems: ContextMenuItem[] = [];
+        if (capabilities.canBuild) {
+            buildItems.push(
+                { label: 'Clean', onClick: () => post({ type: 'buildClean' }) },
+                { label: 'Build Debug', onClick: () => post({ type: 'buildDebug' }) },
+                { label: 'Build Release', onClick: () => post({ type: 'buildRelease' }) },
+            );
+        }
         if (capabilities.canBuildSkeletons) {
-            items.push({
+            buildItems.push({
                 label: 'Build Skeletons',
                 onClick: () => post({ type: 'buildSkeletons' }),
             });
         }
-        if (capabilities.canBuild) {
+        if (buildItems.length > 0) {
             items.push({
                 label: 'Build',
-                onClick: () => post({ type: 'build' }),
-            });
-            items.push({
-                label: 'Run Debug',
-                onClick: () => post({ type: 'runDebug' }),
-            });
-            items.push({
-                label: 'Run Release',
-                onClick: () => post({ type: 'runRelease' }),
+                children: buildItems,
             });
         }
         items.push({

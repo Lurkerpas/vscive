@@ -2,8 +2,9 @@ import * as vscode from 'vscode';
 import { DeploymentViewEditorProvider } from './editor/DeploymentViewEditorProvider';
 import { InterfaceViewEditorProvider } from './editor/InterfaceViewEditorProvider';
 import { log, showLog } from './logger';
+import { DvModel, DEFAULT_OPTIONS, EditorOptions, IvModel } from './model/types';
+import { serializeDvXml } from './serializers/DvXmlSerializer';
 import { serializeIvXml } from './serializers/IvXmlSerializer';
-import { DEFAULT_OPTIONS, EditorOptions, IvModel } from './model/types';
 import { basename, dirnameUri, extname, joinPathSegments } from './utils/platform';
 
 function createEmptyIvModel(): IvModel {
@@ -16,6 +17,18 @@ function createEmptyIvModel(): IvModel {
         connections: [],
         comments: [],
         layers: [{ name: 'default', isVisible: true }],
+        unknownXmlAttrs: {},
+    };
+}
+
+function createEmptyDvModel(): DvModel {
+    return {
+        version: '1.0',
+        uiFile: 'deploymentview.ui.xml',
+        creatorHash: '',
+        modifierHash: '',
+        nodes: [],
+        connections: [],
         unknownXmlAttrs: {},
     };
 }
@@ -70,6 +83,25 @@ async function createIvInDirectory(resource?: vscode.Uri): Promise<void> {
     await vscode.window.showTextDocument(document, { preview: false });
 }
 
+async function createDvInDirectory(resource?: vscode.Uri): Promise<void> {
+    const targetDir = await resolveTargetDirectory(resource);
+    if (!targetDir) {
+        void vscode.window.showErrorMessage('No target directory is available for deploymentview.dv.xml.');
+        return;
+    }
+
+    const targetFile = joinPathSegments(targetDir, 'deploymentview.dv.xml');
+    if (await statOrUndefined(targetFile)) {
+        void vscode.window.showErrorMessage(`deploymentview.dv.xml already exists in ${basename(targetDir)}.`);
+        return;
+    }
+
+    const dvXml = serializeDvXml(createEmptyDvModel());
+    await vscode.workspace.fs.writeFile(targetFile, new TextEncoder().encode(dvXml));
+    const document = await vscode.workspace.openTextDocument(targetFile);
+    await vscode.window.showTextDocument(document, { preview: false });
+}
+
 function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -109,6 +141,94 @@ async function runTasteInitHere(context: vscode.ExtensionContext, resource?: vsc
     terminal.show();
 }
 
+function getWrappedCommand(context: vscode.ExtensionContext, command: string): string {
+    if (!getUseTasteCliShForCommands(context)) {
+        return command;
+    }
+
+    const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    return `bash ${shellQuote(tasteCliPath)} ${command}`;
+}
+
+async function runTerminalCommand(context: vscode.ExtensionContext, terminalName: string, command: string, resource?: vscode.Uri): Promise<void> {
+    const targetDir = await resolveTargetDirectory(resource);
+    if (!targetDir) {
+        void vscode.window.showErrorMessage(`No target directory is available for ${terminalName}.`);
+        return;
+    }
+
+    const terminal = vscode.window.createTerminal({ name: terminalName, cwd: targetDir });
+    terminal.sendText(getWrappedCommand(context, command));
+    terminal.show();
+}
+
+async function resolveDeploymentViewTarget(resource?: vscode.Uri): Promise<{ targetDir: vscode.Uri; targetName: string } | undefined> {
+    const resourceStat = resource ? await statOrUndefined(resource) : undefined;
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    const resourceIsDvFile = resourceStat?.type === vscode.FileType.File && !!resource && /\.dv\.xml$/iu.test(basename(resource));
+    if (resourceIsDvFile && resource) {
+        return { targetDir: dirnameUri(resource), targetName: basename(resource).replace(/\.dv\.xml$/iu, '') };
+    }
+
+    if (activeUri && /\.dv\.xml$/iu.test(basename(activeUri))) {
+        const activeDir = dirnameUri(activeUri);
+        const targetDir = await resolveTargetDirectory(resource);
+        if (!targetDir || activeDir.toString() === targetDir.toString()) {
+            return { targetDir: activeDir, targetName: basename(activeUri).replace(/\.dv\.xml$/iu, '') };
+        }
+    }
+
+    const targetDir = await resolveTargetDirectory(resource);
+    if (!targetDir) {
+        return undefined;
+    }
+
+    const dvFiles = (await vscode.workspace.fs.readDirectory(targetDir))
+        .filter(([name, type]) => type === vscode.FileType.File && /\.dv\.xml$/iu.test(name))
+        .map(([name]) => name);
+
+    if (dvFiles.length === 0) {
+        void vscode.window.showErrorMessage(`No *.dv.xml file was found in ${basename(targetDir)}.`);
+        return undefined;
+    }
+    if (dvFiles.length > 1) {
+        void vscode.window.showErrorMessage(`Multiple *.dv.xml files were found in ${basename(targetDir)}. Open the desired Deployment View file first, or run the command on that file.`);
+        return undefined;
+    }
+
+    return { targetDir, targetName: dvFiles[0].replace(/\.dv\.xml$/iu, '') };
+}
+
+async function runTasteBuildCommand(context: vscode.ExtensionContext, resource: vscode.Uri | undefined, action: 'release' | 'debug' | 'clean' | 'skeletons'): Promise<void> {
+    const command = action === 'release'
+        ? 'make release'
+        : action === 'debug'
+            ? 'make debug'
+            : action === 'clean'
+                ? 'make clean'
+                : 'make skeletons';
+    const terminalName = action === 'release'
+        ? 'TASTE Build Release'
+        : action === 'debug'
+            ? 'TASTE Build Debug'
+            : action === 'clean'
+                ? 'TASTE Build Clean'
+                : 'TASTE Build Skeletons';
+    await runTerminalCommand(context, terminalName, command, resource);
+}
+
+async function runTasteDvBuildCommand(context: vscode.ExtensionContext, resource: vscode.Uri | undefined, action: 'release' | 'debug'): Promise<void> {
+    const target = await resolveDeploymentViewTarget(resource);
+    if (!target) {
+        return;
+    }
+
+    const terminalName = action === 'release' ? 'TASTE Build DV Release' : 'TASTE Build DV Debug';
+    const terminal = vscode.window.createTerminal({ name: terminalName, cwd: target.targetDir });
+    terminal.sendText(getWrappedCommand(context, `make ${shellQuote(target.targetName)} ${action}`));
+    terminal.show();
+}
+
 export function activate(context: vscode.ExtensionContext): void {
     showLog();
     log(`activate — extensionUri: ${context.extensionUri.fsPath}`);
@@ -127,8 +247,29 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.commands.registerCommand('vscive.createIv', async (resource?: vscode.Uri) => {
                 await createIvInDirectory(resource);
             }),
+            vscode.commands.registerCommand('vscive.createDv', async (resource?: vscode.Uri) => {
+                await createDvInDirectory(resource);
+            }),
             vscode.commands.registerCommand('vscive.tasteInitHere', async (resource?: vscode.Uri) => {
                 await runTasteInitHere(context, resource);
+            }),
+            vscode.commands.registerCommand('vscive.tasteBuildRelease', async (resource?: vscode.Uri) => {
+                await runTasteBuildCommand(context, resource, 'release');
+            }),
+            vscode.commands.registerCommand('vscive.tasteBuildDebug', async (resource?: vscode.Uri) => {
+                await runTasteBuildCommand(context, resource, 'debug');
+            }),
+            vscode.commands.registerCommand('vscive.tasteBuildClean', async (resource?: vscode.Uri) => {
+                await runTasteBuildCommand(context, resource, 'clean');
+            }),
+            vscode.commands.registerCommand('vscive.tasteBuildDvRelease', async (resource?: vscode.Uri) => {
+                await runTasteDvBuildCommand(context, resource, 'release');
+            }),
+            vscode.commands.registerCommand('vscive.tasteBuildDvDebug', async (resource?: vscode.Uri) => {
+                await runTasteDvBuildCommand(context, resource, 'debug');
+            }),
+            vscode.commands.registerCommand('vscive.tasteBuildSkeletons', async (resource?: vscode.Uri) => {
+                await runTasteBuildCommand(context, resource, 'skeletons');
             }),
         );
         log('registerCustomEditorProvider OK');
