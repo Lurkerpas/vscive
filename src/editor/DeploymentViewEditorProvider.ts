@@ -8,6 +8,10 @@ function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function wrapTasteCliCommand(scriptPath: string, command: string, image: string): string {
+    return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)} ${command}`;
+}
+
 function getDvBuildTarget(document: DeploymentViewDocument): string {
     const filename = basename(document.uri);
     if (/\.dv\.xml$/iu.test(filename)) {
@@ -19,7 +23,7 @@ function getDvBuildTarget(document: DeploymentViewDocument): string {
     return filename;
 }
 
-function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, mode: 'clean' | 'skeletons' | 'debug' | 'release', extensionUri: vscode.Uri): string {
+function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, tasteDockerImage: string, mode: 'clean' | 'skeletons' | 'debug' | 'release', extensionUri: vscode.Uri): string {
     const target = getDvBuildTarget(document);
     const command = mode === 'clean'
         ? 'make clean'
@@ -31,7 +35,7 @@ function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCom
     }
 
     const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
-    return `bash ${shellQuote(scriptPath)} ${command}`;
+    return wrapTasteCliCommand(scriptPath, command, tasteDockerImage);
 }
 
 export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider<DeploymentViewDocument> {
@@ -169,7 +173,7 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                                     : 'Build Skeletons',
                         cwd: dirnameUri(document.uri),
                     });
-                    terminal.sendText(getDvBuildCommand(document, this.getOptions().useTasteCliShForCommands, message.mode, this.context.extensionUri));
+                    terminal.sendText(getDvBuildCommand(document, this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, message.mode, this.context.extensionUri));
                     terminal.show();
                     break;
                 }

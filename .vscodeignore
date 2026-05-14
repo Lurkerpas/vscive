@@ -4,6 +4,7 @@ src
 webview
 references
 design
+tmp
 .gitignore
 .eslintrc*
 tsconfig.json

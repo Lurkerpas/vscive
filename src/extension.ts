@@ -106,6 +106,16 @@ function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function getTasteDockerImage(context: vscode.ExtensionContext): string {
+    const saved = context.globalState.get<Partial<EditorOptions>>('editorOptions', DEFAULT_OPTIONS);
+    return saved.tasteDockerImage ?? DEFAULT_OPTIONS.tasteDockerImage;
+}
+
+function wrapTasteCliCommand(context: vscode.ExtensionContext, command: string): string {
+    const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    return `TASTE_DOCKER_IMAGE=${shellQuote(getTasteDockerImage(context))} bash ${shellQuote(tasteCliPath)} ${command}`;
+}
+
 function getUseTasteCliShForCommands(context: vscode.ExtensionContext): boolean {
     const saved = context.globalState.get<Partial<EditorOptions> & { useDockerWrapperForCommands?: boolean }>('editorOptions', DEFAULT_OPTIONS);
     const configured = vscode.workspace
@@ -125,8 +135,7 @@ function getTasteInitCommand(context: vscode.ExtensionContext): string {
         return `bash ${shellQuote(tasteInitHerePath)}`;
     }
 
-    const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
-    return `bash ${shellQuote(tasteCliPath)} bash -s -- < ${shellQuote(tasteInitHerePath)}`;
+    return wrapTasteCliCommand(context, `bash -s -- < ${shellQuote(tasteInitHerePath)}`);
 }
 
 async function runTasteInitHere(context: vscode.ExtensionContext, resource?: vscode.Uri): Promise<void> {
@@ -146,8 +155,7 @@ function getWrappedCommand(context: vscode.ExtensionContext, command: string): s
         return command;
     }
 
-    const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
-    return `bash ${shellQuote(tasteCliPath)} ${command}`;
+    return wrapTasteCliCommand(context, command);
 }
 
 async function runTerminalCommand(context: vscode.ExtensionContext, terminalName: string, command: string, resource?: vscode.Uri): Promise<void> {

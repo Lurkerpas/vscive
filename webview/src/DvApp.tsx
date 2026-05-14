@@ -643,6 +643,7 @@ function DvDiagramEditor() {
                             <span style={LABEL}>Use taste-cli.sh for Commands</span>
                             <label><input type="checkbox" checked={options.useTasteCliShForCommands} onChange={event => updateOptions({ useTasteCliShForCommands: event.target.checked })} /> Run Build commands through taste-cli.sh</label>
                         </div>
+                        <div style={ROW}><span style={LABEL}>taste-cli.sh Docker Image</span><input style={INPUT} value={options.tasteDockerImage} onChange={event => updateOptions({ tasteDockerImage: event.target.value })} /></div>
                         <div style={ROW}><span style={LABEL}>Node Font Size</span><input style={INPUT} type="number" value={options.fontSizeFn} onChange={event => updateOptions({ fontSizeFn: Math.max(20, Number(event.target.value) || 90) })} /></div>
                         <div style={ROW}><span style={LABEL}>Device Font Size</span><input style={INPUT} type="number" value={options.fontSizeIface} onChange={event => updateOptions({ fontSizeIface: Math.max(8, Number(event.target.value) || 45) })} /></div>
                         <div style={ROW}><span style={LABEL}>Connection Font Size</span><input style={INPUT} type="number" value={options.fontSizeConn} onChange={event => updateOptions({ fontSizeConn: Math.max(6, Number(event.target.value) || 11) })} /></div>

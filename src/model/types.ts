@@ -303,6 +303,8 @@ export interface AttributeSchema {
 
 // ── Editor options (persisted in extension globalState) ──────────────────
 
+export const DEFAULT_TASTE_DOCKER_IMAGE = 'gitlab.esa.int:4567/taste/taste-setup:feature-trixie';
+
 export interface EditorOptions {
     canvasColor: string;
     snapEnabled: boolean;
@@ -316,6 +318,7 @@ export interface EditorOptions {
     attrFilePath: string;
     boardsFilePath: string;
     useTasteCliShForCommands: boolean;
+    tasteDockerImage: string;
     /** Maximum number of undo steps retained per document. */
     undoDepth: number;
     showDeviceNames: boolean;
@@ -334,6 +337,7 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     attrFilePath: '',
     boardsFilePath: '',
     useTasteCliShForCommands: false,
+    tasteDockerImage: DEFAULT_TASTE_DOCKER_IMAGE,
     undoDepth: 100,
     showDeviceNames: true,
 };

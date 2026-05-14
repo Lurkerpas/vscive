@@ -168,6 +168,16 @@ export function OptionsPanel({ options, onChange, canBrowseAttrFile, onBrowseAtt
                 </label>
             </div>
 
+            <div style={ROW}>
+                <span style={LABEL}>taste-cli.sh Docker Image</span>
+                <input
+                    type="text"
+                    value={options.tasteDockerImage}
+                    onChange={e => onChange({ tasteDockerImage: e.target.value })}
+                    style={INPUT}
+                />
+            </div>
+
             <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
                 Font Sizes (flow-px)
             </div>

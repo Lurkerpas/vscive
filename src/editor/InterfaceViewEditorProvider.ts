@@ -27,8 +27,13 @@ function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function wrapTasteCliCommand(scriptPath: string, command: string, image: string): string {
+    return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)} ${command}`;
+}
+
 function getProjectCommand(
     useTasteCliShForCommands: boolean,
+    tasteDockerImage: string,
     action: 'make' | 'clean' | 'skeletons' | 'debugBuild' | 'releaseBuild' | 'debugRun' | 'releaseRun',
     extensionUri: vscode.Uri,
 ): string {
@@ -36,19 +41,19 @@ function getProjectCommand(
         const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
         switch (action) {
             case 'make':
-                return `bash ${shellQuote(scriptPath)} make`;
+                return wrapTasteCliCommand(scriptPath, 'make', tasteDockerImage);
             case 'clean':
-                return `bash ${shellQuote(scriptPath)} make clean`;
+                return wrapTasteCliCommand(scriptPath, 'make clean', tasteDockerImage);
             case 'skeletons':
-                return `bash ${shellQuote(scriptPath)} make skeletons`;
+                return wrapTasteCliCommand(scriptPath, 'make skeletons', tasteDockerImage);
             case 'debugBuild':
-                return `bash ${shellQuote(scriptPath)} make debug`;
+                return wrapTasteCliCommand(scriptPath, 'make debug', tasteDockerImage);
             case 'releaseBuild':
-                return `bash ${shellQuote(scriptPath)} make release`;
+                return wrapTasteCliCommand(scriptPath, 'make release', tasteDockerImage);
             case 'debugRun':
-                return `bash ${shellQuote(scriptPath)} make debug run`;
+                return wrapTasteCliCommand(scriptPath, 'make debug run', tasteDockerImage);
             case 'releaseRun':
-                return `bash ${shellQuote(scriptPath)} make release run`;
+                return wrapTasteCliCommand(scriptPath, 'make release run', tasteDockerImage);
         }
     }
 
@@ -313,7 +318,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build Skeletons', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'skeletons', this.extensionUri));
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'skeletons', this.extensionUri));
                     terminal.show();
                     break;
                 }
@@ -322,7 +327,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build Clean', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'clean', this.extensionUri));
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'clean', this.extensionUri));
                     terminal.show();
                     break;
                 }
@@ -331,7 +336,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build Debug', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'debugBuild', this.extensionUri));
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugBuild', this.extensionUri));
                     terminal.show();
                     break;
                 }
@@ -340,7 +345,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build Release', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'releaseBuild', this.extensionUri));
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseBuild', this.extensionUri));
                     terminal.show();
                     break;
                 }
@@ -349,7 +354,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Build', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'make', this.extensionUri));
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'make', this.extensionUri));
                     terminal.show();
                     break;
                 }
@@ -358,7 +363,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Run Debug', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'debugRun', this.extensionUri));
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugRun', this.extensionUri));
                     terminal.show();
                     break;
                 }
@@ -367,7 +372,7 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     const terminal = vscode.window.createTerminal({ name: 'Run Release', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, 'releaseRun', this.extensionUri));
+                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseRun', this.extensionUri));
                     terminal.show();
                     break;
                 }
