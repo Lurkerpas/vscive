@@ -127,6 +127,21 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         return doc;
     }
 
+    private async tryLoadUi(fileName: string): Promise<UiModel | undefined> {
+        const uiUri = joinPathSegments(dirnameUri(this.uri), fileName);
+        log(`reload: reading UI XML from ${uiUri.toString()}`);
+        try {
+            const uiBytes = await vscode.workspace.fs.readFile(uiUri);
+            const ui = parseUiXml(decodeUtf8(uiBytes));
+            populateMissingRootCoordinates(this.iv, ui);
+            log(`reload: UI parsed from ${fileName} — ${Object.keys(ui.entities).length} entities`);
+            return ui;
+        } catch (err) {
+            log(`reload: UI XML not found or failed for ${fileName} (${err})`);
+            return undefined;
+        }
+    }
+
     async reload(): Promise<void> {
         log(`reload: reading ${this.uri.toString()}`);
         const xmlBytes = await vscode.workspace.fs.readFile(this.uri);
@@ -135,26 +150,43 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
         this.iv = parseIvXml(xmlStr);
         log(`reload: IV parsed — uiFile=${this.iv.uiFile}`);
 
+        const baseName = basenameWithoutExtension(this.uri);
+        const canonicalUiFile = `${baseName}.ui.xml`;
+        const legacyUiFile = `${baseName}_ui.xml`;
+
         if (!this.iv.uiFile) {
             // Legacy format: no separate UI file, coordinates are embedded as Taste::coordinates properties
-            const baseName = basenameWithoutExtension(this.uri);
-            this.iv.uiFile = `${baseName}_ui.xml`;
+            this.iv.uiFile = canonicalUiFile;
+
+            const existingUi = await this.tryLoadUi(canonicalUiFile)
+                ?? await this.tryLoadUi(legacyUiFile);
+            if (existingUi) {
+                this.ui = existingUi;
+                log(`reload: legacy format — migrated uiFile=${this.iv.uiFile}`);
+                return;
+            }
+
             this.ui = buildUiFromIv(this.iv);
             log(`reload: legacy format — extracted ${Object.keys(this.ui.entities).length} entities, generated uiFile=${this.iv.uiFile}`);
             return;
         }
 
-        const uiUri = joinPathSegments(dirnameUri(this.uri), this.iv.uiFile);
-        log(`reload: reading UI XML from ${uiUri.toString()}`);
-        try {
-            const uiBytes = await vscode.workspace.fs.readFile(uiUri);
-            this.ui = parseUiXml(decodeUtf8(uiBytes));
-            populateMissingRootCoordinates(this.iv, this.ui);
-            log(`reload: UI parsed — ${Object.keys(this.ui.entities).length} entities`);
-        } catch (err) {
-            log(`reload: UI XML not found or failed (${err}), using empty UI`);
+        if (this.iv.uiFile === legacyUiFile) {
+            this.iv.uiFile = canonicalUiFile;
+            const migratedUi = await this.tryLoadUi(legacyUiFile)
+                ?? await this.tryLoadUi(canonicalUiFile);
+            if (migratedUi) {
+                this.ui = migratedUi;
+                log(`reload: normalized legacy uiFile to ${this.iv.uiFile}`);
+                return;
+            }
+
+            log(`reload: no legacy UI XML found, using empty canonical UI ${this.iv.uiFile}`);
             this.ui = { version: '1.0', entities: {} };
+            return;
         }
+
+        this.ui = await this.tryLoadUi(this.iv.uiFile) ?? { version: '1.0', entities: {} };
     }
 
     async loadSchema(): Promise<void> {
