@@ -23,12 +23,14 @@ function getDvBuildTarget(document: DeploymentViewDocument): string {
     return filename;
 }
 
-function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, tasteDockerImage: string, mode: 'clean' | 'skeletons' | 'debug' | 'release', extensionUri: vscode.Uri): string {
+function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, tasteDockerImage: string, mode: 'clean' | 'skeletons' | 'debug' | 'release' | 'run', extensionUri: vscode.Uri): string {
     const target = getDvBuildTarget(document);
     const command = mode === 'clean'
         ? 'make clean'
         : mode === 'skeletons'
             ? 'make skeletons'
+            : mode === 'run'
+                ? 'make run'
             : `make ${shellQuote(target)} ${mode}`;
     if (!useTasteCliShForCommands) {
         return command;
@@ -170,6 +172,8 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                                 ? 'Build Debug'
                                 : message.mode === 'clean'
                                     ? 'Build Clean'
+                                    : message.mode === 'run'
+                                        ? 'Run'
                                     : 'Build Skeletons',
                         cwd: dirnameUri(document.uri),
                     });

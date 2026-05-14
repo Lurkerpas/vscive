@@ -225,6 +225,10 @@ async function runTasteBuildCommand(context: vscode.ExtensionContext, resource: 
     await runTerminalCommand(context, terminalName, command, resource);
 }
 
+async function runTasteRunCommand(context: vscode.ExtensionContext, resource?: vscode.Uri): Promise<void> {
+    await runTerminalCommand(context, 'TASTE Run', 'make run', resource);
+}
+
 async function runTasteDvBuildCommand(context: vscode.ExtensionContext, resource: vscode.Uri | undefined, action: 'release' | 'debug'): Promise<void> {
     const target = await resolveDeploymentViewTarget(resource);
     if (!target) {
@@ -278,6 +282,9 @@ export function activate(context: vscode.ExtensionContext): void {
             }),
             vscode.commands.registerCommand('vscive.tasteBuildSkeletons', async (resource?: vscode.Uri) => {
                 await runTasteBuildCommand(context, resource, 'skeletons');
+            }),
+            vscode.commands.registerCommand('vscive.tasteRun', async (resource?: vscode.Uri) => {
+                await runTasteRunCommand(context, resource);
             }),
         );
         log('registerCustomEditorProvider OK');

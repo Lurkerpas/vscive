@@ -526,6 +526,7 @@ function DvDiagramEditor() {
                     { label: 'Clean', onClick: () => post({ type: 'buildDv', mode: 'clean' } satisfies DvWebviewMessage) },
                     { label: 'Build Debug', onClick: () => post({ type: 'buildDv', mode: 'debug' } satisfies DvWebviewMessage) },
                     { label: 'Build Release', onClick: () => post({ type: 'buildDv', mode: 'release' } satisfies DvWebviewMessage) },
+                    { label: 'Run', onClick: () => post({ type: 'buildDv', mode: 'run' } satisfies DvWebviewMessage) },
                     { label: 'Build Skeletons', onClick: () => post({ type: 'buildDv', mode: 'skeletons' } satisfies DvWebviewMessage) },
                 ],
             });

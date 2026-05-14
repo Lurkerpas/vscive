@@ -419,6 +419,7 @@ export type WebviewMessage =
     | { type: 'buildClean' }
     | { type: 'buildDebug' }
     | { type: 'buildRelease' }
+    | { type: 'buildRun' }
     | { type: 'build' }
     | { type: 'runDebug' }
     | { type: 'runRelease' }
@@ -447,7 +448,7 @@ export type DvWebviewMessage =
     | { type: 'undeployDvFunctions'; nodeId: string; functionIds: string[] }
     | { type: 'deployDvMessages'; connectionId: string; messageIds: string[] }
     | { type: 'undeployDvMessages'; connectionId: string; messageIds: string[] }
-    | { type: 'buildDv'; mode: 'clean' | 'skeletons' | 'debug' | 'release' }
+    | { type: 'buildDv'; mode: 'clean' | 'skeletons' | 'debug' | 'release' | 'run' }
     | { type: 'updateOptions'; options: EditorOptions }
     | { type: 'browseBoardsFile' }
     | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };

@@ -760,6 +760,7 @@ function DiagramEditor() {
                 { label: 'Clean', onClick: () => post({ type: 'buildClean' }) },
                 { label: 'Build Debug', onClick: () => post({ type: 'buildDebug' }) },
                 { label: 'Build Release', onClick: () => post({ type: 'buildRelease' }) },
+                { label: 'Run', onClick: () => post({ type: 'buildRun' }) },
             );
         }
         if (capabilities.canBuildSkeletons) {
