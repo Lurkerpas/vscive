@@ -12,6 +12,7 @@
   ],
   "activationEvents": [
     "onCustomEditor:vscive.interfaceViewEditor",
+    "onCustomEditor:vscive.deploymentViewEditor",
     "onCommand:vscive.createIv",
     "onCommand:vscive.tasteInitHere"
   ],
@@ -50,6 +51,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "vscive.deploymentViewEditor",
+        "displayName": "Deployment View Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.dv.xml"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "configuration": {
@@ -59,6 +70,11 @@
           "type": "string",
           "default": "",
           "description": "Path or URI to the Attributes file. On desktop, empty defaults to $HOME/.local/default_attributes.xml."
+        },
+        "vscive.boardsFilePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path or URI to the Boards file used by the Deployment View editor."
         },
         "vscive.useTasteCliShForCommands": {
           "type": "boolean",

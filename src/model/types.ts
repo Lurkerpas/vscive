@@ -115,6 +115,133 @@ export interface IvModel {
     unknownXmlAttrs: Record<string, string>;
 }
 
+export interface DvFunctionModel {
+    id: string;
+    name: string;
+    path: string;
+    properties: PropertyModel[];
+    extraAttrs: Record<string, string>;
+}
+
+export interface DvPartitionModel {
+    id: string;
+    name: string;
+    functions: DvFunctionModel[];
+    properties: PropertyModel[];
+    extraAttrs: Record<string, string>;
+}
+
+export interface DvDeviceModel {
+    id: string;
+    name: string;
+    port: string;
+    requiresBusAccess: string;
+    packetizer: string;
+    config: string;
+    asn1file: string;
+    asn1type: string;
+    asn1module: string;
+    implExtends: string;
+    extends: string;
+    namespace: string;
+    busNamespace: string;
+    properties: PropertyModel[];
+    extraAttrs: Record<string, string>;
+    attrOrder?: string[];
+}
+
+export interface DvNodeModel {
+    id: string;
+    name: string;
+    type: string;
+    nodeLabel: string;
+    namespace: string;
+    partition: DvPartitionModel;
+    devices: DvDeviceModel[];
+    properties: PropertyModel[];
+    extraAttrs: Record<string, string>;
+}
+
+export interface DvMessageModel {
+    id: string;
+    name: string;
+    fromFunction: string;
+    fromInterface: string;
+    toFunction: string;
+    toInterface: string;
+    properties: PropertyModel[];
+    extraAttrs: Record<string, string>;
+}
+
+export interface DvConnectionModel {
+    id: string;
+    name: string;
+    fromNode: string;
+    fromPort: string;
+    toBus: string;
+    toNode: string;
+    toPort: string;
+    messages: DvMessageModel[];
+    properties: PropertyModel[];
+    extraAttrs: Record<string, string>;
+}
+
+export interface DvModel {
+    version: string;
+    uiFile: string;
+    creatorHash: string;
+    modifierHash: string;
+    nodes: DvNodeModel[];
+    connections: DvConnectionModel[];
+    unknownXmlAttrs: Record<string, string>;
+}
+
+export interface BoardPortModel {
+    name: string;
+    namespace: string;
+    busNamespace: string;
+    extends: string;
+    implExtends: string;
+    asn1file: string;
+    asn1module: string;
+    asn1type: string;
+    requiresBusAccess: string;
+    config: string;
+    packetizer: string;
+    extraAttrs: Record<string, string>;
+}
+
+export interface BoardModel {
+    name: string;
+    type: string;
+    namespace: string;
+    ports: BoardPortModel[];
+    extraAttrs: Record<string, string>;
+}
+
+export interface BoardsFileModel {
+    boards: BoardModel[];
+}
+
+export interface DvAvailableFunction {
+    id: string;
+    name: string;
+    path: string;
+    deployedNodeId?: string;
+    deployedNodeName?: string;
+}
+
+export interface DvAvailableMessage {
+    key: string;
+    name: string;
+    fromFunction: string;
+    fromInterface: string;
+    toFunction: string;
+    toInterface: string;
+    deployedConnectionId?: string;
+    deployedConnectionName?: string;
+}
+
 // ── UI / layout model ──────────────────────────────────────────────────────
 
 export interface EntityLayout {
@@ -185,9 +312,11 @@ export interface EditorOptions {
     fontSizeIface: number;
     fontSizeConn: number;
     attrFilePath: string;
+    boardsFilePath: string;
     useTasteCliShForCommands: boolean;
     /** Maximum number of undo steps retained per document. */
     undoDepth: number;
+    showDeviceNames: boolean;
 }
 
 export const DEFAULT_OPTIONS: EditorOptions = {
@@ -201,8 +330,10 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     fontSizeIface: 45,
     fontSizeConn: 11,
     attrFilePath: '',
+    boardsFilePath: '',
     useTasteCliShForCommands: false,
     undoDepth: 100,
+    showDeviceNames: true,
 };
 
 // ── postMessage protocol ───────────────────────────────────────────────────
@@ -213,6 +344,14 @@ export interface DiagramData {
     schema: AttributeSchema;
 }
 
+export interface DvDiagramData {
+    dv: DvModel;
+    ui: UiModel;
+    boards: BoardsFileModel;
+    availableFunctions: DvAvailableFunction[];
+    availableMessages: DvAvailableMessage[];
+}
+
 export interface ExtensionCapabilities {
     canBuild: boolean;
     canBuildSkeletons: boolean;
@@ -220,10 +359,20 @@ export interface ExtensionCapabilities {
     canEditFunction: boolean;
 }
 
+export interface DvExtensionCapabilities {
+    canBrowseBoardsFile: boolean;
+}
+
 export type ExtensionMessage =
     | { type: 'load'; data: DiagramData }
     | { type: 'options'; options: EditorOptions }
     | { type: 'capabilities'; capabilities: ExtensionCapabilities }
+    | { type: 'requestExport'; format: 'png' | 'svg' };
+
+export type DvExtensionMessage =
+    | { type: 'loadDv'; data: DvDiagramData }
+    | { type: 'options'; options: EditorOptions }
+    | { type: 'capabilitiesDv'; capabilities: DvExtensionCapabilities }
     | { type: 'requestExport'; format: 'png' | 'svg' };
 
 /** A single node-move record sent from the webview after drag-stop. */
@@ -236,6 +385,16 @@ export interface NodeMove {
     w: number;
     h: number;
     /** Parent function id — present for nested functions and all interface nodes. */
+    parentId?: string;
+}
+
+export interface DvNodeMove {
+    id: string;
+    kind: 'node' | 'device';
+    x: number;
+    y: number;
+    w: number;
+    h: number;
     parentId?: string;
 }
 
@@ -263,3 +422,21 @@ export type WebviewMessage =
     | { type: 'pasteInterface'; newId: string; source: InterfaceModel; funcId: string; relRfX: number; relRfY: number }
     | { type: 'reparentFunction'; id: string; newParentId?: string }
     | { type: 'updateConnectionWaypoints'; id: string; waypoints: Array<{x: number; y: number}> };
+
+export type DvWebviewMessage =
+    | { type: 'ready' }
+    | { type: 'requestExport' }
+    | { type: 'nodesMoved'; moves: DvNodeMove[] }
+    | { type: 'addDvNode'; id: string; boardType: string; boardName: string; rfX: number; rfY: number }
+    | { type: 'deleteDvEntities'; nodeIds?: string[]; deviceIds?: string[]; connectionIds?: string[] }
+    | { type: 'updateDvNode'; id: string; name?: string; nodeLabel?: string; extraAttrs?: Record<string, string> }
+    | { type: 'updateDvDevice'; nodeId: string; id: string; patch: Partial<Omit<DvDeviceModel, 'id' | 'properties' | 'extraAttrs' | 'attrOrder'>> & { extraAttrs?: Record<string, string> } }
+    | { type: 'updateDvConnection'; id: string; patch: Partial<Pick<DvConnectionModel, 'name' | 'toBus'>> & { extraAttrs?: Record<string, string> } }
+    | { type: 'connectDvDevices'; id: string; fromNodeId: string; fromDeviceId: string; toNodeId: string; toDeviceId: string }
+    | { type: 'deployDvFunctions'; nodeId: string; functionIds: string[] }
+    | { type: 'undeployDvFunctions'; nodeId: string; functionIds: string[] }
+    | { type: 'deployDvMessages'; connectionId: string; messageIds: string[] }
+    | { type: 'undeployDvMessages'; connectionId: string; messageIds: string[] }
+    | { type: 'updateOptions'; options: EditorOptions }
+    | { type: 'browseBoardsFile' }
+    | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };

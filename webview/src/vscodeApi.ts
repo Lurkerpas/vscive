@@ -1,4 +1,4 @@
-import { WebviewMessage } from '../../src/model/types';
+import { DvWebviewMessage, WebviewMessage } from '../../src/model/types';
 
 declare const acquireVsCodeApi: () => { postMessage: (msg: unknown) => void };
 
@@ -7,6 +7,6 @@ try { _api = acquireVsCodeApi(); } catch { /* running outside VS Code */ }
 
 export const vscodeApi = _api;
 
-export function post(msg: WebviewMessage): void {
+export function post(msg: WebviewMessage | DvWebviewMessage): void {
     _api?.postMessage(msg);
 }

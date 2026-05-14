@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { DeploymentViewEditorProvider } from './editor/DeploymentViewEditorProvider';
 import { InterfaceViewEditorProvider } from './editor/InterfaceViewEditorProvider';
 import { log, showLog } from './logger';
 import { serializeIvXml } from './serializers/IvXmlSerializer';
@@ -116,6 +117,11 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.window.registerCustomEditorProvider(
                 InterfaceViewEditorProvider.viewType,
                 new InterfaceViewEditorProvider(context),
+                { supportsMultipleEditorsPerDocument: false },
+            ),
+            vscode.window.registerCustomEditorProvider(
+                DeploymentViewEditorProvider.viewType,
+                new DeploymentViewEditorProvider(context),
                 { supportsMultipleEditorsPerDocument: false },
             ),
             vscode.commands.registerCommand('vscive.createIv', async (resource?: vscode.Uri) => {
