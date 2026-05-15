@@ -70,6 +70,8 @@ const INPUT: React.CSSProperties = {
 const BTN: React.CSSProperties = { background: '#313244', color: '#cdd6f4', border: '1px solid #45475a', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', fontSize: 11 };
 const BTN_PRIMARY: React.CSSProperties = { ...BTN, background: '#89b4fa', color: '#1e1e2e', borderColor: '#89b4fa' };
 const LIST: React.CSSProperties = { border: '1px solid #313244', borderRadius: 6, overflow: 'auto', maxHeight: 260 };
+const DETAILS: React.CSSProperties = { marginTop: 12, border: '1px solid #313244', borderRadius: 6, overflow: 'hidden' };
+const SUMMARY: React.CSSProperties = { cursor: 'pointer', padding: '8px 10px', color: '#89b4fa', fontSize: 11, fontWeight: 'bold', background: '#11111b' };
 
 const DV_NODE_HEADER_FONT_SIZE = 12;
 const DV_NODE_BODY_FONT_SIZE = 11;
@@ -99,6 +101,18 @@ function snapToGrid(value: number, grid: number): number {
     return Math.round(value / grid) * grid;
 }
 
+function ColorInputRow({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+    return (
+        <div style={ROW}>
+            <span style={LABEL}>{label}</span>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <input type="color" value={value} onChange={event => onChange(event.target.value)} style={{ width: 36, height: 24, padding: 0, border: 'none', cursor: 'pointer', background: 'none' }} />
+                <input type="text" value={value} onChange={event => onChange(event.target.value)} style={{ ...INPUT, flex: 1 }} />
+            </div>
+        </div>
+    );
+}
+
 function applyDvNodePresentation(nodes: Node[], options: EditorOptions, locked: boolean): Node[] {
     const headerFontSize = dvNodeHeaderFontSize(options);
     const bodyFontSize = dvNodeBodyFontSize(options);
@@ -108,7 +122,7 @@ function applyDvNodePresentation(nodes: Node[], options: EditorOptions, locked: 
         if (node.type === 'dvNode') {
             return {
                 ...node,
-                data: { ...(node.data as object), headerFontSize, bodyFontSize, locked },
+                data: { ...(node.data as object), headerFontSize, bodyFontSize, locked, nodeColor: options.dvNodeColor, nodeFontColor: options.dvNodeFontColor },
             };
         }
 
@@ -124,12 +138,15 @@ function applyDvNodePresentation(nodes: Node[], options: EditorOptions, locked: 
 }
 
 function DvNodeRenderer({ data, selected }: NodeProps) {
-    const typedData = data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; locked?: boolean };
+    const typedData = data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; locked?: boolean; nodeColor?: string; nodeFontColor?: string };
     const headerFontSize = typedData.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
     const bodyFontSize = typedData.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
+    const nodeColor = typedData.nodeColor ?? '#313244';
+    const nodeFontColor = typedData.nodeFontColor ?? '#cdd6f4';
+    const borderColor = selected ? '#89b4fa' : nodeColor;
 
     return (
-        <div style={{ width: '100%', height: '100%', background: '#1e1e2e', border: '2px solid #6c7086', borderRadius: 8, color: '#cdd6f4', boxSizing: 'border-box' }}>
+        <div style={{ width: '100%', height: '100%', background: '#1e1e2e', border: `2px solid ${borderColor}`, borderRadius: 8, color: nodeFontColor, boxSizing: 'border-box' }}>
             <NodeResizer
                 isVisible={selected && !typedData.locked}
                 minWidth={200}
@@ -137,14 +154,14 @@ function DvNodeRenderer({ data, selected }: NodeProps) {
                 lineStyle={{ borderColor: '#89b4fa', borderWidth: 1 }}
                 handleStyle={{ width: 10, height: 10, background: '#89b4fa', borderRadius: 2 }}
             />
-            <div style={{ background: '#313244', padding: '8px 10px', borderTopLeftRadius: 6, borderTopRightRadius: 6, fontWeight: 'bold', fontFamily: 'sans-serif', fontSize: headerFontSize, lineHeight: 1.2 }}>
+            <div style={{ background: nodeColor, padding: '8px 10px', borderTopLeftRadius: 6, borderTopRightRadius: 6, fontWeight: 'bold', fontFamily: 'sans-serif', fontSize: headerFontSize, lineHeight: 1.2, color: nodeFontColor }}>
                 {typedData.node.name} [{typedData.node.type || typedData.node.namespace || 'Board'}]
             </div>
             <div style={{ padding: 10, fontSize: bodyFontSize, fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', gap: 6, lineHeight: 1.25 }}>
                 <div>Partition: {typedData.node.partition.name || 'Partition_1'}</div>
                 <div>Functions: {typedData.node.partition.functions.length}</div>
-                <div style={{ color: '#a6adc8' }}>{typedData.summary || 'No deployed functions'}</div>
-                {typedData.overflow > 0 && <div style={{ color: '#89b4fa' }}>+{typedData.overflow} more</div>}
+                <div style={{ color: nodeFontColor, opacity: 0.8 }}>{typedData.summary || 'No deployed functions'}</div>
+                {typedData.overflow > 0 && <div style={{ color: nodeFontColor, opacity: 0.9 }}>+{typedData.overflow} more</div>}
             </div>
         </div>
     );
@@ -738,7 +755,6 @@ function DvDiagramEditor() {
                                 <button style={BTN} disabled={!capabilities.canBrowseBoardsFile} onClick={() => post({ type: 'browseBoardsFile' } satisfies DvWebviewMessage)}>…</button>
                             </div>
                         </div>
-                        <div style={ROW}><span style={LABEL}>Canvas Color</span><input style={INPUT} value={options.canvasColor} onChange={event => updateOptions({ canvasColor: event.target.value })} /></div>
                         <div style={ROW}><span style={LABEL}>Snap to Grid</span><label><input type="checkbox" checked={options.snapEnabled} onChange={event => updateOptions({ snapEnabled: event.target.checked })} /> Enabled</label></div>
                         <div style={ROW}><span style={LABEL}>Snap Grid Size (flow-px)</span><input style={INPUT} type="number" min={4} max={500} value={options.snapGridSize} onChange={event => updateOptions({ snapGridSize: Math.max(4, Number(event.target.value) || 20) })} /></div>
                         <div style={ROW}><span style={LABEL}>Show Minimap</span><label><input type="checkbox" checked={options.showMinimap} onChange={event => updateOptions({ showMinimap: event.target.checked })} /> Enabled</label></div>
@@ -749,9 +765,18 @@ function DvDiagramEditor() {
                             <label><input type="checkbox" checked={options.useTasteCliShForCommands} onChange={event => updateOptions({ useTasteCliShForCommands: event.target.checked })} /> Run Build commands through taste-cli.sh</label>
                         </div>
                         <div style={ROW}><span style={LABEL}>taste-cli.sh Docker Image</span><input style={INPUT} value={options.tasteDockerImage} onChange={event => updateOptions({ tasteDockerImage: event.target.value })} /></div>
-                        <div style={ROW}><span style={LABEL}>Node Font Size</span><input style={INPUT} type="number" value={options.fontSizeFn} onChange={event => updateOptions({ fontSizeFn: Math.max(20, Number(event.target.value) || 90) })} /></div>
-                        <div style={ROW}><span style={LABEL}>Device Font Size</span><input style={INPUT} type="number" value={options.fontSizeIface} onChange={event => updateOptions({ fontSizeIface: Math.max(8, Number(event.target.value) || 45) })} /></div>
-                        <div style={ROW}><span style={LABEL}>Connection Font Size</span><input style={INPUT} type="number" value={options.fontSizeConn} onChange={event => updateOptions({ fontSizeConn: Math.max(6, Number(event.target.value) || 11) })} /></div>
+                        <details open style={DETAILS}>
+                            <summary style={SUMMARY}>Appearance</summary>
+                            <div style={{ padding: '0 10px 10px' }}>
+                                <ColorInputRow label="Canvas Color" value={options.canvasColor} onChange={value => updateOptions({ canvasColor: value })} />
+                                <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>Font Sizes (flow-px)</div>
+                                <div style={ROW}><span style={LABEL}>Node Font Size</span><input style={INPUT} type="number" value={options.fontSizeFn} onChange={event => updateOptions({ fontSizeFn: Math.max(20, Number(event.target.value) || 90) })} /></div>
+                                <div style={ROW}><span style={LABEL}>Device Font Size</span><input style={INPUT} type="number" value={options.fontSizeIface} onChange={event => updateOptions({ fontSizeIface: Math.max(8, Number(event.target.value) || 45) })} /></div>
+                                <div style={ROW}><span style={LABEL}>Connection Font Size</span><input style={INPUT} type="number" value={options.fontSizeConn} onChange={event => updateOptions({ fontSizeConn: Math.max(6, Number(event.target.value) || 11) })} /></div>
+                                <ColorInputRow label="Node Color" value={options.dvNodeColor} onChange={value => updateOptions({ dvNodeColor: value })} />
+                                <ColorInputRow label="Node Font Color" value={options.dvNodeFontColor} onChange={value => updateOptions({ dvNodeFontColor: value })} />
+                            </div>
+                        </details>
                     </div>
                 )}
 
@@ -959,13 +984,15 @@ function buildSvg(nodes: Node[], edges: Edge[], options: EditorOptions): string 
         if (node.type === 'dvNode') {
             const widthPx = Number(node.width ?? node.style?.width ?? DV_NODE_WIDTH);
             const heightPx = Number(node.height ?? node.style?.height ?? DV_NODE_HEIGHT);
-            const data = node.data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number };
+            const data = node.data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; nodeColor?: string; nodeFontColor?: string };
             const headerFontSize = data.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
             const bodyFontSize = data.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
-            parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="${heightPx}" rx="8" fill="#1e1e2e" stroke="#6c7086" stroke-width="2"/>`);
-            parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="34" rx="8" fill="#313244"/>`);
-            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 22}" fill="#cdd6f4" font-size="${headerFontSize}" font-family="sans-serif">${escapeXml(`${data.node.name} [${data.node.type || data.node.namespace || 'Board'}]`)}</text>`);
-            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 56}" fill="#a6adc8" font-size="${bodyFontSize}" font-family="sans-serif">Functions: ${data.node.partition.functions.length}</text>`);
+            const nodeColor = data.nodeColor ?? options.dvNodeColor;
+            const nodeFontColor = data.nodeFontColor ?? options.dvNodeFontColor;
+            parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="${heightPx}" rx="8" fill="#1e1e2e" stroke="${nodeColor}" stroke-width="2"/>`);
+            parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="34" rx="8" fill="${nodeColor}"/>`);
+            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 22}" fill="${nodeFontColor}" font-size="${headerFontSize}" font-family="sans-serif">${escapeXml(`${data.node.name} [${data.node.type || data.node.namespace || 'Board'}]`)}</text>`);
+            parts.push(`<text x="${pos.x + 10}" y="${pos.y + 56}" fill="${nodeFontColor}" font-size="${bodyFontSize}" font-family="sans-serif">Functions: ${data.node.partition.functions.length}</text>`);
         } else {
             const data = node.data as { device: DvDeviceModel; showName?: boolean; fontSizeDevice?: number };
             parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${DV_DEVICE_WIDTH}" height="${DV_DEVICE_HEIGHT}" rx="14" fill="#313244" stroke="#6c7086" stroke-width="1"/>`);

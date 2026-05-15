@@ -39,6 +39,44 @@ const INPUT: React.CSSProperties = {
     boxSizing: 'border-box',
 };
 
+const DETAILS: React.CSSProperties = {
+    marginTop: 12,
+    border: '1px solid #313244',
+    borderRadius: 6,
+    overflow: 'hidden',
+};
+
+const SUMMARY: React.CSSProperties = {
+    cursor: 'pointer',
+    padding: '8px 10px',
+    color: '#89b4fa',
+    fontSize: 11,
+    fontWeight: 'bold',
+    background: '#11111b',
+};
+
+function ColorInputRow({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+    return (
+        <div style={ROW}>
+            <span style={LABEL}>{label}</span>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <input
+                    type="color"
+                    value={value}
+                    onChange={event => onChange(event.target.value)}
+                    style={{ width: 36, height: 24, padding: 0, border: 'none', cursor: 'pointer', background: 'none' }}
+                />
+                <input
+                    type="text"
+                    value={value}
+                    onChange={event => onChange(event.target.value)}
+                    style={{ ...INPUT, flex: 1 }}
+                />
+            </div>
+        </div>
+    );
+}
+
 interface OptionsPanelProps {
     options: EditorOptions;
     onChange: (patch: Partial<EditorOptions>) => void;
@@ -71,24 +109,6 @@ export function OptionsPanel({ options, onChange, canBrowseAttrFile, onBrowseAtt
                     >…</button>
                 </div>
                 <span style={{ color: '#6c7086', fontSize: 10 }}>Changing reloads the diagram schema.</span>
-            </div>
-
-            <div style={ROW}>
-                <span style={LABEL}>Canvas Background Color</span>
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <input
-                        type="color"
-                        value={options.canvasColor}
-                        onChange={e => onChange({ canvasColor: e.target.value })}
-                        style={{ width: 36, height: 24, padding: 0, border: 'none', cursor: 'pointer', background: 'none' }}
-                    />
-                    <input
-                        type="text"
-                        value={options.canvasColor}
-                        onChange={e => onChange({ canvasColor: e.target.value })}
-                        style={{ ...INPUT, flex: 1 }}
-                    />
-                </div>
             </div>
 
             <div style={ROW}>
@@ -178,51 +198,6 @@ export function OptionsPanel({ options, onChange, canBrowseAttrFile, onBrowseAtt
                 />
             </div>
 
-            <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
-                Font Sizes (flow-px)
-            </div>
-
-            <div style={ROW}>
-                <span style={LABEL}>Function Header</span>
-                <input
-                    type="number"
-                    min={20}
-                    max={300}
-                    value={options.fontSizeFn}
-                    onChange={e => onChange({ fontSizeFn: Math.max(20, Number(e.target.value) || 90) })}
-                    style={INPUT}
-                />
-            </div>
-
-            <div style={ROW}>
-                <span style={LABEL}>Interface Label</span>
-                <input
-                    type="number"
-                    min={10}
-                    max={200}
-                    value={options.fontSizeIface}
-                    onChange={e => onChange({ fontSizeIface: Math.max(10, Number(e.target.value) || 45) })}
-                    style={INPUT}
-                />
-            </div>
-
-            <div style={ROW}>
-                <span style={LABEL}>Connection Label</span>
-                <input
-                    type="number"
-                    min={6}
-                    max={100}
-                    value={options.fontSizeConn}
-                    onChange={e => onChange({ fontSizeConn: Math.max(6, Number(e.target.value) || 11) })}
-                    style={INPUT}
-                />
-            </div>
-
-            <div style={{ color: '#a6adc8', fontSize: 10, marginTop: 16, lineHeight: 1.5 }}>
-                Font sizes are in diagram space units (same scale as node dimensions).
-                Reload diagram after changing to see effect on connections.
-            </div>
-
             <div style={{ color: '#89b4fa', marginTop: 12, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
                 History
             </div>
@@ -239,6 +214,65 @@ export function OptionsPanel({ options, onChange, canBrowseAttrFile, onBrowseAtt
                 />
                 <span style={{ color: '#6c7086', fontSize: 10 }}>Maximum number of undo steps retained.</span>
             </div>
+
+            <details open style={DETAILS}>
+                <summary style={SUMMARY}>Appearance</summary>
+                <div style={{ padding: '0 10px 10px' }}>
+                    <ColorInputRow label="Canvas Background Color" value={options.canvasColor} onChange={value => onChange({ canvasColor: value })} />
+
+                    <div style={{ color: '#89b4fa', marginTop: 8, marginBottom: 4, fontSize: 11, fontWeight: 'bold' }}>
+                        Font Sizes (flow-px)
+                    </div>
+
+                    <div style={ROW}>
+                        <span style={LABEL}>Function Header</span>
+                        <input
+                            type="number"
+                            min={20}
+                            max={300}
+                            value={options.fontSizeFn}
+                            onChange={e => onChange({ fontSizeFn: Math.max(20, Number(e.target.value) || 90) })}
+                            style={INPUT}
+                        />
+                    </div>
+
+                    <div style={ROW}>
+                        <span style={LABEL}>Interface Label</span>
+                        <input
+                            type="number"
+                            min={10}
+                            max={200}
+                            value={options.fontSizeIface}
+                            onChange={e => onChange({ fontSizeIface: Math.max(10, Number(e.target.value) || 45) })}
+                            style={INPUT}
+                        />
+                    </div>
+
+                    <div style={ROW}>
+                        <span style={LABEL}>Connection Label</span>
+                        <input
+                            type="number"
+                            min={6}
+                            max={100}
+                            value={options.fontSizeConn}
+                            onChange={e => onChange({ fontSizeConn: Math.max(6, Number(e.target.value) || 11) })}
+                            style={INPUT}
+                        />
+                    </div>
+
+                    <ColorInputRow label="Function Color" value={options.ivFunctionColor} onChange={value => onChange({ ivFunctionColor: value })} />
+                    <ColorInputRow label="Function Font Color" value={options.ivFunctionFontColor} onChange={value => onChange({ ivFunctionFontColor: value })} />
+                    <ColorInputRow label="Interface Color" value={options.ivInterfaceColor} onChange={value => onChange({ ivInterfaceColor: value })} />
+                    <ColorInputRow label="Interface Font Color" value={options.ivInterfaceFontColor} onChange={value => onChange({ ivInterfaceFontColor: value })} />
+                    <ColorInputRow label="Connection Color" value={options.ivConnectionColor} onChange={value => onChange({ ivConnectionColor: value })} />
+                    <ColorInputRow label="Connection Font Color" value={options.ivConnectionFontColor} onChange={value => onChange({ ivConnectionFontColor: value })} />
+
+                    <div style={{ color: '#a6adc8', fontSize: 10, marginTop: 16, lineHeight: 1.5 }}>
+                        Font sizes are in diagram space units (same scale as node dimensions).
+                        Reload diagram after changing to see effect on connections.
+                    </div>
+                </div>
+            </details>
         </div>
     );
 }

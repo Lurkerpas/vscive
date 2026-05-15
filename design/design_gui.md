@@ -88,16 +88,24 @@ Color picker shall allow to select a color, using:
 
 When Show Options is clicked, the properties panel shall show the following settings:
 - Path to the attributes file,
-- Canvas color,
 - Snap to Grid toggle,
 - Snap grid size,
 - Show minimap toggle,
 - Show interface names toggle,
 - Show connection labels toggle,
+- Undo / redo depth.
+
+Appearance-related settings shall be grouped at the end of the options panel under a collapsible Appearance section. That section shall contain:
+- Canvas color,
 - Function name font size,
 - Interface name font size,
 - Connection name font size,
-- Undo / redo depth.
+- default Function color,
+- default Function font color,
+- default Interface color,
+- default Interface font color,
+- default Connection color,
+- default Connection font color.
 
 When Function is selected, the properties panel shall show:
 - editable typed fields for name, language, default implementation, is type, and fixed system element,
@@ -184,16 +192,20 @@ Right clicking on a Connection line shall present a menu with the following opti
 
 When Show Options is clicked, the properties panel shall show the following settings:
 - Path to the boards file,
-- Canvas color,
 - Snap to Grid toggle,
 - Snap grid size,
 - Show minimap toggle,
 - Show device names toggle,
 - Show connection labels toggle,
+- Undo / redo depth.
+
+Appearance-related settings shall be grouped at the end of the options panel under a collapsible Appearance section. That section shall contain:
+- Canvas color,
 - Node name font size,
 - Device name font size,
 - Connection name font size,
-- Undo / redo depth.
+- default Node color,
+- default Node font color.
 
 When no entity is selected, the properties panel may additionally show a compact summary of all Nodes, all undeployed Functions, and all Connections, but without direct editing controls.
 

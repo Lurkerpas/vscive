@@ -11,13 +11,17 @@ interface FunctionNodeData {
     isConnTarget?: boolean;
     fontSizeFn?: number;
     fontScale?: number;
+    functionColor?: string;
+    functionFontColor?: string;
     [key: string]: unknown;
 }
 
 export function FunctionNode({ data, selected }: NodeProps) {
     const d = data as FunctionNodeData;
     const caption = d.language ? `${d.label} [${d.language}]` : d.label;
-    const borderColor = d.isConnSrc ? '#a6e3a1' : selected ? '#89b4fa' : '#6c7086';
+    const functionColor = d.functionColor ?? '#313244';
+    const functionFontColor = d.functionFontColor ?? '#cdd6f4';
+    const borderColor = d.isConnSrc ? '#a6e3a1' : selected ? '#89b4fa' : functionColor;
     const fontScale = Math.max(d.fontScale ?? 1, 0.05);
     const headerPaddingY = Math.max(2, 6 * fontScale);
     const headerPaddingX = Math.max(4, 10 * fontScale);
@@ -30,7 +34,7 @@ export function FunctionNode({ data, selected }: NodeProps) {
             border: `${borderWidth}px solid ${borderColor}`,
             borderRadius: 6,
             background: '#1e1e2e',
-            color: '#cdd6f4',
+            color: functionFontColor,
             fontFamily: 'sans-serif',
             boxSizing: 'border-box',
             display: 'flex',
@@ -43,11 +47,10 @@ export function FunctionNode({ data, selected }: NodeProps) {
                 lineStyle={{ borderColor: '#89b4fa', borderWidth: 1 }}
                 handleStyle={{ width: 10, height: 10, background: '#89b4fa', borderRadius: 2 }}
             />
-            {/* Header */}
             <div style={{
-                background: '#313244',
+                background: functionColor,
                 padding: `${headerPaddingY}px ${headerPaddingX}px`,
-                borderBottom: '1px solid #6c7086',
+                borderBottom: `1px solid ${borderColor}`,
                 borderRadius: `${headerRadius}px ${headerRadius}px 0 0`,
                 fontWeight: 700,
                 fontSize: d.fontSizeFn ?? 90,
@@ -55,12 +58,11 @@ export function FunctionNode({ data, selected }: NodeProps) {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 letterSpacing: 0.3 * fontScale,
+                color: functionFontColor,
             }}>
                 {caption}
             </div>
-            {/* Body — reserved for nested functions */}
             <div style={{ flex: 1, overflow: 'hidden' }} />
-            {/* Hidden handles — connections go through interface nodes */}
             <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
             <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
         </div>

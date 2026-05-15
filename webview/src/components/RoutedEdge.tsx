@@ -43,6 +43,8 @@ export function RoutedEdge({
         canvasColor?: string;
         showConnectionLabels?: boolean;
         waypointSize?: number;
+        connectionColor?: string;
+        connectionFontColor?: string;
     }) ?? {};
     const waypoints: Waypoint[] = edgeData.waypoints ?? [];
     const locked = edgeData.locked ?? false;
@@ -50,6 +52,8 @@ export function RoutedEdge({
     const labelBg = edgeData.canvasColor ?? '#1e1e2e';
     const showConnectionLabels = edgeData.showConnectionLabels ?? true;
     const waypointSize = Math.max(edgeData.waypointSize ?? WAYPOINT_NODE_SIZE, 6);
+    const connectionColor = edgeData.connectionColor ?? '#6c7086';
+    const connectionFontColor = edgeData.connectionFontColor ?? '#cdd6f4';
 
     // Build polyline path: source → waypoints → target
     const allPts = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }];
@@ -115,7 +119,7 @@ export function RoutedEdge({
             <BaseEdge
                 id={id}
                 path={pathD}
-                style={{ ...style, stroke: selected ? '#89b4fa' : undefined }}
+                style={{ ...style, stroke: selected ? '#89b4fa' : connectionColor }}
             />
             {showConnectionLabels && labelText && (
                 <g transform={`translate(${labelX}, ${labelY})`} style={{ pointerEvents: 'none' }}>
@@ -131,7 +135,7 @@ export function RoutedEdge({
                         x={0}
                         y={labelFontSize * 0.35}
                         textAnchor="middle"
-                        fill="#cdd6f4"
+                        fill={connectionFontColor}
                         fontSize={labelFontSize}
                         fontFamily="sans-serif"
                     >

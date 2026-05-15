@@ -12,6 +12,8 @@ interface InterfaceNodeData {
     ifaceWidth?: number;
     ifaceHeight?: number;
     showInterfaceNames?: boolean;
+    interfaceColor?: string;
+    interfaceFontColor?: string;
     [key: string]: unknown;
 }
 
@@ -51,7 +53,9 @@ export function InterfaceNode({ data, selected }: NodeProps) {
     const d = data as InterfaceNodeData;
     const { iface } = d;
     const edge: IfaceEdge = d.edge ?? 'left';
-    const color = selected ? '#89b4fa' : (KIND_COLORS[iface.kind] ?? '#cdd6f4');
+    const baseColor = d.interfaceColor ?? (KIND_COLORS[iface.kind] ?? '#cdd6f4');
+    const color = selected ? '#89b4fa' : baseColor;
+    const fontColor = d.interfaceFontColor ?? '#cdd6f4';
     const kindIcon = KIND_ICONS[iface.kind] ?? '?';
     const fontScale = Math.max(d.fontScale ?? 1, 0.05);
     const fallbackDimensions = interfaceDimensions(fontScale);
@@ -119,7 +123,7 @@ export function InterfaceNode({ data, selected }: NodeProps) {
             whiteSpace: 'nowrap',
             fontSize: FONT,
             fontFamily: 'sans-serif',
-            color: '#cdd6f4',
+            color: fontColor,
             pointerEvents: 'none',
             userSelect: 'none',
         };

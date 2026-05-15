@@ -322,6 +322,14 @@ export interface EditorOptions {
     /** Maximum number of undo steps retained per document. */
     undoDepth: number;
     showDeviceNames: boolean;
+    ivFunctionColor: string;
+    ivFunctionFontColor: string;
+    ivInterfaceColor: string;
+    ivInterfaceFontColor: string;
+    ivConnectionColor: string;
+    ivConnectionFontColor: string;
+    dvNodeColor: string;
+    dvNodeFontColor: string;
 }
 
 export const DEFAULT_OPTIONS: EditorOptions = {
@@ -340,6 +348,14 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     tasteDockerImage: DEFAULT_TASTE_DOCKER_IMAGE,
     undoDepth: 100,
     showDeviceNames: true,
+    ivFunctionColor: '#313244',
+    ivFunctionFontColor: '#cdd6f4',
+    ivInterfaceColor: '#89b4fa',
+    ivInterfaceFontColor: '#cdd6f4',
+    ivConnectionColor: '#6c7086',
+    ivConnectionFontColor: '#cdd6f4',
+    dvNodeColor: '#313244',
+    dvNodeFontColor: '#cdd6f4',
 };
 
 // ── postMessage protocol ───────────────────────────────────────────────────

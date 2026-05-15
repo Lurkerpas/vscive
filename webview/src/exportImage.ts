@@ -81,13 +81,6 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
         return null;
     }
 
-    const kindColors: Record<string, string> = {
-        Cyclic: '#a6e3a1',
-        Sporadic: '#89b4fa',
-        Protected: '#fab387',
-        Unprotected: '#f38ba8',
-    };
-
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
     let minX = Infinity;
     let minY = Infinity;
@@ -157,7 +150,7 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
         const deltaX = Math.abs(tx - sx) * 0.5;
         const strokeWidth = Math.max(2, IFACE_W * 0.05);
 
-        parts.push(`<path d="M${sx},${sy} C${sx + deltaX},${sy} ${tx - deltaX},${ty} ${tx},${ty}" stroke="#6c7086" stroke-width="${strokeWidth}" fill="none"/>`);
+        parts.push(`<path d="M${sx},${sy} C${sx + deltaX},${sy} ${tx - deltaX},${ty} ${tx},${ty}" stroke="${options.ivConnectionColor}" stroke-width="${strokeWidth}" fill="none"/>`);
         if (options.showConnectionLabels && edge.label) {
             const label = String(edge.label);
             const labelX = (sx + tx) / 2;
@@ -165,7 +158,7 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
             const labelFontSize = Math.max(6, options.fontSizeConn);
             const labelWidth = label.length * labelFontSize * 0.6 + 12;
             parts.push(`<rect x="${labelX - labelWidth / 2}" y="${labelY - labelFontSize - 2}" width="${labelWidth}" height="${labelFontSize + 6}" fill="${options.canvasColor}" rx="3"/>`);
-            parts.push(`<text x="${labelX}" y="${labelY}" text-anchor="middle" fill="#cdd6f4" font-size="${labelFontSize}" font-family="sans-serif">${escapeXml(label)}</text>`);
+            parts.push(`<text x="${labelX}" y="${labelY}" text-anchor="middle" fill="${options.ivConnectionFontColor}" font-size="${labelFontSize}" font-family="sans-serif">${escapeXml(label)}</text>`);
         }
     }
 
@@ -180,11 +173,11 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
         const headerHeight = Math.round(fontSize * 1.2 + 12);
         const textY = y + 2 + headerHeight * 0.7;
 
-        parts.push(`<rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" fill="#1e1e2e" stroke="#6c7086" stroke-width="3" rx="6"/>`);
-        parts.push(`<rect x="${x + 2}" y="${y + 2}" width="${nodeWidth - 4}" height="${headerHeight}" fill="#313244" rx="4"/>`);
-        parts.push(`<rect x="${x + 2}" y="${y + 2 + headerHeight / 2}" width="${nodeWidth - 4}" height="${headerHeight / 2}" fill="#313244"/>`);
-        parts.push(`<line x1="${x}" y1="${y + headerHeight + 2}" x2="${x + nodeWidth}" y2="${y + headerHeight + 2}" stroke="#6c7086" stroke-width="1"/>`);
-        parts.push(`<text x="${x + 10}" y="${textY}" fill="#cdd6f4" font-size="${fontSize}" font-weight="bold" font-family="sans-serif">${escapeXml(caption)}</text>`);
+        parts.push(`<rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" fill="#1e1e2e" stroke="${options.ivFunctionColor}" stroke-width="3" rx="6"/>`);
+        parts.push(`<rect x="${x + 2}" y="${y + 2}" width="${nodeWidth - 4}" height="${headerHeight}" fill="${options.ivFunctionColor}" rx="4"/>`);
+        parts.push(`<rect x="${x + 2}" y="${y + 2 + headerHeight / 2}" width="${nodeWidth - 4}" height="${headerHeight / 2}" fill="${options.ivFunctionColor}"/>`);
+        parts.push(`<line x1="${x}" y1="${y + headerHeight + 2}" x2="${x + nodeWidth}" y2="${y + headerHeight + 2}" stroke="${options.ivFunctionColor}" stroke-width="1"/>`);
+        parts.push(`<text x="${x + 10}" y="${textY}" fill="${options.ivFunctionFontColor}" font-size="${fontSize}" font-weight="bold" font-family="sans-serif">${escapeXml(caption)}</text>`);
     }
 
     for (const node of nodes.filter(entry => entry.type === 'interfaceNode')) {
@@ -195,7 +188,7 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
         const data = node.data as Record<string, unknown>;
         const iface = data.iface as { kind: string; type: string; name: string };
         const edgeName = (data.edge as string | undefined) ?? 'left';
-        const color = kindColors[iface.kind] ?? '#cdd6f4';
+        const color = options.ivInterfaceColor;
         const fontSize = typeof data.fontSizeIface === 'number' ? data.fontSizeIface : 45;
 
         const tipDirection = iface.type === 'provided'
@@ -248,7 +241,7 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
                     break;
             }
 
-            parts.push(`<text x="${labelX}" y="${labelY}" text-anchor="${anchor}" fill="#cdd6f4" font-size="${fontSize}" font-family="sans-serif">${escapeXml(iface.name)}</text>`);
+            parts.push(`<text x="${labelX}" y="${labelY}" text-anchor="${anchor}" fill="${options.ivInterfaceFontColor}" font-size="${fontSize}" font-family="sans-serif">${escapeXml(iface.name)}</text>`);
         }
     }
 

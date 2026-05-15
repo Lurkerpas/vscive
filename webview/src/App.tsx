@@ -199,9 +199,11 @@ function DiagramEditor() {
                 fontSizeConn: options.fontSizeConn,
                 canvasColor: options.canvasColor,
                 showConnectionLabels: options.showConnectionLabels,
+                connectionColor: options.ivConnectionColor,
+                connectionFontColor: options.ivConnectionFontColor,
             },
         })),
-        [edges, nodes, options.fontSizeConn, options.canvasColor, options.showConnectionLabels, locked],
+        [edges, nodes, options.canvasColor, options.fontSizeConn, options.ivConnectionColor, options.ivConnectionFontColor, options.showConnectionLabels, locked],
     );
 
     const selectedFunction = useMemo(
@@ -272,12 +274,32 @@ function DiagramEditor() {
             const fontScale = Math.max(Number((n.data as Record<string, unknown> | undefined)?.fontScale ?? 1), 0.05);
             if (n.type !== 'functionNode') {
                 return n.type === 'interfaceNode'
-                    ? { ...n, data: { ...n.data, fontSizeIface: options.fontSizeIface * fontScale, showInterfaceNames: options.showInterfaceNames } }
+                    ? {
+                        ...n,
+                        data: {
+                            ...n.data,
+                            fontSizeIface: options.fontSizeIface * fontScale,
+                            showInterfaceNames: options.showInterfaceNames,
+                            interfaceColor: options.ivInterfaceColor,
+                            interfaceFontColor: options.ivInterfaceFontColor,
+                        },
+                    }
                     : n;
             }
             const isConnSrc = n.id === connectSrc?.id;
             const isConnTarget = connectMode && !connectSrc;
-            return { ...n, data: { ...n.data, locked, isConnSrc, isConnTarget, fontSizeFn: options.fontSizeFn * fontScale } };
+            return {
+                ...n,
+                data: {
+                    ...n.data,
+                    locked,
+                    isConnSrc,
+                    isConnTarget,
+                    fontSizeFn: options.fontSizeFn * fontScale,
+                    functionColor: options.ivFunctionColor,
+                    functionFontColor: options.ivFunctionFontColor,
+                },
+            };
         });
 
         if (!focusVisibility) { return enhancedNodes; }
@@ -295,7 +317,7 @@ function DiagramEditor() {
             }
             return true;
         });
-    }, [connectMode, connectSrc, focusVisibility, locked, nodes, options.fontSizeFn, options.fontSizeIface, options.showInterfaceNames]);
+    }, [connectMode, connectSrc, focusVisibility, locked, nodes, options.fontSizeFn, options.fontSizeIface, options.ivFunctionColor, options.ivFunctionFontColor, options.ivInterfaceColor, options.ivInterfaceFontColor, options.showInterfaceNames]);
 
     const displayedEdges = useMemo(() => {
         if (!focusVisibility) { return styledEdges; }
