@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Background,
     Controls,
@@ -6,8 +6,12 @@ import {
     Handle,
     MiniMap,
     Node,
+    NodeChange,
     NodeDragHandler,
+    NodeProps,
+    NodeResizer,
     OnConnect,
+    OnNodesChange,
     Position,
     ReactFlow,
     ReactFlowProvider,
@@ -91,7 +95,11 @@ function dvDeviceFontSize(options: EditorOptions): number {
     return scaleDvFont(DV_DEVICE_FONT_SIZE, options.fontSizeIface, DEFAULT_OPTIONS.fontSizeIface, 7);
 }
 
-function applyDvNodePresentation(nodes: Node[], options: EditorOptions): Node[] {
+function snapToGrid(value: number, grid: number): number {
+    return Math.round(value / grid) * grid;
+}
+
+function applyDvNodePresentation(nodes: Node[], options: EditorOptions, locked: boolean): Node[] {
     const headerFontSize = dvNodeHeaderFontSize(options);
     const bodyFontSize = dvNodeBodyFontSize(options);
     const deviceFontSize = dvDeviceFontSize(options);
@@ -100,7 +108,7 @@ function applyDvNodePresentation(nodes: Node[], options: EditorOptions): Node[] 
         if (node.type === 'dvNode') {
             return {
                 ...node,
-                data: { ...(node.data as object), headerFontSize, bodyFontSize },
+                data: { ...(node.data as object), headerFontSize, bodyFontSize, locked },
             };
         }
 
@@ -115,20 +123,28 @@ function applyDvNodePresentation(nodes: Node[], options: EditorOptions): Node[] 
     });
 }
 
-function DvNodeRenderer({ data }: { data: { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number } }) {
-    const headerFontSize = data.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
-    const bodyFontSize = data.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
+function DvNodeRenderer({ data, selected }: NodeProps) {
+    const typedData = data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; locked?: boolean };
+    const headerFontSize = typedData.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
+    const bodyFontSize = typedData.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
 
     return (
         <div style={{ width: '100%', height: '100%', background: '#1e1e2e', border: '2px solid #6c7086', borderRadius: 8, color: '#cdd6f4', boxSizing: 'border-box' }}>
+            <NodeResizer
+                isVisible={selected && !typedData.locked}
+                minWidth={200}
+                minHeight={100}
+                lineStyle={{ borderColor: '#89b4fa', borderWidth: 1 }}
+                handleStyle={{ width: 10, height: 10, background: '#89b4fa', borderRadius: 2 }}
+            />
             <div style={{ background: '#313244', padding: '8px 10px', borderTopLeftRadius: 6, borderTopRightRadius: 6, fontWeight: 'bold', fontFamily: 'sans-serif', fontSize: headerFontSize, lineHeight: 1.2 }}>
-                {data.node.name} [{data.node.type || data.node.namespace || 'Board'}]
+                {typedData.node.name} [{typedData.node.type || typedData.node.namespace || 'Board'}]
             </div>
             <div style={{ padding: 10, fontSize: bodyFontSize, fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', gap: 6, lineHeight: 1.25 }}>
-                <div>Partition: {data.node.partition.name || 'Partition_1'}</div>
-                <div>Functions: {data.node.partition.functions.length}</div>
-                <div style={{ color: '#a6adc8' }}>{data.summary || 'No deployed functions'}</div>
-                {data.overflow > 0 && <div style={{ color: '#89b4fa' }}>+{data.overflow} more</div>}
+                <div>Partition: {typedData.node.partition.name || 'Partition_1'}</div>
+                <div>Functions: {typedData.node.partition.functions.length}</div>
+                <div style={{ color: '#a6adc8' }}>{typedData.summary || 'No deployed functions'}</div>
+                {typedData.overflow > 0 && <div style={{ color: '#89b4fa' }}>+{typedData.overflow} more</div>}
             </div>
         </div>
     );
@@ -275,10 +291,15 @@ function DvDiagramEditor() {
     const [checkedMessageKeys, setCheckedMessageKeys] = useState<string[]>([]);
     const reactFlow = useReactFlow();
     const optionsRef = useRef(options);
+    const lockedRef = useRef(locked);
 
     useEffect(() => {
         optionsRef.current = options;
     }, [options]);
+
+    useEffect(() => {
+        lockedRef.current = locked;
+    }, [locked]);
 
     useEffect(() => {
         const handler = (event: MessageEvent) => {
@@ -286,7 +307,7 @@ function DvDiagramEditor() {
             if (message.type === 'loadDv') {
                 setDiagramData(message.data);
                 const graph = buildDvGraph(message.data.dv, message.data.ui);
-                setNodes(applyDvNodePresentation(graph.nodes, optionsRef.current));
+                setNodes(applyDvNodePresentation(graph.nodes, optionsRef.current, lockedRef.current));
                 setEdges(graph.edges);
                 setWaiting(false);
                 setSelection(current => current && resolveSelection(message.data.dv, current) ? current : null);
@@ -306,11 +327,11 @@ function DvDiagramEditor() {
             setWaiting(false);
         }
         return () => window.removeEventListener('message', handler);
-    }, [options.showDeviceNames, setEdges, setNodes]);
+    }, [setEdges, setNodes]);
 
     useEffect(() => {
-        setNodes(existing => applyDvNodePresentation(existing, options));
-    }, [options, setNodes]);
+        setNodes(existing => applyDvNodePresentation(existing, options, locked));
+    }, [locked, options, setNodes]);
 
     useEffect(() => {
         if (!pendingExportFormat) {
@@ -506,6 +527,87 @@ function DvDiagramEditor() {
         }
     };
 
+    const onNodesChangeWithResize: OnNodesChange = useCallback((changes: NodeChange[]) => {
+        onNodesChange(changes);
+        for (const change of changes) {
+            if (change.type !== 'dimensions' || change.resizing !== false) {
+                continue;
+            }
+
+            const rawW = change.dimensions?.width ?? DV_NODE_WIDTH;
+            const rawH = change.dimensions?.height ?? DV_NODE_HEIGHT;
+
+            setNodes(existing => {
+                const resizedNode = existing.find(candidate => candidate.id === change.id && candidate.type === 'dvNode');
+                if (!resizedNode) {
+                    return existing;
+                }
+
+                const grid = Math.max(1, options.snapGridSize || 1);
+                const minW = options.snapEnabled ? Math.max(grid, Math.ceil(200 / grid) * grid) : 200;
+                const minH = options.snapEnabled ? Math.max(grid, Math.ceil(100 / grid) * grid) : 100;
+
+                let x = resizedNode.position.x;
+                let y = resizedNode.position.y;
+                let w = rawW;
+                let h = rawH;
+
+                if (options.snapEnabled) {
+                    const snappedLeft = snapToGrid(resizedNode.position.x, grid);
+                    const snappedTop = snapToGrid(resizedNode.position.y, grid);
+                    const snappedRight = snapToGrid(resizedNode.position.x + rawW, grid);
+                    const snappedBottom = snapToGrid(resizedNode.position.y + rawH, grid);
+
+                    x = snappedLeft;
+                    y = snappedTop;
+                    w = Math.max(minW, snappedRight - snappedLeft);
+                    h = Math.max(minH, snappedBottom - snappedTop);
+                }
+
+                const moves: DvWebviewMessage = {
+                    type: 'nodesMoved',
+                    moves: [{ id: resizedNode.id, kind: 'node', x, y, w, h }],
+                };
+
+                const updatedNodes = existing.map(candidate => {
+                    if (candidate.id === resizedNode.id) {
+                        return {
+                            ...candidate,
+                            position: { x, y },
+                            width: w,
+                            height: h,
+                            measured: { width: w, height: h },
+                            style: { ...candidate.style, width: w, height: h },
+                        };
+                    }
+
+                    if (candidate.parentId !== resizedNode.id || candidate.type !== 'dvDevice') {
+                        return candidate;
+                    }
+
+                    const snapped = snapDeviceToEdge(candidate.position.x, candidate.position.y, w, h);
+                    moves.moves.push({
+                        id: candidate.id,
+                        kind: 'device',
+                        parentId: resizedNode.id,
+                        x: snapped.x,
+                        y: snapped.y,
+                        w: DV_DEVICE_WIDTH,
+                        h: DV_DEVICE_HEIGHT,
+                    });
+                    return {
+                        ...candidate,
+                        position: { x: snapped.x, y: snapped.y },
+                        data: { ...(candidate.data as object), edge: snapped.edge },
+                    };
+                });
+
+                post(moves);
+                return applyDvNodePresentation(updatedNodes, options, locked);
+            });
+        }
+    }, [locked, onNodesChange, options, setNodes]);
+
     const updateOptions = (patch: Partial<EditorOptions>) => {
         const next = { ...options, ...patch };
         setOptions(next);
@@ -637,6 +739,8 @@ function DvDiagramEditor() {
                             </div>
                         </div>
                         <div style={ROW}><span style={LABEL}>Canvas Color</span><input style={INPUT} value={options.canvasColor} onChange={event => updateOptions({ canvasColor: event.target.value })} /></div>
+                        <div style={ROW}><span style={LABEL}>Snap to Grid</span><label><input type="checkbox" checked={options.snapEnabled} onChange={event => updateOptions({ snapEnabled: event.target.checked })} /> Enabled</label></div>
+                        <div style={ROW}><span style={LABEL}>Snap Grid Size (flow-px)</span><input style={INPUT} type="number" min={4} max={500} value={options.snapGridSize} onChange={event => updateOptions({ snapGridSize: Math.max(4, Number(event.target.value) || 20) })} /></div>
                         <div style={ROW}><span style={LABEL}>Show Minimap</span><label><input type="checkbox" checked={options.showMinimap} onChange={event => updateOptions({ showMinimap: event.target.checked })} /> Enabled</label></div>
                         <div style={ROW}><span style={LABEL}>Show Device Names</span><label><input type="checkbox" checked={options.showDeviceNames} onChange={event => updateOptions({ showDeviceNames: event.target.checked })} /> Enabled</label></div>
                         <div style={ROW}><span style={LABEL}>Show Connection Labels</span><label><input type="checkbox" checked={options.showConnectionLabels} onChange={event => updateOptions({ showConnectionLabels: event.target.checked })} /> Enabled</label></div>
@@ -759,7 +863,7 @@ function DvDiagramEditor() {
                     label: options.showConnectionLabels ? edge.label : '',
                     labelStyle: { fontSize: Math.max(6, options.fontSizeConn) },
                 }))}
-                onNodesChange={onNodesChange}
+                onNodesChange={onNodesChangeWithResize}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStop={onNodeDragStop}
                 onConnect={onConnect}
