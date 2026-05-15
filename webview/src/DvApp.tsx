@@ -122,7 +122,7 @@ function applyDvNodePresentation(nodes: Node[], options: EditorOptions, locked: 
         if (node.type === 'dvNode') {
             return {
                 ...node,
-                data: { ...(node.data as object), headerFontSize, bodyFontSize, locked, nodeColor: options.dvNodeColor, nodeFontColor: options.dvNodeFontColor },
+                data: { ...(node.data as object), headerFontSize, bodyFontSize, locked, nodeColor: options.dvNodeColor, nodeFontColor: options.dvNodeFontColor, nodeBodyColor: options.dvNodeBodyColor },
             };
         }
 
@@ -138,15 +138,16 @@ function applyDvNodePresentation(nodes: Node[], options: EditorOptions, locked: 
 }
 
 function DvNodeRenderer({ data, selected }: NodeProps) {
-    const typedData = data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; locked?: boolean; nodeColor?: string; nodeFontColor?: string };
+    const typedData = data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; locked?: boolean; nodeColor?: string; nodeFontColor?: string; nodeBodyColor?: string };
     const headerFontSize = typedData.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
     const bodyFontSize = typedData.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
     const nodeColor = typedData.nodeColor ?? '#313244';
     const nodeFontColor = typedData.nodeFontColor ?? '#cdd6f4';
+    const nodeBodyColor = typedData.nodeBodyColor ?? '#1e1e2e';
     const borderColor = selected ? '#89b4fa' : nodeColor;
 
     return (
-        <div style={{ width: '100%', height: '100%', background: '#1e1e2e', border: `2px solid ${borderColor}`, borderRadius: 8, color: nodeFontColor, boxSizing: 'border-box' }}>
+        <div style={{ width: '100%', height: '100%', background: nodeBodyColor, border: `2px solid ${borderColor}`, borderRadius: 8, color: nodeFontColor, boxSizing: 'border-box' }}>
             <NodeResizer
                 isVisible={selected && !typedData.locked}
                 minWidth={200}
@@ -773,8 +774,10 @@ function DvDiagramEditor() {
                                 <div style={ROW}><span style={LABEL}>Node Font Size</span><input style={INPUT} type="number" value={options.fontSizeFn} onChange={event => updateOptions({ fontSizeFn: Math.max(20, Number(event.target.value) || 90) })} /></div>
                                 <div style={ROW}><span style={LABEL}>Device Font Size</span><input style={INPUT} type="number" value={options.fontSizeIface} onChange={event => updateOptions({ fontSizeIface: Math.max(8, Number(event.target.value) || 45) })} /></div>
                                 <div style={ROW}><span style={LABEL}>Connection Font Size</span><input style={INPUT} type="number" value={options.fontSizeConn} onChange={event => updateOptions({ fontSizeConn: Math.max(6, Number(event.target.value) || 11) })} /></div>
+                                <div style={ROW}><span style={LABEL}>Connection Thickness</span><input style={INPUT} type="number" min={1} max={20} step={0.5} value={options.dvConnectionThickness} onChange={event => updateOptions({ dvConnectionThickness: Math.max(1, Number(event.target.value) || 2) })} /></div>
                                 <ColorInputRow label="Node Color" value={options.dvNodeColor} onChange={value => updateOptions({ dvNodeColor: value })} />
                                 <ColorInputRow label="Node Font Color" value={options.dvNodeFontColor} onChange={value => updateOptions({ dvNodeFontColor: value })} />
+                                <ColorInputRow label="Node Internal Space Color" value={options.dvNodeBodyColor} onChange={value => updateOptions({ dvNodeBodyColor: value })} />
                             </div>
                         </details>
                     </div>
@@ -886,6 +889,7 @@ function DvDiagramEditor() {
                 edges={displayedEdges.map(edge => ({
                     ...edge,
                     label: options.showConnectionLabels ? edge.label : '',
+                    style: { ...(edge.style ?? {}), strokeWidth: options.dvConnectionThickness },
                     labelStyle: { fontSize: Math.max(6, options.fontSizeConn) },
                 }))}
                 onNodesChange={onNodesChangeWithResize}
@@ -974,7 +978,7 @@ function buildSvg(nodes: Node[], edges: Edge[], options: EditorOptions): string 
         const sy = sourcePosition.y + DV_DEVICE_HEIGHT / 2;
         const tx = targetPosition.x;
         const ty = targetPosition.y + DV_DEVICE_HEIGHT / 2;
-        parts.push(`<path d="M${sx},${sy} C${sx + 60},${sy} ${tx - 60},${ty} ${tx},${ty}" stroke="#89b4fa" stroke-width="2" fill="none"/>`);
+        parts.push(`<path d="M${sx},${sy} C${sx + 60},${sy} ${tx - 60},${ty} ${tx},${ty}" stroke="#89b4fa" stroke-width="${Math.max(1, options.dvConnectionThickness)}" fill="none"/>`);
         if (options.showConnectionLabels && edge.label) {
             parts.push(`<text x="${(sx + tx) / 2}" y="${(sy + ty) / 2 - 6}" text-anchor="middle" fill="#a6adc8" font-size="${Math.max(6, options.fontSizeConn)}" font-family="sans-serif">${escapeXml(String(edge.label))}</text>`);
         }
@@ -984,12 +988,13 @@ function buildSvg(nodes: Node[], edges: Edge[], options: EditorOptions): string 
         if (node.type === 'dvNode') {
             const widthPx = Number(node.width ?? node.style?.width ?? DV_NODE_WIDTH);
             const heightPx = Number(node.height ?? node.style?.height ?? DV_NODE_HEIGHT);
-            const data = node.data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; nodeColor?: string; nodeFontColor?: string };
+            const data = node.data as { node: DvNodeModel; summary: string; overflow: number; headerFontSize?: number; bodyFontSize?: number; nodeColor?: string; nodeFontColor?: string; nodeBodyColor?: string };
             const headerFontSize = data.headerFontSize ?? DV_NODE_HEADER_FONT_SIZE;
             const bodyFontSize = data.bodyFontSize ?? DV_NODE_BODY_FONT_SIZE;
             const nodeColor = data.nodeColor ?? options.dvNodeColor;
             const nodeFontColor = data.nodeFontColor ?? options.dvNodeFontColor;
-            parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="${heightPx}" rx="8" fill="#1e1e2e" stroke="${nodeColor}" stroke-width="2"/>`);
+            const nodeBodyColor = data.nodeBodyColor ?? options.dvNodeBodyColor;
+            parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="${heightPx}" rx="8" fill="${nodeBodyColor}" stroke="${nodeColor}" stroke-width="2"/>`);
             parts.push(`<rect x="${pos.x}" y="${pos.y}" width="${widthPx}" height="34" rx="8" fill="${nodeColor}"/>`);
             parts.push(`<text x="${pos.x + 10}" y="${pos.y + 22}" fill="${nodeFontColor}" font-size="${headerFontSize}" font-family="sans-serif">${escapeXml(`${data.node.name} [${data.node.type || data.node.namespace || 'Board'}]`)}</text>`);
             parts.push(`<text x="${pos.x + 10}" y="${pos.y + 56}" fill="${nodeFontColor}" font-size="${bodyFontSize}" font-family="sans-serif">Functions: ${data.node.partition.functions.length}</text>`);

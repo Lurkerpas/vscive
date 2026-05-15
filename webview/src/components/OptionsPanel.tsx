@@ -260,8 +260,22 @@ export function OptionsPanel({ options, onChange, canBrowseAttrFile, onBrowseAtt
                         />
                     </div>
 
+                    <div style={ROW}>
+                        <span style={LABEL}>Connection Thickness</span>
+                        <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            step={0.5}
+                            value={options.ivConnectionThickness}
+                            onChange={e => onChange({ ivConnectionThickness: Math.max(1, Number(e.target.value) || 2) })}
+                            style={INPUT}
+                        />
+                    </div>
+
                     <ColorInputRow label="Function Color" value={options.ivFunctionColor} onChange={value => onChange({ ivFunctionColor: value })} />
                     <ColorInputRow label="Function Font Color" value={options.ivFunctionFontColor} onChange={value => onChange({ ivFunctionFontColor: value })} />
+                    <ColorInputRow label="Function Internal Space Color" value={options.ivFunctionBodyColor} onChange={value => onChange({ ivFunctionBodyColor: value })} />
                     <ColorInputRow label="Interface Color" value={options.ivInterfaceColor} onChange={value => onChange({ ivInterfaceColor: value })} />
                     <ColorInputRow label="Interface Font Color" value={options.ivInterfaceFontColor} onChange={value => onChange({ ivInterfaceFontColor: value })} />
                     <ColorInputRow label="Connection Color" value={options.ivConnectionColor} onChange={value => onChange({ ivConnectionColor: value })} />

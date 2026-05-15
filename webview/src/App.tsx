@@ -201,9 +201,10 @@ function DiagramEditor() {
                 showConnectionLabels: options.showConnectionLabels,
                 connectionColor: options.ivConnectionColor,
                 connectionFontColor: options.ivConnectionFontColor,
+                connectionThickness: options.ivConnectionThickness,
             },
         })),
-        [edges, nodes, options.canvasColor, options.fontSizeConn, options.ivConnectionColor, options.ivConnectionFontColor, options.showConnectionLabels, locked],
+        [edges, nodes, options.canvasColor, options.fontSizeConn, options.ivConnectionColor, options.ivConnectionFontColor, options.ivConnectionThickness, options.showConnectionLabels, locked],
     );
 
     const selectedFunction = useMemo(
@@ -298,6 +299,7 @@ function DiagramEditor() {
                     fontSizeFn: options.fontSizeFn * fontScale,
                     functionColor: options.ivFunctionColor,
                     functionFontColor: options.ivFunctionFontColor,
+                    functionBodyColor: options.ivFunctionBodyColor,
                 },
             };
         });
@@ -317,7 +319,7 @@ function DiagramEditor() {
             }
             return true;
         });
-    }, [connectMode, connectSrc, focusVisibility, locked, nodes, options.fontSizeFn, options.fontSizeIface, options.ivFunctionColor, options.ivFunctionFontColor, options.ivInterfaceColor, options.ivInterfaceFontColor, options.showInterfaceNames]);
+    }, [connectMode, connectSrc, focusVisibility, locked, nodes, options.fontSizeFn, options.fontSizeIface, options.ivFunctionBodyColor, options.ivFunctionColor, options.ivFunctionFontColor, options.ivInterfaceColor, options.ivInterfaceFontColor, options.showInterfaceNames]);
 
     const displayedEdges = useMemo(() => {
         if (!focusVisibility) { return styledEdges; }

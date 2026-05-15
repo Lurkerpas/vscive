@@ -328,8 +328,12 @@ export interface EditorOptions {
     ivInterfaceFontColor: string;
     ivConnectionColor: string;
     ivConnectionFontColor: string;
+    ivConnectionThickness: number;
+    ivFunctionBodyColor: string;
     dvNodeColor: string;
     dvNodeFontColor: string;
+    dvConnectionThickness: number;
+    dvNodeBodyColor: string;
 }
 
 export const DEFAULT_OPTIONS: EditorOptions = {
@@ -354,8 +358,12 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     ivInterfaceFontColor: '#cdd6f4',
     ivConnectionColor: '#6c7086',
     ivConnectionFontColor: '#cdd6f4',
+    ivConnectionThickness: 2,
+    ivFunctionBodyColor: '#1e1e2e',
     dvNodeColor: '#313244',
     dvNodeFontColor: '#cdd6f4',
+    dvConnectionThickness: 2,
+    dvNodeBodyColor: '#1e1e2e',
 };
 
 // ── postMessage protocol ───────────────────────────────────────────────────

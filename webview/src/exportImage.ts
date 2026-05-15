@@ -148,7 +148,7 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
         const tx = handleX(targetPos, targetEdge, targetDims.width);
         const ty = handleY(targetPos, targetEdge, targetDims.height);
         const deltaX = Math.abs(tx - sx) * 0.5;
-        const strokeWidth = Math.max(2, IFACE_W * 0.05);
+        const strokeWidth = Math.max(1, options.ivConnectionThickness);
 
         parts.push(`<path d="M${sx},${sy} C${sx + deltaX},${sy} ${tx - deltaX},${ty} ${tx},${ty}" stroke="${options.ivConnectionColor}" stroke-width="${strokeWidth}" fill="none"/>`);
         if (options.showConnectionLabels && edge.label) {
@@ -173,7 +173,7 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
         const headerHeight = Math.round(fontSize * 1.2 + 12);
         const textY = y + 2 + headerHeight * 0.7;
 
-        parts.push(`<rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" fill="#1e1e2e" stroke="${options.ivFunctionColor}" stroke-width="3" rx="6"/>`);
+        parts.push(`<rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" fill="${options.ivFunctionBodyColor}" stroke="${options.ivFunctionColor}" stroke-width="3" rx="6"/>`);
         parts.push(`<rect x="${x + 2}" y="${y + 2}" width="${nodeWidth - 4}" height="${headerHeight}" fill="${options.ivFunctionColor}" rx="4"/>`);
         parts.push(`<rect x="${x + 2}" y="${y + 2 + headerHeight / 2}" width="${nodeWidth - 4}" height="${headerHeight / 2}" fill="${options.ivFunctionColor}"/>`);
         parts.push(`<line x1="${x}" y1="${y + headerHeight + 2}" x2="${x + nodeWidth}" y2="${y + headerHeight + 2}" stroke="${options.ivFunctionColor}" stroke-width="1"/>`);

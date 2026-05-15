@@ -100,8 +100,10 @@ Appearance-related settings shall be grouped at the end of the options panel und
 - Function name font size,
 - Interface name font size,
 - Connection name font size,
+- Connection thickness,
 - default Function color,
 - default Function font color,
+- default Function internal space color,
 - default Interface color,
 - default Interface font color,
 - default Connection color,
@@ -204,8 +206,10 @@ Appearance-related settings shall be grouped at the end of the options panel und
 - Node name font size,
 - Device name font size,
 - Connection name font size,
+- Connection thickness,
 - default Node color,
 - default Node font color.
+- default Node internal space color.
 
 When no entity is selected, the properties panel may additionally show a compact summary of all Nodes, all undeployed Functions, and all Connections, but without direct editing controls.
 

@@ -13,6 +13,7 @@ interface FunctionNodeData {
     fontScale?: number;
     functionColor?: string;
     functionFontColor?: string;
+    functionBodyColor?: string;
     [key: string]: unknown;
 }
 
@@ -21,6 +22,7 @@ export function FunctionNode({ data, selected }: NodeProps) {
     const caption = d.language ? `${d.label} [${d.language}]` : d.label;
     const functionColor = d.functionColor ?? '#313244';
     const functionFontColor = d.functionFontColor ?? '#cdd6f4';
+    const functionBodyColor = d.functionBodyColor ?? '#1e1e2e';
     const borderColor = d.isConnSrc ? '#a6e3a1' : selected ? '#89b4fa' : functionColor;
     const fontScale = Math.max(d.fontScale ?? 1, 0.05);
     const headerPaddingY = Math.max(2, 6 * fontScale);
@@ -33,7 +35,7 @@ export function FunctionNode({ data, selected }: NodeProps) {
             height: '100%',
             border: `${borderWidth}px solid ${borderColor}`,
             borderRadius: 6,
-            background: '#1e1e2e',
+            background: functionBodyColor,
             color: functionFontColor,
             fontFamily: 'sans-serif',
             boxSizing: 'border-box',
