@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { log } from '../logger';
 import { DvDiagramData, DvExtensionMessage, DvWebviewMessage, EditorOptions, DEFAULT_OPTIONS } from '../model/types';
 import { basename, dataUrlToBytes, dirnameUri, encodeUtf8, extname, joinPathSegments, serializeUriForSetting } from '../utils/platform';
+import { runInSharedTerminal } from '../utils/terminal';
 import { DeploymentViewDocument } from './DeploymentViewDocument';
 
 function shellQuote(value: string): string {
@@ -165,20 +166,10 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({
-                        name: message.mode === 'release'
-                            ? 'Build Release'
-                            : message.mode === 'debug'
-                                ? 'Build Debug'
-                                : message.mode === 'clean'
-                                    ? 'Build Clean'
-                                    : message.mode === 'run'
-                                        ? 'Run'
-                                    : 'Build Skeletons',
-                        cwd: dirnameUri(document.uri),
-                    });
-                    terminal.sendText(getDvBuildCommand(document, this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, message.mode, this.context.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(
+                        getDvBuildCommand(document, this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, message.mode, this.context.extensionUri),
+                        dirnameUri(document.uri),
+                    );
                     break;
                 }
                 case 'updateOptions': {

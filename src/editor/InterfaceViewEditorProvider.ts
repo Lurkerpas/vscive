@@ -22,6 +22,7 @@ import {
     joinPathSegments,
     serializeUriForSetting,
 } from '../utils/platform';
+import { runInSharedTerminal } from '../utils/terminal';
 
 function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -321,72 +322,56 @@ export class InterfaceViewEditorProvider
                     if (!this.getCapabilities().canBuildSkeletons) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Build Skeletons', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'skeletons', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'skeletons', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildClean': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Build Clean', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'clean', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'clean', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildDebug': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Build Debug', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugBuild', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugBuild', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildRelease': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Build Release', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseBuild', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseBuild', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildRun': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Run', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'run', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'run', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'build': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Build', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'make', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'make', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'runDebug': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Run Debug', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugRun', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugRun', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'runRelease': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    const terminal = vscode.window.createTerminal({ name: 'Run Release', cwd: dirnameUri(document.uri) });
-                    terminal.sendText(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseRun', this.extensionUri));
-                    terminal.show();
+                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseRun', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'editFunction': {

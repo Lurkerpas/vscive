@@ -6,6 +6,7 @@ import { DvModel, DEFAULT_OPTIONS, EditorOptions, IvModel } from './model/types'
 import { serializeDvXml } from './serializers/DvXmlSerializer';
 import { serializeIvXml } from './serializers/IvXmlSerializer';
 import { basename, dirnameUri, extname, joinPathSegments } from './utils/platform';
+import { runInSharedTerminal } from './utils/terminal';
 
 function createEmptyIvModel(): IvModel {
     return {
@@ -145,9 +146,7 @@ async function runTasteInitHere(context: vscode.ExtensionContext, resource?: vsc
         return;
     }
 
-    const terminal = vscode.window.createTerminal({ name: 'TASTE Init Here', cwd: targetDir });
-    terminal.sendText(getTasteInitCommand(context));
-    terminal.show();
+    runInSharedTerminal(getTasteInitCommand(context), targetDir);
 }
 
 function getWrappedCommand(context: vscode.ExtensionContext, command: string): string {
@@ -165,9 +164,7 @@ async function runTerminalCommand(context: vscode.ExtensionContext, terminalName
         return;
     }
 
-    const terminal = vscode.window.createTerminal({ name: terminalName, cwd: targetDir });
-    terminal.sendText(getWrappedCommand(context, command));
-    terminal.show();
+    runInSharedTerminal(getWrappedCommand(context, command), targetDir);
 }
 
 async function resolveDeploymentViewTarget(resource?: vscode.Uri): Promise<{ targetDir: vscode.Uri; targetName: string } | undefined> {
@@ -235,10 +232,7 @@ async function runTasteDvBuildCommand(context: vscode.ExtensionContext, resource
         return;
     }
 
-    const terminalName = action === 'release' ? 'TASTE Build DV Release' : 'TASTE Build DV Debug';
-    const terminal = vscode.window.createTerminal({ name: terminalName, cwd: target.targetDir });
-    terminal.sendText(getWrappedCommand(context, `make ${shellQuote(target.targetName)} ${action}`));
-    terminal.show();
+    runInSharedTerminal(getWrappedCommand(context, `make ${shellQuote(target.targetName)} ${action}`), target.targetDir);
 }
 
 export function activate(context: vscode.ExtensionContext): void {
