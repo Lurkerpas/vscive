@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<UI version="1.0">
+  <Entity id="bf45eae2-d1ec-4fe6-bb41-b05315628f4e">
+    <Taste coordinates="-8000 0 28000 24000"/>
+  </Entity>
+  <Entity id="b8a56d60-706b-4554-b1cd-9c46d813754d">
+    <Taste coordinates="52000 0 88000 24000"/>
+  </Entity>
+  <Entity id="9f8f96f8-24d0-4efb-9502-09d8419c881c">
+    <Taste coordinates="16600 -800"/>
+  </Entity>
+  <Entity id="ce2363d9-3d1f-494d-9a58-881dbf6b2840">
+    <Taste coordinates="28600 12800"/>
+  </Entity>
+  <Entity id="a6a4bf65-a62f-4e7e-b2a3-8760a256260e">
+    <Taste coordinates="51400 12800"/>
+  </Entity>
+</UI>
