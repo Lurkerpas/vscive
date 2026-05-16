@@ -27,7 +27,7 @@ import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
 import { SearchFunctionDialog } from './components/SearchFunctionDialog';
 import { Palette } from './components/Palette';
 import { renderDiagramImage } from './exportImage';
-import { computeFocusVisibility } from './focus';
+import { computeFocusEdges, computeFocusVisibility } from './focus';
 import { Waypoint, isWaypointNodeId, parseWaypointNodeId, waypointCenterFromNode } from './waypoints';
 
 const nodeTypes = {
@@ -204,6 +204,16 @@ function DiagramEditor() {
         [edges, focusEnabled, nodes, selected],
     );
 
+    const displayedEdges = useMemo(
+        () => computeFocusEdges(focusEnabled, selected, nodes, styledEdges, focusVisibility),
+        [focusEnabled, focusVisibility, nodes, selected, styledEdges],
+    );
+
+    const displayedEdgeIds = useMemo(
+        () => new Set(displayedEdges.map(edge => edge.id)),
+        [displayedEdges],
+    );
+
     const displayedNodes = useMemo(() => {
         const enhancedNodes = nodes.map(n => {
             const fontScale = Math.max(Number((n.data as Record<string, unknown> | undefined)?.fontScale ?? 1), 0.05);
@@ -249,16 +259,11 @@ function DiagramEditor() {
             }
             if (node.type === 'waypointNode') {
                 const parsed = parseWaypointNodeId(node.id);
-                return parsed ? focusVisibility.visibleEdgeIds.has(parsed.connectionId) : true;
+                return parsed ? displayedEdgeIds.has(parsed.connectionId) : true;
             }
             return true;
         });
-    }, [connectMode, connectSrc, focusVisibility, locked, nodes, options.fontSizeFn, options.fontSizeIface, options.ivFunctionBodyColor, options.ivFunctionColor, options.ivFunctionFontColor, options.ivInterfaceColor, options.ivInterfaceFontColor, options.showInterfaceNames]);
-
-    const displayedEdges = useMemo(() => {
-        if (!focusVisibility) { return styledEdges; }
-        return styledEdges.filter(edge => focusVisibility.visibleEdgeIds.has(edge.id));
-    }, [focusVisibility, styledEdges]);
+    }, [connectMode, connectSrc, displayedEdgeIds, focusVisibility, locked, nodes, options.fontSizeFn, options.fontSizeIface, options.ivFunctionBodyColor, options.ivFunctionColor, options.ivFunctionFontColor, options.ivInterfaceColor, options.ivInterfaceFontColor, options.showInterfaceNames]);
 
     // ── Receive messages from extension ─────────────────────────────────────
     useEffect(() => {
