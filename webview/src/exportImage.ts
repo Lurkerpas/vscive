@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
 import { EditorOptions } from '../../src/model/types';
+import { functionHeaderHeight } from './functionLayout';
 import { IFACE_H, IFACE_W } from './transform';
 
 export interface DiagramImage {
@@ -170,7 +171,8 @@ export function buildDiagramSvg(nodes: Node[], edges: Edge[], options: EditorOpt
         const data = node.data as Record<string, unknown>;
         const caption = data.language ? `${String(data.label ?? '')} [${String(data.language)}]` : String(data.label ?? '');
         const fontSize = typeof data.fontSizeFn === 'number' ? data.fontSizeFn : 90;
-        const headerHeight = Math.round(fontSize * 1.2 + 12);
+        const fontScale = Math.max(Number(data.fontScale ?? 1), 0.05);
+        const headerHeight = functionHeaderHeight(fontScale, fontSize);
         const textY = y + 2 + headerHeight * 0.7;
 
         parts.push(`<rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" fill="${options.ivFunctionBodyColor}" stroke="${options.ivFunctionColor}" stroke-width="3" rx="6"/>`);

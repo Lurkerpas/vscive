@@ -3,6 +3,7 @@ import {
     IvModel, UiModel, FunctionModel, InterfaceModel, ConnectionModel, EntityLayout,
     DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT,
 } from '../../src/model/types';
+import { functionContentRect } from './functionLayout';
 import { makeWaypointNodeId, WAYPOINT_NODE_SIZE, waypointNodeSize } from './waypoints';
 
 const SC_SCALE = 0.05;
@@ -82,12 +83,54 @@ function mapPointToParentLocalPx(
     };
 }
 
+function mapPointToParentContentLocalPx(
+    parentLayout: EntityLayout | undefined,
+    scX: number,
+    scY: number,
+    parentFontScale = 1,
+): { x: number; y: number } {
+    const outer = rectFromCoords(parentLayout?.coordinates);
+    const inner = rectFromCoords(parentLayout?.rootCoordinates);
+
+    if (outer && inner) {
+        const widthPx = Math.max(px(rectWidth(outer)), 1);
+        const heightPx = Math.max(px(rectHeight(outer)), 1);
+        const content = functionContentRect(widthPx, heightPx, parentFontScale);
+        return {
+            x: scaleInto(scX, inner.x1, inner.x2, content.width),
+            y: content.y + scaleInto(scY, inner.y1, inner.y2, content.height),
+        };
+    }
+
+    return mapPointToParentLocalPx(parentLayout, scX, scY);
+}
+
 function mapRectToParentLocalPx(
     parentLayout: EntityLayout | undefined,
     coords: number[] | undefined,
+    parentFontScale = 1,
 ): { x: number; y: number; w: number; h: number } | null {
     const rect = rectFromCoords(coords);
     if (!rect) { return null; }
+
+    const outer = rectFromCoords(parentLayout?.coordinates);
+    const inner = rectFromCoords(parentLayout?.rootCoordinates);
+
+    if (outer && inner) {
+        const widthPx = Math.max(px(rectWidth(outer)), 1);
+        const heightPx = Math.max(px(rectHeight(outer)), 1);
+        const content = functionContentRect(widthPx, heightPx, parentFontScale);
+        const left = scaleInto(rect.x1, inner.x1, inner.x2, content.width);
+        const right = scaleInto(rect.x2, inner.x1, inner.x2, content.width);
+        const top = scaleInto(rect.y1, inner.y1, inner.y2, content.height);
+        const bottom = scaleInto(rect.y2, inner.y1, inner.y2, content.height);
+        return {
+            x: left,
+            y: content.y + top,
+            w: Math.max(right - left, 1),
+            h: Math.max(bottom - top, 1),
+        };
+    }
 
     const topLeft = mapPointToParentLocalPx(parentLayout, rect.x1, rect.y1);
     const bottomRight = mapPointToParentLocalPx(parentLayout, rect.x2, rect.y2);
@@ -257,7 +300,7 @@ function functionToNode(
 
     if (parentId) {
         const parentLayout = layoutOf(ui, parentId);
-        const mapped = mapRectToParentLocalPx(parentLayout, layout?.coordinates);
+        const mapped = mapRectToParentLocalPx(parentLayout, layout?.coordinates, fontScale);
         if (mapped) {
             x = mapped.x;
             y = mapped.y;
@@ -399,7 +442,12 @@ function connectionWaypointNodes(
         let centerY = layout.coordinates[i + 1] * SC_SCALE;
 
         if (containerLayout?.rootCoordinates?.length === 4 && containerRect) {
-            const local = mapPointToParentLocalPx(containerLayout, layout.coordinates[i], layout.coordinates[i + 1]);
+            const local = mapPointToParentContentLocalPx(
+                containerLayout,
+                layout.coordinates[i],
+                layout.coordinates[i + 1],
+                containerRect.fontScale,
+            );
             centerX = containerRect.x + local.x;
             centerY = containerRect.y + local.y;
         }
