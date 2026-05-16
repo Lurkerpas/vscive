@@ -27,6 +27,7 @@ import { AddEntityDialog, DialogState } from './components/AddEntityDialog';
 import { SearchFunctionDialog } from './components/SearchFunctionDialog';
 import { Palette } from './components/Palette';
 import { renderDiagramImage } from './exportImage';
+import { computeFocusVisibility } from './focus';
 import { Waypoint, isWaypointNodeId, parseWaypointNodeId, waypointCenterFromNode } from './waypoints';
 
 const nodeTypes = {
@@ -122,25 +123,6 @@ function replaceConnectionWaypointNodes(nodes: Node[], connectionId: string, way
     ];
 }
 
-function edgeConnectsInterface(edge: Edge, interfaceId: string): boolean {
-    return edge.source === interfaceId || edge.target === interfaceId;
-}
-
-function isAncestorFunctionNode(nodes: Node[], ancestorId: string, descendantId: string): boolean {
-    let currentId: string | undefined = descendantId;
-    while (currentId) {
-        if (currentId === ancestorId) { return true; }
-        const currentNode = nodes.find(node => node.id === currentId);
-        currentId = currentNode?.parentId;
-    }
-    return false;
-}
-
-function areFunctionNodesInProxyRelation(nodes: Node[], leftId?: string, rightId?: string): boolean {
-    if (!leftId || !rightId || leftId === rightId) { return false; }
-    return isAncestorFunctionNode(nodes, leftId, rightId) || isAncestorFunctionNode(nodes, rightId, leftId);
-}
-
 function flattenFunctions(functions: FunctionModel[]): FunctionModel[] {
     const flat: FunctionModel[] = [];
     const visit = (fn: FunctionModel) => {
@@ -217,58 +199,10 @@ function DiagramEditor() {
         [diagramData],
     );
 
-    const focusVisibility = useMemo(() => {
-        if (!focusEnabled || !selected) { return null; }
-
-        const interfaceHost = new Map<string, string>();
-        const functionInterfaces = new Map<string, Set<string>>();
-
-        for (const node of nodes) {
-            if (node.type !== 'interfaceNode' || !node.parentId) { continue; }
-            interfaceHost.set(node.id, node.parentId);
-            const bucket = functionInterfaces.get(node.parentId) ?? new Set<string>();
-            bucket.add(node.id);
-            functionInterfaces.set(node.parentId, bucket);
-        }
-
-        const visibleFunctionIds = new Set<string>();
-        const visibleInterfaceIds = new Set<string>();
-        const visibleEdgeIds = new Set<string>();
-
-        if (isFunction(selected)) {
-            visibleFunctionIds.add(selected.id);
-            for (const ifaceId of functionInterfaces.get(selected.id) ?? new Set<string>()) {
-                visibleInterfaceIds.add(ifaceId);
-            }
-            for (const edge of edges) {
-                const touchesSelectedFunction = visibleInterfaceIds.has(edge.source) || visibleInterfaceIds.has(edge.target);
-                if (!touchesSelectedFunction) { continue; }
-                visibleEdgeIds.add(edge.id);
-                visibleInterfaceIds.add(edge.source);
-                visibleInterfaceIds.add(edge.target);
-                const sourceHost = interfaceHost.get(edge.source);
-                const targetHost = interfaceHost.get(edge.target);
-                if (sourceHost) { visibleFunctionIds.add(sourceHost); }
-                if (targetHost) { visibleFunctionIds.add(targetHost); }
-            }
-        } else {
-            visibleInterfaceIds.add(selected.id);
-            const hostFunctionId = interfaceHost.get(selected.id);
-            if (hostFunctionId) { visibleFunctionIds.add(hostFunctionId); }
-            for (const edge of edges) {
-                if (!edgeConnectsInterface(edge, selected.id)) { continue; }
-                visibleEdgeIds.add(edge.id);
-                visibleInterfaceIds.add(edge.source);
-                visibleInterfaceIds.add(edge.target);
-                const sourceHost = interfaceHost.get(edge.source);
-                const targetHost = interfaceHost.get(edge.target);
-                if (sourceHost) { visibleFunctionIds.add(sourceHost); }
-                if (targetHost) { visibleFunctionIds.add(targetHost); }
-            }
-        }
-
-        return { visibleFunctionIds, visibleInterfaceIds, visibleEdgeIds };
-    }, [edges, focusEnabled, nodes, selected]);
+    const focusVisibility = useMemo(
+        () => computeFocusVisibility(focusEnabled, selected, nodes, edges),
+        [edges, focusEnabled, nodes, selected],
+    );
 
     const displayedNodes = useMemo(() => {
         const enhancedNodes = nodes.map(n => {
