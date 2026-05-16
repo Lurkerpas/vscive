@@ -13,6 +13,11 @@ function wrapTasteCliCommand(scriptPath: string, command: string, image: string)
     return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)} ${command}`;
 }
 
+function getTasteCliShellCommand(extensionUri: vscode.Uri, tasteDockerImage: string): string {
+    const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    return wrapTasteCliCommand(scriptPath, '', tasteDockerImage);
+}
+
 function getDvBuildTarget(document: DeploymentViewDocument): string {
     const filename = basename(document.uri);
     if (/\.dv\.xml$/iu.test(filename)) {
@@ -24,7 +29,11 @@ function getDvBuildTarget(document: DeploymentViewDocument): string {
     return filename;
 }
 
-function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, tasteDockerImage: string, mode: 'clean' | 'skeletons' | 'debug' | 'release' | 'run', extensionUri: vscode.Uri): string {
+function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, tasteDockerImage: string, mode: 'clean' | 'skeletons' | 'debug' | 'release' | 'run' | 'cli', extensionUri: vscode.Uri): string {
+    if (mode === 'cli') {
+        return getTasteCliShellCommand(extensionUri, tasteDockerImage);
+    }
+
     const target = getDvBuildTarget(document);
     const command = mode === 'clean'
         ? 'make clean'
@@ -164,6 +173,9 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                 }
                 case 'buildDv': {
                     if (!this.getCapabilities().canBuild) {
+                        break;
+                    }
+                    if (message.mode === 'cli' && !this.getOptions().useTasteCliShForCommands) {
                         break;
                     }
                     runInSharedTerminal(

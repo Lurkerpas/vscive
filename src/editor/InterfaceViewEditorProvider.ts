@@ -32,6 +32,11 @@ function wrapTasteCliCommand(scriptPath: string, command: string, image: string)
     return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)} ${command}`;
 }
 
+function getTasteCliShellCommand(extensionUri: vscode.Uri, tasteDockerImage: string): string {
+    const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    return wrapTasteCliCommand(scriptPath, '', tasteDockerImage);
+}
+
 function getProjectCommand(
     useTasteCliShForCommands: boolean,
     tasteDockerImage: string,
@@ -344,6 +349,13 @@ export class InterfaceViewEditorProvider
                         break;
                     }
                     runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseBuild', this.extensionUri), dirnameUri(document.uri));
+                    break;
+                }
+                case 'buildCli': {
+                    if (!this.getCapabilities().canBuild || !this.getOptions().useTasteCliShForCommands) {
+                        break;
+                    }
+                    runInSharedTerminal(getTasteCliShellCommand(this.extensionUri, this.getOptions().tasteDockerImage), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildRun': {
