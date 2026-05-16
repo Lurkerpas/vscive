@@ -205,6 +205,58 @@ test('focus renders the effective concrete edge instead of the intermediate prox
     );
 });
 
+test('focus follows a selected nested child through an ancestor proxy interface to the external concrete source', () => {
+    const selected = makeFunction('child');
+    const nodes = [
+        { id: 'upstream', type: 'functionNode', position: { x: 0, y: 0 } },
+        { id: 'proxy', type: 'functionNode', position: { x: 300, y: 0 } },
+        { id: 'child', type: 'functionNode', position: { x: 40, y: 40 }, parentId: 'proxy' },
+        {
+            id: 'upstream-ri',
+            type: 'interfaceNode',
+            position: { x: 0, y: 0 },
+            parentId: 'upstream',
+            data: { iface: { ...makeInterface('upstream-ri'), type: 'required' } },
+        },
+        {
+            id: 'proxy-pi',
+            type: 'interfaceNode',
+            position: { x: 0, y: 0 },
+            parentId: 'proxy',
+            data: { iface: { ...makeInterface('proxy-pi'), type: 'provided' } },
+        },
+        {
+            id: 'child-pi',
+            type: 'interfaceNode',
+            position: { x: 0, y: 0 },
+            parentId: 'child',
+            data: { iface: { ...makeInterface('child-pi'), type: 'provided' } },
+        },
+    ] as Node[];
+    const edges = [
+        { id: 'upstream-to-proxy', source: 'upstream-ri', target: 'proxy-pi' },
+        { id: 'proxy-to-child', source: 'proxy-pi', target: 'child-pi' },
+    ] as Edge[];
+
+    const visibility = computeFocusVisibility(true, selected, nodes, edges);
+    const renderedEdges = computeFocusEdges(true, selected, nodes, edges, visibility);
+
+    assert.ok(visibility);
+    assert.deepEqual([...visibility.visibleFunctionIds].sort(), ['child', 'proxy', 'upstream']);
+    assert.deepEqual([...visibility.visibleInterfaceIds].sort(), ['child-pi', 'proxy-pi', 'upstream-ri']);
+    assert.deepEqual([...visibility.visibleEdgeIds].sort(), ['proxy-to-child', 'upstream-to-proxy']);
+    assert.deepEqual(
+        renderedEdges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target })),
+        [
+            {
+                id: 'upstream-to-proxy::focus::upstream-ri::child-pi',
+                source: 'upstream-ri',
+                target: 'child-pi',
+            },
+        ],
+    );
+});
+
 test('focus edge projection is disabled when focus is off', () => {
     const selected = makeFunction('router');
     const nodes = [

@@ -217,6 +217,27 @@ export function computeFocusVisibility(
         }
     };
 
+    const expandVisibleConcreteEdges = () => {
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const edge of edges) {
+                if (isProxyEdge(ctx, edge)) { continue; }
+                const touchesVisibleInterface = visibleInterfaceIds.has(edge.source) || visibleInterfaceIds.has(edge.target);
+                if (!touchesVisibleInterface) { continue; }
+                const beforeFunctions = visibleFunctionIds.size;
+                const beforeInterfaces = visibleInterfaceIds.size;
+                const beforeEdges = visibleEdgeIds.size;
+                addEdgeEndpoints(edge);
+                if (visibleFunctionIds.size !== beforeFunctions
+                    || visibleInterfaceIds.size !== beforeInterfaces
+                    || visibleEdgeIds.size !== beforeEdges) {
+                    changed = true;
+                }
+            }
+        }
+    };
+
     if (isFunction(selected)) {
         addFunctionWithAncestors(selected.id);
         for (const ifaceId of ctx.functionInterfaces.get(selected.id) ?? new Set<string>()) {
@@ -240,7 +261,14 @@ export function computeFocusVisibility(
         }
     }
 
-    expandVisibleProxyEdges();
+    let previousSignature = '';
+    while (true) {
+        expandVisibleProxyEdges();
+        expandVisibleConcreteEdges();
+        const nextSignature = `${visibleFunctionIds.size}:${visibleInterfaceIds.size}:${visibleEdgeIds.size}`;
+        if (nextSignature === previousSignature) { break; }
+        previousSignature = nextSignature;
+    }
 
     return { visibleFunctionIds, visibleInterfaceIds, visibleEdgeIds };
 }
