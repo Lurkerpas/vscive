@@ -3,7 +3,8 @@
 set -euo pipefail
 
 PROJECT_DIR=$(pwd -P)
-PROJECT_NAME=$(basename "${PROJECT_DIR}")
+PROJECT_NAME_SOURCE=${TASTE_HOST_PWD:-${PROJECT_DIR}}
+PROJECT_NAME=$(basename "${PROJECT_NAME_SOURCE}")
 SCRATCH_PARENT=
 
 cleanup() {

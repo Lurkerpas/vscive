@@ -39,6 +39,7 @@ fi
     -e USER=taste \
     -e LOGNAME=taste \
     -e TASTE_IN_DOCKER=1 \
+    -e TASTE_HOST_PWD="${WORKDIR}" \
     -v "${WORKDIR}:${CONTAINER_HOME}/work" \
     -w "${CONTAINER_HOME}/work" \
     "${IMAGE}" \
