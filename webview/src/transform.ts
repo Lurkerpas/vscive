@@ -307,6 +307,23 @@ function ifacePositionFromLayout(
     ifaceH: number,
 ): { x: number; y: number } | null {
     if (!layout || !parentLayout) { return null; }
+
+    // Imported nested interfaces can carry both coordinate systems:
+    // - coordinates: absolute canvas anchor on the host function border
+    // - rootCoordinates: anchor in the host function's internal space
+    // Draw the node from the external anchor when available so icon/handle placement
+    // follows the outer border. Fall back to scoped coordinates for editor-created data
+    // that only stores the internal point.
+    if ((layout.rootCoordinates?.length ?? 0) >= 2 && layout.coordinates.length >= 2) {
+        const parentRect = rectFromCoords(parentLayout.coordinates);
+        if (parentRect) {
+            return {
+                x: px(layout.coordinates[0] - parentRect.x1) - ifaceW / 2,
+                y: px(layout.coordinates[1] - parentRect.y1) - ifaceH / 2,
+            };
+        }
+    }
+
     const posCoords = (layout.rootCoordinates?.length ?? 0) >= 2 ? layout.rootCoordinates! : layout.coordinates;
     if (posCoords.length < 2) { return null; }
     const mapped = mapPointToParentLocalPx(parentLayout, posCoords[0], posCoords[1]);
