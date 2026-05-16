@@ -22,6 +22,8 @@ import {
 const SC_INV = 1 / SC_SCALE; // pixels → SC coords (= 20)
 const IFACE_W = 60;
 const IFACE_H = 80;
+const NEW_FUNCTION_DEFAULT_WIDTH = 1780;
+const NEW_FUNCTION_DEFAULT_HEIGHT = 960;
 
 interface Rect {
     x1: number;
@@ -292,17 +294,17 @@ export class InterfaceViewDocument implements vscode.CustomDocument {
             ? (() => {
                 const parentRect = this.getFunctionFlowRect(parentId);
                 if (!parentRect) {
-                    return this.flowRectToAbsoluteSc(rfX, rfY, DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT);
+                    return this.flowRectToAbsoluteSc(rfX, rfY, NEW_FUNCTION_DEFAULT_WIDTH, NEW_FUNCTION_DEFAULT_HEIGHT);
                 }
                 return this.flowRectToScopedSc(
                     this.ui.entities[parentId],
                     rfX - parentRect.x,
                     rfY - parentRect.y,
-                    DEFAULT_FUNCTION_WIDTH,
-                    DEFAULT_FUNCTION_HEIGHT,
+                    NEW_FUNCTION_DEFAULT_WIDTH,
+                    NEW_FUNCTION_DEFAULT_HEIGHT,
                 );
             })()
-            : this.flowRectToAbsoluteSc(rfX, rfY, DEFAULT_FUNCTION_WIDTH, DEFAULT_FUNCTION_HEIGHT);
+            : this.flowRectToAbsoluteSc(rfX, rfY, NEW_FUNCTION_DEFAULT_WIDTH, NEW_FUNCTION_DEFAULT_HEIGHT);
 
         const newFn: FunctionModel = {
             id,
