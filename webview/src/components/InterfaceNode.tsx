@@ -1,7 +1,8 @@
 import React from 'react';
-import { NodeProps, Handle, Position } from '@xyflow/react';
+import { NodeProps, Handle } from '@xyflow/react';
 import { InterfaceModel } from '../../../src/model/types';
 import { IfaceEdge, IFACE_W, IFACE_H, interfaceDimensions } from '../transform';
+import { buildInterfaceHandleSpecs } from './interfaceHandles';
 
 interface InterfaceNodeData {
     label: string;
@@ -62,9 +63,6 @@ export function InterfaceNode({ data, selected }: NodeProps) {
     const width = d.ifaceWidth ?? fallbackDimensions.width;
     const height = d.ifaceHeight ?? fallbackDimensions.height;
     const iconSize = Math.max(10, ICON * fontScale);
-    const handleSize = Math.max(6, 12 * fontScale);
-    const handleBorderWidth = Math.max(1, 2 * fontScale);
-    const handleOffset = Math.max(2, 4 * fontScale);
 
     // Tip direction:
     //   PI → tip toward function center (inward)
@@ -81,26 +79,7 @@ export function InterfaceNode({ data, selected }: NodeProps) {
     //   PI: middle of the base edge (the flat outside side)
     //   RI: the tip vertex (pointing outward)
     // In both cases the outside is on the same side as the edge direction.
-    const handlePos =
-        edge === 'left'   ? Position.Left :
-        edge === 'right'  ? Position.Right :
-        edge === 'top'    ? Position.Top :
-                            Position.Bottom;
-
-    const handleStyle: React.CSSProperties = (() => {
-        const base: React.CSSProperties = {
-            width: handleSize,
-            height: handleSize,
-            background: color,
-            border: `${handleBorderWidth}px solid #1e1e2e`,
-        };
-        switch (edge) {
-            case 'left':   return { ...base, left: -handleOffset, top: height / 2 - handleSize / 2 };
-            case 'right':  return { ...base, right: -handleOffset, top: height / 2 - handleSize / 2 };
-            case 'top':    return { ...base, top: -handleOffset, left: width / 2 - handleSize / 2 };
-            case 'bottom': return { ...base, bottom: -handleOffset, left: width / 2 - handleSize / 2 };
-        }
-    })();
+    const handleSpecs = buildInterfaceHandleSpecs(edge, color, width, height, fontScale);
 
     // Kind icon: place just outside the outer vertex/edge, slightly offset
     const iconStyle: React.CSSProperties = (() => {
@@ -155,10 +134,14 @@ export function InterfaceNode({ data, selected }: NodeProps) {
             </svg>
             {d.showInterfaceNames !== false && <span style={labelStyle}>{iface.name}</span>}
             <span style={iconStyle}>{kindIcon}</span>
-            {iface.type === 'provided'
-                ? <Handle type="target" position={handlePos} style={handleStyle} />
-                : <Handle type="source" position={handlePos} style={handleStyle} />
-            }
+            {handleSpecs.map(spec => (
+                <Handle
+                    key={spec.type}
+                    type={spec.type}
+                    position={spec.position}
+                    style={spec.style}
+                />
+            ))}
         </div>
     );
 }
