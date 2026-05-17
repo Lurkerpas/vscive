@@ -1,6 +1,20 @@
+The code of this extension is licensed under MIT License.
+- The direct dependencies are as follows:
+- xmldom - MIT License,
+- xyflow (React Flow) - MIT License,
+- react - MIT License.
+
+References are sourced from different repositories, copyrighted by their respective owners under respective licenses:
+- kazoo, included as submodule,
+- opus2, included as submodule,
+- TASTE-SAMV71-RTEMS-Tests, included as submodule,
+- taste-setup, 3 files coped (including license file).
+
+No code from these repositories is used, compiled or linked. For kazoo, opus2 and TASTE-SAMV71-RTEMS-Tests, only Interface View and Deployment view files (xml data) have been used as references for development and testing. For taste-setup, Board1.xml and default_attributes.xml files (xml configuration) are used as reference and user configuration. None of these files are distributed as a part of the packaged extension.
+
 MIT License
 
-Copyright (c) 2026 Lurkerpas
+Copyright (c) 2026 Michał Kurowski
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
