@@ -1,0 +1,8 @@
+Node : node_1
+  |_ Partition        : asw
+    |_ Coverage       : FALSE
+    |_ Package        : ocarina_processors_arm
+    |_ CPU Name       : p1
+    |_ CPU Platform   : PLATFORM_SAMV71_RTEMS
+    |_ CPU Classifier : ocarina_processors_arm::samv71.rtems
+    |_ Contains       : testfunction 

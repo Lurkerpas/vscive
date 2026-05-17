@@ -1,0 +1,30 @@
+Function TestFunction in context _Root
+├─ Full Prefix : (none)
+├─ Language    : c
+├─ Zip file    : (none)
+├─ Is type     : FALSE
+├─ Instance of : 
+├─ Minimum number of instances :  1
+├─ Maximum number of instances :  1
+├─ Instance number :  1
+├─ Instance original name : TestFunction
+├─ Context Parameters :
+├─ Directives:
+├─ Simulink Tuneable Parameters:
+├─ Implementations:
+├─ User properties:
+│  ├─ Taste::Instances_Max = 1
+│  ├─ Taste::Instances_Min = 1
+│  ├─ Taste::Startup_Priority = 1
+│  └─ TASTE_IV_Properties::Default_Codegen = Ada
+├─ Timers:
+├─ Provided interfaces:
+│  └─ Name : trigger - in FV: TestFunction
+│     ├─ RCM Kind    : CYCLIC_OPERATION
+│     ├─ Period/MIAT :  1000
+│     ├─ WCET (ms)   :  0
+│     ├─ Queue Size  :  1
+│     ├─ Parameters  :
+│     └─ Connections :
+└─ Required interfaces:
+

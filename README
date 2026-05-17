@@ -29,9 +29,10 @@ The tool does not implement all SpaceCreator features, and does not expose all T
 Only the most basic usage will be described here. For information regarding general TASTE usage and semantics, refer to the [TASTE main site](taste.tools) and its [wiki](https://gitlab.esa.int/taste/taste-setup/-/wikis/home).
 
 The main use is inspecting existing TASTE projects. Just open interfaceview.xml file, and a visual editor for InterfaceView should open:
-![Main view](assets/demo_main.png)
+![Main view/Interface View](assets/demo_main.png)
 
 Similarly, when opening a *.dv.xml file, a visual editor for Deployment View should open.
+![Deployment View](assets/demo_dv.png)
 
 The diagrams can be edited, visualisation can be adjusted by opening the options. In particular, the "Focus" command can be usefull for inspecting large systems, as it shows only the nodes connected to the current one, facilitating tracing component interactions. When a Function, Interface, Node or Connection is selected, its properties can be edited. Unlike in SpaceCreator, most options are treated as text strings, without validation, so care should be taken.
 ![Function properties](assets/demo_function_properties.png)
@@ -51,7 +52,14 @@ When all sources are ready, project can be built using *Build->Build Debug/Relea
 
 # Installation
 ## General
-VSCIVE is intended to be used on Linux, and was tested on Debian 13 and Ubuntu 24.04. Some capabilities may be available on other platforms.
+VSCIVE is intended to be used on Linux, and was tested on Debian 13 and Ubuntu 24.04. Some capabilities may be available on other platforms. 
+
+End users should install the extension by downloading the newest *.vsix package from [Releases](https://github.com/Lurkerpas/vscive/releases).
+
+Developer should install Node and use Makefile targets:
+- make test - run tests,
+- make package - build project and create vsix package,
+- make install - build project and install extension in local Visual Studio Code.
 
 ## When TASTE is installed on the target system
 When TASTE is installed on the host system, standard TASTE commands should work out of the box. All that is left is to configure the editor settings.
@@ -77,6 +85,7 @@ When a build command is issued for the first time, the image will be downloaded.
 
 Note that the default image contains only basic runtimes and tools. If you want to build projects e.g., for Microchip SAMV71 MCU, you should:
 - enter the the container, by invoking *CLI* command (in the *Build* group in editor canvas context menu) or using docker run command,
+- (optional) update installation to source the newest code by running *$(HOME)/tool-src/Update-TASTE.sh*
 - install the necessary software, e.g., for SAMV71 you should run:
     - *$(HOME)/tool-src/add-ons/install-samx-rtems-runtime.sh*
     - *$(HOME)/tool-src/add-ons/install-rtems-qdp-arm.sh*

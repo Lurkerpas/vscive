@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<InterfaceView version="" asn1file="samv71.asn" UiFile="interfaceview.ui.xml" modifierHash="">
+  <Function id="88598203-48ac-4c5c-8c37-840233f64a7c" name="TestFunction" is_type="NO" language="C" default_implementation="default" fixed_system_element="NO" required_system_element="NO" startup_priority="1" instances_min="1" instances_max="1">
+    <Provided_Interface id="18bf9c44-c5f9-49f9-85f0-b42737cbd870" name="trigger" kind="Cyclic" layer="default" enable_multicast="true" required_system_element="NO">
+    </Provided_Interface>
+    <Implementations>
+      <Implementation name="default" language="C"/>
+    </Implementations>
+  </Function>
+  <Comment id="" name="Welcome to TASTE!\n============\n\nRight click to add a function, and use Ctrl-Click to connect functions together.\n\nYou can split the screen in multiple windows using Ctrl-E-3" required_system_element="NO"></Comment>
+</InterfaceView>
