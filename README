@@ -61,6 +61,9 @@ Developer should install Node and use Makefile targets:
 - make package - build project and create vsix package,
 - make install - build project and install extension in local Visual Studio Code.
 
+GitHub release automation is configured in `.github/workflows/release-vsix.yml`.
+When you push a tag, GitHub Actions will build the extension and attach the generated `*.vsix` file to the GitHub Release for that tag.
+
 ## When TASTE is installed on the target system
 When TASTE is installed on the host system, standard TASTE commands should work out of the box. All that is left is to configure the editor settings.
 

@@ -5,6 +5,10 @@ webview
 references
 design
 tmp
+assets
+demos
+deleteme
+*.vsix
 .gitignore
 .eslintrc*
 tsconfig.json
