@@ -161,7 +161,6 @@ export function parseIvXml(xml: string): IvModel {
     }
 
     // Collect all Connection elements from root AND from any nested Function elements
-    // (e.g. SpaceCreator stores ASW's 500+ internal connections inside the ASW Function element)
     function collectConnectionElements(el: XmlElement | XmlDocument): XmlElement[] {
         const out: XmlElement[] = [];
         for (const c of childElements(el as XmlElement, 'Connection')) { out.push(c); }
