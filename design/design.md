@@ -1,569 +1,192 @@
-# VSCIVE - Current Implementation Design
+# VSCIVE: Implementation Design
 
-This document describes the implementation that is currently present in the repository. It is not a forward-looking target architecture. Where a feature is only partially implemented or intentionally left as a placeholder, that is called out explicitly so the document stays consistent with the code.
+This document provides an overview of VSCIVE design.
 
-## 1. Scope and Runtime Model
+## 1) Purpose and Scope
 
-VSCIVE is a VS Code custom editor for TASTE / SpaceCreator Interface View diagrams.
+VSCIVE is a VS Code extension providing two custom editors:
+
+- Interface View editor for `interfaceview.xml`
+- Deployment View editor for `*.dv.xml`
+
+Both editors support diagram editing, XML round-trip serialization, image export, and build/run integration through shell commands (optionally wrapped by `scripts/taste-cli.sh`).
+
+## 2) Main Libraries and Tooling
+
+Runtime libraries:
+
+- VS Code Extension API (`vscode`): activation, custom editors, commands, file I/O, webview host
+- React + React DOM: webview UI
+- `@xyflow/react` (React Flow): diagram/canvas interaction and node/edge rendering
+- `@xmldom/xmldom`: XML parse/manipulation in the extension host and test helpers
+
+Build/tooling:
+
+- TypeScript
+- esbuild: extension bundles (`out/extension-node.js`, `out/extension-web.js`)
+- Vite + `@vitejs/plugin-react`: webview bundle (`out/webview/assets/main.js`, `main.css`)
+- Node test runner for unit/integration-style tests in `test/`
+
+## 3) High-Level Architecture
 
 The implementation is split into two runtime parts:
 
-- the extension host, which parses, owns, mutates, saves, and restores the document model
-- the webview, which renders the diagram with React Flow and sends user intents back to the extension host through typed `postMessage` messages
+- Extension host (authoritative model/state and persistence)
+- Webview app (diagram rendering, interaction, transient UI state)
 
-The extension host is the source of truth. The webview keeps local React state for rendering, selection, transient clipboard, connect mode, and session-local lock state, but persisted document changes are always applied in the extension host first.
+The extension host is the source of truth. Webviews emit typed intent messages; documents mutate in host memory first; host then pushes a refreshed model back to the webview.
 
-## 2. Persisted File Formats
+### 3.1 Extension Entry and Registration
 
-### 2.1 Interface View XML
+`src/extension.ts`:
 
-The main XML document is parsed into `IvModel` and serialized back from that model.
+- Registers custom editors:
+  - `vscive.interfaceViewEditor` via `InterfaceViewEditorProvider`
+  - `vscive.deploymentViewEditor` via `DeploymentViewEditorProvider`
+- Registers explorer commands (create IV/DV, taste init/build/run)
+- Resolves folder targets and executes terminal commands via shared terminal helper
 
-Important persisted entities:
+### 3.2 Custom Editor Providers
 
-- `Function`
-- `Provided_Interface`
-- `Required_Interface`
-- `Connection`
-- `Layer`
+`src/editor/InterfaceViewEditorProvider.ts`:
 
-Model facts reflected by the current implementation:
+- Handles webview lifecycle, message routing, save/revert/backup
+- Implements snapshot-based undo/redo with undo-depth limiting
+- Persists options in `globalState`
+- Supports IV build actions, including `CLI` action when taste-cli wrapping is enabled
+- Supports function source opening (`Edit Function`) for Ada/C/C++
 
-- functions may be nested arbitrarily using child `Function` elements
-- interfaces belong to functions and are identified by UUID-like string ids
-- connections reference interfaces by `iface_id`
-- connection endpoint names are duplicated in the XML model as `func_name`, `ri_name`, and `pi_name`
-- unknown XML attributes are preserved in `extraAttrs`
-- unknown `Property` elements are preserved in `properties`
-- `Taste::InheritPI` and `Taste::Autonamed` are mapped to typed boolean fields on interfaces and are serialized back as `Property` elements
+`src/editor/DeploymentViewEditorProvider.ts`:
 
-The parser accepts connections both at the root level and nested under functions. The serializer writes connections under the nearest common ancestor function of the two endpoint interfaces, with a root-level fallback when there is no common owner.
+- Handles DV webview lifecycle and messages
+- Snapshot-based undo/redo
+- Persists options in `globalState`
+- Supports DV build actions and `CLI` mode via `buildDv` message
 
-### 2.2 UI XML
+### 3.3 Document Model Owners
 
-The visual layout is parsed into `UiModel`.
+`src/editor/InterfaceViewDocument.ts`:
 
-Current layout conventions:
+- Owns `iv`, `ui`, and attribute `schema`
+- Loads modern IV+UI or synthesizes UI from legacy embedded `Taste::coordinates`
+- Applies all IV mutations (add/update/delete/move/connect/paste/reparent/waypoints)
+- Serializes to IV XML + UI XML
 
-- functions use `coordinates = [x1, y1, x2, y2]`
-- interfaces use `coordinates = [x, y]` where the point is the interface center in SpaceCreator space
-- connections use `coordinates = [x1, y1, x2, y2, ...]` for routed waypoints
-- container functions may also carry `RootCoordinates`, parsed into `rootCoordinates`
+`src/editor/DeploymentViewDocument.ts`:
 
-`rootCoordinates` are used for modern nested/container layouts. When present, they describe the expanded inner canvas of a container function, and child coordinates are interpreted relative to that inner canvas origin during graph construction.
+- Owns `dv`, `ui`, `boards`, plus derived deployment candidates
+- Loads DV/UI, ensures layout entries, loads boards file
+- Applies DV mutations (nodes/devices/connections, deploy/undeploy functions/messages)
+- Serializes to DV XML + UI XML
 
-### 2.3 Legacy Compatibility
+## 4) Data Model and File Formats
 
-Legacy IV files without a separate UI file are supported.
+Shared types: `src/model/types.ts`.
 
-Current behavior:
+Key models:
 
-- if `UiFile` is missing, the document synthesizes `<basename>_ui.xml`
-- `Taste::coordinates` properties embedded in the IV file are extracted into a transient `UiModel`
-- connection waypoint coordinates embedded as properties are also extracted
+- Interface side: `IvModel`, `FunctionModel`, `InterfaceModel`, `ConnectionModel`
+- Deployment side: `DvModel`, node/device/connection/message types
+- Shared layout: `UiModel`, `EntityLayout`
+- Messaging protocol: `WebviewMessage`, `ExtensionMessage`, `DvWebviewMessage`, `DvExtensionMessage`
+- User options: `EditorOptions`, `DEFAULT_OPTIONS`
 
-This lets the rest of the editor treat modern and legacy files through the same in-memory shape.
+XML parsing/serialization:
 
-### 2.4 Coordinate Conversion
+- Parsers: `src/parsers/*.ts` (`IvXmlParser`, `DvXmlParser`, `UiXmlParser`, `AttrXmlParser`, `BoardsXmlParser`)
+- Serializers: `src/serializers/*.ts` (`IvXmlSerializer`, `DvXmlSerializer`, `UiXmlSerializer`)
 
-The implementation uses a fixed scale factor:
+Round-trip behavior is intentionally loss-tolerant for unknown attrs/properties through `extraAttrs` and preserved property lists.
 
-`SC_SCALE = 0.05`
+## 5) Webview Architecture
 
-That means:
+Entry: `webview/src/main.tsx` chooses editor app via `document.body.dataset.editorKind`:
 
-- SpaceCreator units are converted to React Flow coordinates by multiplying by `0.05`
-- React Flow coordinates are converted back by multiplying by `20`
+- Interface app: `webview/src/App.tsx`
+- Deployment app: `webview/src/DvApp.tsx`
 
-This conversion is applied at the parse / graph-build boundary and again when persisting layout updates.
+Canvas and interactions are implemented with React Flow (`@xyflow/react`), custom node/edge renderers, and per-editor local React state.
 
-## 3. Shared Domain Model
+Core transformation layers:
 
-The shared TypeScript model lives in `src/model/types.ts`.
+- IV graph build: `webview/src/transform.ts`
+- DV graph build: `webview/src/dvTransform.ts`
 
-Primary types:
+Image export pipelines:
 
-- `IvModel`
-- `FunctionModel`
-- `InterfaceModel`
-- `ConnectionModel`
-- `UiModel`
-- `EntityLayout`
-- `AttributeSchema`
-- `EditorOptions`
-- `WebviewMessage`
-- `ExtensionMessage`
+- IV: `webview/src/exportImage.ts`
+- DV: inline SVG/raster helpers in `webview/src/DvApp.tsx`
 
-Notable current fields:
+Message bridge:
 
-- `FunctionModel.nestedFunctions`
-- `InterfaceModel.inheritPI`
-- `InterfaceModel.autonamed`
-- `ConnectionModel.sourceFuncName`
-- `ConnectionModel.sourceRiName`
-- `ConnectionModel.targetFuncName`
-- `ConnectionModel.targetPiName`
-- `EntityLayout.rootCoordinates`
+- `webview/src/vscodeApi.ts` wraps `acquireVsCodeApi()` and typed `post(...)`
 
-The duplicate connection endpoint name fields are actively maintained on rename so persisted XML stays compatible with existing tools.
+## 6) Primary Data Flows
 
-## 4. Extension-Host Architecture
+### 6.1 Open / Initial Load
 
-### 4.1 Entry Point
+1. VS Code opens matching file with custom editor provider.
+2. Provider creates document (`InterfaceViewDocument.create` or `DeploymentViewDocument.create`).
+3. Document parses XML into typed models.
+4. Webview loads and sends `ready`.
+5. Provider replies with capabilities/options and `load` (IV) or `loadDv` (DV).
+6. Webview builds graph nodes/edges and renders canvas.
 
-`src/extension.ts` registers a single custom editor provider:
+### 6.2 Edit / Persisted Mutation
 
-- view type: `vscive.interfaceViewEditor`
-- `supportsMultipleEditorsPerDocument: false`
+1. User action in webview emits typed message (e.g., `addFunction`, `updateDvNode`, `connect`).
+2. Provider snapshots pre-state.
+3. Document applies mutation to in-memory model.
+4. Provider emits undo/redo closures and pushes refreshed diagram message.
+5. Save writes XML (main model file + UI file).
 
-### 4.2 Provider
+### 6.3 Build / Run / CLI
 
-`src/editor/InterfaceViewEditorProvider.ts` is responsible for:
+1. User selects build action from context menu/palette.
+2. Webview emits build message (`build*` for IV, `buildDv` for DV).
+3. Provider resolves command:
+   - direct `make ...`, or
+   - wrapped via `scripts/taste-cli.sh` with `TASTE_DOCKER_IMAGE=...`
+4. Command runs in shared terminal (`src/utils/terminal.ts`, terminal name `VSCive Commands`) with temporary `cd` into document directory.
+5. `CLI` action opens interactive `taste-cli.sh` shell when wrapping is enabled.
 
-- opening custom documents
-- creating and resolving the webview
-- loading the built webview assets from `out/webview/index.html`
-- brokering all webview messages
-- saving and reverting documents
-- snapshot-based undo/redo integration with VS Code
-- persisting editor options in extension `globalState`
-- export save dialogs for PNG and SVG
+### 6.4 Export Diagram as Image
 
-The provider does not use a standalone command-stack class. Undo/redo is implemented directly in the provider with model snapshots.
+1. Webview requests export target (`requestExport`).
+2. Provider opens save dialog and returns chosen format.
+3. Webview renders SVG/PNG data URL.
+4. Provider writes exported bytes to selected file.
 
-### 4.3 Document
+## 7) Coordinates and Layout Conventions
 
-`src/editor/InterfaceViewDocument.ts` owns the current in-memory document state:
+IV layout scale:
 
-- `iv`
-- `ui`
-- `schema`
+- `SC_SCALE = 0.05` in UI/graph transform path (`UiXmlParser`, `transform.ts`)
 
-It implements all persisted mutations currently used by the webview, including:
+DV layout scale:
 
-- moving nodes
-- adding functions
-- adding interfaces
-- connecting interfaces
-- connecting functions by creating a matched RI/PI pair
-- connecting an existing interface to a function by creating a compatible interface
-- deleting entities
-- updating function fields
-- updating interface fields
-- pasting functions
-- pasting interfaces
-- reparenting functions
-- updating connection waypoints
+- `DV_LAYOUT_SCALE = 0.02` (`types.ts`, `DeploymentViewDocument`, `dvTransform.ts`)
 
-### 4.4 Parsers and Serializers
+IV function sizing in current code:
 
-Current parser / serializer modules:
+- Shared fallback defaults: `DEFAULT_FUNCTION_WIDTH = 270`, `DEFAULT_FUNCTION_HEIGHT = 190` (`types.ts`)
+- New function creation default in document mutation path: `1780 x 960` (`InterfaceViewDocument.ts`)
+- Interactive resize minimum in renderer: `200 x 100` (`webview/src/components/FunctionNode.tsx`)
 
-- `src/parsers/IvXmlParser.ts`
-- `src/parsers/UiXmlParser.ts`
-- `src/parsers/AttrXmlParser.ts`
-- `src/serializers/IvXmlSerializer.ts`
-- `src/serializers/UiXmlSerializer.ts`
+## 8) Testing Coverage (Current)
 
-There is no separate config service for the attributes file path; that logic currently lives in `InterfaceViewDocument.loadSchemaFromPath()`.
+Tests in `test/` cover parser/transform/export/editor behavior, including:
 
-## 5. Undo, Redo, Save, and Restore
+- attribute parsing (`attr-parser.test.ts`)
+- interface/deployment editor behavior (`interfaceview.test.ts`, `deploymentview.test.ts`)
+- graph transform and focus logic (`transform.test.ts`, `focus.test.ts`)
+- image export (`export-image.test.ts`)
+- interface node behavior (`interface-node.test.ts`)
 
-Undo and redo are snapshot-based.
+## 9) Notable Design Characteristics
 
-Current implementation details:
-
-- before each persisted mutation, the provider records a deep snapshot of `iv` and `ui`
-- after mutation, it records the post-change snapshot
-- the provider emits a `CustomDocumentEditEvent` with `undo` and `redo` closures
-- undo depth is enforced by monotonic per-document edit serials
-- default undo depth is `100`
-- current undo depth is configurable through editor options
-
-Save behavior:
-
-- `saveCustomDocument()` writes both the IV XML file and the UI XML file
-- `saveCustomDocumentAs()` writes both files next to the chosen destination
-- `revertCustomDocument()` reloads from disk and resends the diagram to the active webview
-
-Backup behavior writes only the main IV XML backup payload.
-
-## 6. Options and Configuration
-
-Editor options are represented by `EditorOptions` and stored in extension `globalState`, not in the workspace settings file.
-
-Current persisted options:
-
-- `canvasColor`
-- `snapEnabled`
-- `snapGridSize`
-- `showMinimap`
-- `showInterfaceNames`
-- `showConnectionLabels`
-- `fontSizeFn`
-- `fontSizeIface`
-- `fontSizeConn`
-- `attrFilePath`
-- `undoDepth`
-
-The provider merges saved options with `DEFAULT_OPTIONS` on read so newly added fields receive defaults for existing users.
-
-The attributes schema file is resolved in this order:
-
-1. explicit path from the saved options
-2. VS Code setting `vscive.attributesFilePath`
-3. `$HOME/.local/default_attributes.xml`
-
-## 7. Webview Architecture
-
-### 7.1 General Structure
-
-The webview is a Vite + React application rooted in `webview/src`.
-
-Current state management is local React state plus `useNodesState` / `useEdgesState` from `@xyflow/react`. There is no Zustand store.
-
-Main files:
-
-- `webview/src/App.tsx`
-- `webview/src/transform.ts`
-- `webview/src/components/Palette.tsx`
-- `webview/src/components/OptionsPanel.tsx`
-- `webview/src/components/AttributePanel.tsx`
-- `webview/src/components/FunctionNode.tsx`
-- `webview/src/components/InterfaceNode.tsx`
-- `webview/src/components/RoutedEdge.tsx`
-- `webview/src/components/WaypointNode.tsx`
-
-### 7.2 Graph Construction
-
-`buildGraph()` converts the persisted model into React Flow elements.
-
-Current graph element types:
-
-- function nodes
-- interface nodes
-- waypoint nodes for connection routing handles
-- routed edges for connections
-
-Waypoint nodes are explicit React Flow nodes so they can be selected with the selection rectangle, dragged, and deleted as part of node selection.
-
-### 7.3 Function Rendering
-
-Functions are rendered as custom rectangular nodes with:
-
-- a header bar
-- caption format `name [language]` when language is present
-- a body area reserved for nested content
-- a `NodeResizer`
-
-Default function size when layout is missing:
-
-- width: `800`
-- height: `560`
-
-Nested functions use React Flow parent-child layout via `parentId` and `extent: 'parent'`.
-
-### 7.4 Interface Rendering
-
-Interfaces are rendered as custom triangular nodes positioned just outside the host function border.
-
-Current constants:
-
-- width: `60`
-- height: `80`
-
-Current behavior:
-
-- provided interfaces point inward toward the function body
-- required interfaces point outward away from the function body
-- each interface has one connection handle on the outside side
-- interface kind controls icon and color
-- interface labels can be shown or hidden via `showInterfaceNames`
-- dragging an interface re-snaps it to the nearest edge of the parent function
-
-Required interfaces cannot be set to `Cyclic` in the property panel.
-
-### 7.5 Connection Rendering
-
-Connections are rendered as custom routed edges.
-
-Current behavior:
-
-- the path is a polyline through source, waypoints, and target
-- labels are rendered explicitly by the custom edge, not by React Flow's default edge label helper
-- connection label background is recomputed on every render from the current connection font size
-- labels can be shown or hidden via `showConnectionLabels`
-- right-clicking a segment opens a context menu that can add a waypoint or remove the connection
-
-Connection waypoints are stored in the UI model as absolute routed points and exposed in the canvas as dedicated waypoint nodes.
-
-### 7.6 Palette
-
-The palette is a fixed left-side vertical toolbar with icon-only buttons and separators.
-
-Current button order:
-
-- Zoom In
-- Zoom Out
-- Zoom to Fit
-- Snap to Grid
-- divider
-- Add Function
-- Add Provided Interface
-- Add Required Interface
-- Add Connection
-- divider
-- Export Diagram as Image
-- divider
-- Show Options
-- Lock Diagram from Modification
-
-Current palette behavior:
-
-- Add Provided / Required Interface is disabled unless a function is selected
-- Add Connection toggles a click-based connect mode
-- Show Options toggles the options panel
-- Lock Diagram is a webview-local toggle and is not persisted into the document or options
-
-### 7.7 Context Menus
-
-Current context menus are:
-
-Canvas:
-
-- Add Function
-- Add Connection
-- Paste Function (only if the clipboard currently holds a function)
-- Build Skeletons
-- Build
-- Export Diagram as Image
-
-Function:
-
-- Add Provided Interface
-- Add Required Interface
-- Add Nested Function
-- Copy Function
-- Paste Interface (only if the clipboard currently holds an interface)
-- Move to Root (only when nested)
-- Edit Function
-- Delete Function
-
-Interface:
-
-- Copy Interface
-- Delete Interface
-
-Waypoint node:
-
-- Remove Node
-- Remove Connection
-
-Connection segment:
-
-- Add Node
-- Remove Connection
-
-### 7.8 Panels
-
-The right-side panel area shows either the options panel or the attribute panel.
-
-Current behavior:
-
-- options panel shows only when `optionsVisible` is true and no entity is selected
-- attribute panel shows when a function or interface is selected
-
-The options panel currently edits:
-
-- attributes file path
-- canvas background color
-- snap toggle
-- snap grid size
-- show minimap
-- show interface names
-- show connection labels
-- function header font size
-- interface label font size
-- connection label font size
-- undo / redo depth
-
-The attribute panel currently edits:
-
-For functions:
-
-- name
-- language
-- default implementation
-- is type
-- fixed system element
-- visible schema attributes
-- arbitrary function properties list
-
-For interfaces:
-
-- name
-- kind
-- `inheritPI`
-- parameters
-- visible schema attributes
-- read-only preserved `Property` values
-
-Connected required interfaces show inherited parameters as locked/read-only when a connected PI is present.
-
-`Autonamed` is displayed read-only.
-
-## 8. Interaction Model
-
-### 8.1 Add / Connect Workflows
-
-Functions can be created:
-
-- from the palette
-- from the canvas context menu
-- as nested functions from the function context menu
-
-Interfaces can be created:
-
-- from the palette for the currently selected function
-- from the function context menu
-- by dragging a connection from an existing interface onto a function, which creates a compatible interface automatically
-
-Connections can be created in three ways:
-
-1. by dragging between compatible interfaces
-2. by dragging from an interface to a function, which creates a compatible interface and connects it
-3. by using connect mode, then clicking a source function and a target function to create a matched RI/PI pair and connect them
-
-Connect mode is click-based, not Ctrl-drag based.
-
-### 8.2 Copy / Paste
-
-Clipboard state is webview-local.
-
-Current paste behavior:
-
-- pasted functions receive a new function id
-- pasted direct child interfaces of that function also receive new ids
-- pasted functions do not copy nested functions
-- pasted entities do not copy connections
-- pasted interfaces receive a new interface id and no connections
-
-### 8.3 Snapping and Resizing
-
-When snap is enabled:
-
-- node dragging uses React Flow snap-to-grid
-- function resize completion snaps the resized rectangle borders to the grid
-- interface positions remain constrained to host edges and are re-snapped after parent resize
-- the background dot grid uses the configured snap gap
-
-### 8.4 Reparenting
-
-Current reparenting support is one-way through drag of a root function into another root function.
-
-Behavior:
-
-- on drag stop, the editor checks whether the moved root function's center lies inside another root function
-- the smallest containing function is chosen as the new parent
-- explicit `Move to Root` is available from the context menu for nested functions
-
-The document keeps absolute persisted coordinates and only moves the function in the tree structure.
-
-### 8.5 Locking
-
-The lock toggle currently prevents most mutating UI actions, including:
-
-- adding entities
-- deleting entities
-- dragging functions and interfaces
-- resizing functions
-- connection creation
-- context-menu mutations
-- paste operations
-- property editing through the attribute panel
-
-The lock state is not persisted and resets when the webview is reloaded.
-
-## 9. Export
-
-Export is initiated in the provider so the user chooses the destination file first.
-
-Current behavior:
-
-- saving with `.png` exports PNG
-- saving with `.svg` exports SVG
-- the webview renders the current visible diagram state to SVG markup
-- PNG export rasterizes that SVG through a browser canvas
-- the export respects current canvas color, label visibility toggles, and current font sizes
-
-## 10. Name Propagation and Inheritance Rules
-
-Current rename propagation:
-
-- renaming a function updates matching connection `sourceFuncName` and `targetFuncName`
-- renaming an interface updates matching `sourceRiName`, `targetPiName`, and derived connection names
-
-Current inheritance behavior:
-
-- connecting an RI to a PI calls `syncRequiredInterfaceFromProvided()` before the connection is created
-- that routine forces `inheritPI = true`
-- it copies interface kind from PI to RI
-- it copies parameters when the RI is inheriting or currently empty
-- it copies missing preserved properties
-- it copies missing or blank extra attributes
-- when a provided interface is updated later, connected inheriting required interfaces are synchronized again
-
-## 11. Current Limitations and Placeholders
-
-The following behaviors are intentionally described as current limitations because they are present in the codebase today:
-
-- `Edit Function` is a placeholder and only shows an informational message
-- there is no connection-specific properties panel or connection selection model for attribute editing
-- function, interface, and connection colors are not user-editable; rendering uses fixed theme colors plus kind-based interface colors
-- lock state is session-local and not persisted
-- there is no separate undo-stack module or command pattern implementation
-- there is no Zustand store in the webview
-- attributes file path persistence is implemented through extension global state plus a fallback workspace setting lookup, not through a dedicated config service
-- pasted functions do not clone nested function subtrees
-
-## 12. Actual Source Layout
-
-Current top-level source layout:
-
-```text
-src/
-  extension.ts
-  logger.ts
-  editor/
-    InterfaceViewDocument.ts
-    InterfaceViewEditorProvider.ts
-  model/
-    types.ts
-  parsers/
-    AttrXmlParser.ts
-    IvXmlParser.ts
-    UiXmlParser.ts
-  serializers/
-    IvXmlSerializer.ts
-    UiXmlSerializer.ts
-
-webview/
-  src/
-    App.tsx
-    main.tsx
-    transform.ts
-    waypoints.ts
-    components/
-      AddEntityDialog.tsx
-      AttributePanel.tsx
-      ContextMenu.tsx
-      EdgeMenuContext.tsx
-      FunctionNode.tsx
-      InterfaceNode.tsx
-      OptionsPanel.tsx
-      Palette.tsx
-      RoutedEdge.tsx
-      WaypointNode.tsx
-```
-
-This structure, together with the behavior documented above, is the current implementation baseline.
+- Model authority is centralized in extension host documents.
+- Message protocol is strongly typed across host/webview boundary.
+- Undo/redo is snapshot-based (not operational transform/CRDT).
+- XML round-trip prioritizes compatibility with existing TASTE/SpaceCreator artifacts.
+- The extension implements both IV and DV editors with parallel architecture and shared options model.
