@@ -3,19 +3,35 @@ import { log } from '../logger';
 import { DvDiagramData, DvExtensionMessage, DvWebviewMessage, EditorOptions, DEFAULT_OPTIONS } from '../model/types';
 import { basename, dataUrlToBytes, dirnameUri, encodeUtf8, extname, joinPathSegments, serializeUriForSetting } from '../utils/platform';
 import { runInSharedTerminal } from '../utils/terminal';
+import { isWindowsHost, resolveEditorOptions, shouldUseTasteCliWrapper } from '../utils/editorOptions';
 import { DeploymentViewDocument } from './DeploymentViewDocument';
 
 function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function wrapTasteCliCommand(scriptPath: string, command: string, image: string): string {
-    return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)} ${command}`;
+function cmdQuote(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`;
 }
 
-function getTasteCliShellCommand(extensionUri: vscode.Uri, tasteDockerImage: string): string {
+function wrapTasteCliCommand(extensionUri: vscode.Uri, args: string[], image: string, useTasteCliBatForCommands: boolean): string {
+    if (useTasteCliBatForCommands && isWindowsHost()) {
+        const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.bat').fsPath;
+        const suffix = args.map(arg => cmdQuote(arg)).join(' ');
+        return `set "TASTE_DOCKER_IMAGE=${image.replace(/"/g, '""')}" && call ${cmdQuote(scriptPath)}${suffix ? ` ${suffix}` : ''}`;
+    }
+
     const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
-    return wrapTasteCliCommand(scriptPath, '', tasteDockerImage);
+    const suffix = args.map(arg => shellQuote(arg)).join(' ');
+    if (isWindowsHost()) {
+        return `set "TASTE_DOCKER_IMAGE=${image.replace(/"/g, '""')}" && bash ${cmdQuote(scriptPath)}${suffix ? ` ${suffix}` : ''}`;
+    }
+
+    return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)}${suffix ? ` ${suffix}` : ''}`;
+}
+
+function getTasteCliShellCommand(extensionUri: vscode.Uri, tasteDockerImage: string, useTasteCliBatForCommands: boolean): string {
+    return wrapTasteCliCommand(extensionUri, [], tasteDockerImage, useTasteCliBatForCommands);
 }
 
 function getDvBuildTarget(document: DeploymentViewDocument): string {
@@ -29,9 +45,9 @@ function getDvBuildTarget(document: DeploymentViewDocument): string {
     return filename;
 }
 
-function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, tasteDockerImage: string, mode: 'clean' | 'skeletons' | 'debug' | 'release' | 'run' | 'cli', extensionUri: vscode.Uri): string {
+function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCommands: boolean, useTasteCliBatForCommands: boolean, tasteDockerImage: string, mode: 'clean' | 'skeletons' | 'debug' | 'release' | 'run' | 'cli', extensionUri: vscode.Uri): string {
     if (mode === 'cli') {
-        return getTasteCliShellCommand(extensionUri, tasteDockerImage);
+        return getTasteCliShellCommand(extensionUri, tasteDockerImage, useTasteCliBatForCommands);
     }
 
     const target = getDvBuildTarget(document);
@@ -42,12 +58,21 @@ function getDvBuildCommand(document: DeploymentViewDocument, useTasteCliShForCom
             : mode === 'run'
                 ? 'make run'
             : `make ${shellQuote(target)} ${mode}`;
-    if (!useTasteCliShForCommands) {
+    if (!useTasteCliShForCommands && !useTasteCliBatForCommands) {
         return command;
     }
 
-    const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
-    return wrapTasteCliCommand(scriptPath, command, tasteDockerImage);
+    if (mode === 'clean') {
+        return wrapTasteCliCommand(extensionUri, ['make', 'clean'], tasteDockerImage, useTasteCliBatForCommands);
+    }
+    if (mode === 'skeletons') {
+        return wrapTasteCliCommand(extensionUri, ['make', 'skeletons'], tasteDockerImage, useTasteCliBatForCommands);
+    }
+    if (mode === 'run') {
+        return wrapTasteCliCommand(extensionUri, ['make', 'run'], tasteDockerImage, useTasteCliBatForCommands);
+    }
+
+    return wrapTasteCliCommand(extensionUri, ['make', target, mode], tasteDockerImage, useTasteCliBatForCommands);
 }
 
 export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider<DeploymentViewDocument> {
@@ -175,11 +200,12 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    if (message.mode === 'cli' && !this.getOptions().useTasteCliShForCommands) {
+                    const options = this.getOptions();
+                    if (message.mode === 'cli' && !shouldUseTasteCliWrapper(options)) {
                         break;
                     }
                     runInSharedTerminal(
-                        getDvBuildCommand(document, this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, message.mode, this.context.extensionUri),
+                        getDvBuildCommand(document, options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, message.mode, this.context.extensionUri),
                         dirnameUri(document.uri),
                     );
                     break;
@@ -292,7 +318,8 @@ export class DeploymentViewEditorProvider implements vscode.CustomEditorProvider
     }
 
     private getOptions(): EditorOptions {
-        return { ...DEFAULT_OPTIONS, ...this.context.globalState.get<Partial<EditorOptions>>('editorOptions', DEFAULT_OPTIONS) };
+        const saved = this.context.globalState.get<Partial<EditorOptions> & { useDockerWrapperForCommands?: boolean }>('editorOptions', DEFAULT_OPTIONS);
+        return resolveEditorOptions(saved);
     }
 
     private async saveOptions(options: EditorOptions): Promise<void> {

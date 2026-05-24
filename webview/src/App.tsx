@@ -723,7 +723,7 @@ function DiagramEditor() {
                 { label: 'Clean', onClick: () => post({ type: 'buildClean' }) },
                 { label: 'Build Debug', onClick: () => post({ type: 'buildDebug' }) },
                 { label: 'Build Release', onClick: () => post({ type: 'buildRelease' }) },
-                ...(options.useTasteCliShForCommands
+                ...((options.useTasteCliShForCommands || options.useTasteCliBatForCommands)
                     ? [{ label: 'CLI', onClick: () => post({ type: 'buildCli' }) }]
                     : []),
                 { label: 'Run', onClick: () => post({ type: 'buildRun' }) },
@@ -746,7 +746,7 @@ function DiagramEditor() {
             onClick: () => post({ type: 'requestExport' }),
         });
         setContextMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items });
-    }, [capabilities.canBuild, capabilities.canBuildSkeletons, clipboard, locked, options.useTasteCliShForCommands, screenToFlowPosition]);
+    }, [capabilities.canBuild, capabilities.canBuildSkeletons, clipboard, locked, options.useTasteCliBatForCommands, options.useTasteCliShForCommands, screenToFlowPosition]);
 
     const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
         e.preventDefault();

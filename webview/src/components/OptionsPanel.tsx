@@ -189,7 +189,20 @@ export function OptionsPanel({ options, onChange, canBrowseAttrFile, onBrowseAtt
             </div>
 
             <div style={ROW}>
-                <span style={LABEL}>taste-cli.sh Docker Image</span>
+                <span style={LABEL}>Use taste-cli.bat for Commands</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#cdd6f4', fontSize: 11, padding: '2px 0' }}>
+                    <input
+                        type="checkbox"
+                        checked={options.useTasteCliBatForCommands}
+                        onChange={e => onChange({ useTasteCliBatForCommands: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                    />
+                    Run Build commands through taste-cli.bat with podman
+                </label>
+            </div>
+
+            <div style={ROW}>
+                <span style={LABEL}>taste-cli Docker Image</span>
                 <input
                     type="text"
                     value={options.tasteDockerImage}

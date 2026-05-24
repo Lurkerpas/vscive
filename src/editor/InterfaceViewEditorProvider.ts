@@ -23,45 +23,61 @@ import {
     serializeUriForSetting,
 } from '../utils/platform';
 import { runInSharedTerminal } from '../utils/terminal';
+import { isWindowsHost, resolveEditorOptions, shouldUseTasteCliWrapper } from '../utils/editorOptions';
 
 function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function wrapTasteCliCommand(scriptPath: string, command: string, image: string): string {
-    return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)} ${command}`;
+function cmdQuote(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`;
 }
 
-function getTasteCliShellCommand(extensionUri: vscode.Uri, tasteDockerImage: string): string {
+function wrapTasteCliCommand(extensionUri: vscode.Uri, args: string[], image: string, useTasteCliBatForCommands: boolean): string {
+    if (useTasteCliBatForCommands && isWindowsHost()) {
+        const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.bat').fsPath;
+        const suffix = args.map(arg => cmdQuote(arg)).join(' ');
+        return `set "TASTE_DOCKER_IMAGE=${image.replace(/"/g, '""')}" && call ${cmdQuote(scriptPath)}${suffix ? ` ${suffix}` : ''}`;
+    }
+
     const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
-    return wrapTasteCliCommand(scriptPath, '', tasteDockerImage);
+    const suffix = args.map(arg => shellQuote(arg)).join(' ');
+    if (isWindowsHost()) {
+        return `set "TASTE_DOCKER_IMAGE=${image.replace(/"/g, '""')}" && bash ${cmdQuote(scriptPath)}${suffix ? ` ${suffix}` : ''}`;
+    }
+
+    return `TASTE_DOCKER_IMAGE=${shellQuote(image)} bash ${shellQuote(scriptPath)}${suffix ? ` ${suffix}` : ''}`;
+}
+
+function getTasteCliShellCommand(extensionUri: vscode.Uri, tasteDockerImage: string, useTasteCliBatForCommands: boolean): string {
+    return wrapTasteCliCommand(extensionUri, [], tasteDockerImage, useTasteCliBatForCommands);
 }
 
 function getProjectCommand(
     useTasteCliShForCommands: boolean,
+    useTasteCliBatForCommands: boolean,
     tasteDockerImage: string,
     action: 'make' | 'clean' | 'skeletons' | 'debugBuild' | 'releaseBuild' | 'run' | 'debugRun' | 'releaseRun',
     extensionUri: vscode.Uri,
 ): string {
-    if (useTasteCliShForCommands) {
-        const scriptPath = joinPathSegments(extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    if (useTasteCliShForCommands || useTasteCliBatForCommands) {
         switch (action) {
             case 'make':
-                return wrapTasteCliCommand(scriptPath, 'make', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make'], tasteDockerImage, useTasteCliBatForCommands);
             case 'clean':
-                return wrapTasteCliCommand(scriptPath, 'make clean', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make', 'clean'], tasteDockerImage, useTasteCliBatForCommands);
             case 'skeletons':
-                return wrapTasteCliCommand(scriptPath, 'make skeletons', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make', 'skeletons'], tasteDockerImage, useTasteCliBatForCommands);
             case 'debugBuild':
-                return wrapTasteCliCommand(scriptPath, 'make debug', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make', 'debug'], tasteDockerImage, useTasteCliBatForCommands);
             case 'releaseBuild':
-                return wrapTasteCliCommand(scriptPath, 'make release', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make', 'release'], tasteDockerImage, useTasteCliBatForCommands);
             case 'run':
-                return wrapTasteCliCommand(scriptPath, 'make run', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make', 'run'], tasteDockerImage, useTasteCliBatForCommands);
             case 'debugRun':
-                return wrapTasteCliCommand(scriptPath, 'make debug run', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make', 'debug', 'run'], tasteDockerImage, useTasteCliBatForCommands);
             case 'releaseRun':
-                return wrapTasteCliCommand(scriptPath, 'make release run', tasteDockerImage);
+                return wrapTasteCliCommand(extensionUri, ['make', 'release', 'run'], tasteDockerImage, useTasteCliBatForCommands);
         }
     }
 
@@ -118,18 +134,7 @@ export class InterfaceViewEditorProvider
 
     private getOptions(): EditorOptions {
         const saved = this.context.globalState.get<Partial<EditorOptions> & { useDockerWrapperForCommands?: boolean }>('editorOptions', DEFAULT_OPTIONS);
-        const configuredUseTasteCliShForCommands = vscode.workspace
-            .getConfiguration('vscive')
-            .get<boolean>(
-                'useTasteCliShForCommands',
-                vscode.workspace
-                    .getConfiguration('vscive')
-                    .get<boolean>('useDockerWrapperForCommands', DEFAULT_OPTIONS.useTasteCliShForCommands),
-            );
-        const useTasteCliShForCommands = saved.useTasteCliShForCommands
-            ?? saved.useDockerWrapperForCommands
-            ?? configuredUseTasteCliShForCommands;
-        return { ...DEFAULT_OPTIONS, ...saved, useTasteCliShForCommands };
+        return resolveEditorOptions(saved);
     }
 
     private async saveOptions(options: EditorOptions): Promise<void> {
@@ -327,63 +332,72 @@ export class InterfaceViewEditorProvider
                     if (!this.getCapabilities().canBuildSkeletons) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'skeletons', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'skeletons', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildClean': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'clean', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'clean', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildDebug': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugBuild', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'debugBuild', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildRelease': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseBuild', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'releaseBuild', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildCli': {
-                    if (!this.getCapabilities().canBuild || !this.getOptions().useTasteCliShForCommands) {
+                    const options = this.getOptions();
+                    if (!this.getCapabilities().canBuild || !shouldUseTasteCliWrapper(options)) {
                         break;
                     }
-                    runInSharedTerminal(getTasteCliShellCommand(this.extensionUri, this.getOptions().tasteDockerImage), dirnameUri(document.uri));
+                    runInSharedTerminal(getTasteCliShellCommand(this.extensionUri, options.tasteDockerImage, options.useTasteCliBatForCommands), dirnameUri(document.uri));
                     break;
                 }
                 case 'buildRun': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'run', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'run', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'build': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'make', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'make', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'runDebug': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'debugRun', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'debugRun', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'runRelease': {
                     if (!this.getCapabilities().canBuild) {
                         break;
                     }
-                    runInSharedTerminal(getProjectCommand(this.getOptions().useTasteCliShForCommands, this.getOptions().tasteDockerImage, 'releaseRun', this.extensionUri), dirnameUri(document.uri));
+                    const options = this.getOptions();
+                    runInSharedTerminal(getProjectCommand(options.useTasteCliShForCommands, options.useTasteCliBatForCommands, options.tasteDockerImage, 'releaseRun', this.extensionUri), dirnameUri(document.uri));
                     break;
                 }
                 case 'editFunction': {

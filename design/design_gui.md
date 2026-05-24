@@ -93,6 +93,9 @@ When Show Options is clicked, the properties panel shall show the following sett
 - Show minimap toggle,
 - Show interface names toggle,
 - Show connection labels toggle,
+- Use taste-cli.sh for Commands toggle,
+- Use taste-cli.bat for Commands toggle, located directly under Use taste-cli.sh for Commands and selected by default on Windows and unselected on other platforms,
+- taste-cli Docker image,
 - Undo / redo depth.
 
 Appearance-related settings shall be grouped at the end of the options panel under a collapsible Appearance section. That section shall contain:
@@ -199,6 +202,9 @@ When Show Options is clicked, the properties panel shall show the following sett
 - Show minimap toggle,
 - Show device names toggle,
 - Show connection labels toggle,
+- Use taste-cli.sh for Commands toggle,
+- Use taste-cli.bat for Commands toggle, located directly under Use taste-cli.sh for Commands and selected by default on Windows and unselected on other platforms,
+- taste-cli Docker image,
 - Undo / redo depth.
 
 Appearance-related settings shall be grouped at the end of the options panel under a collapsible Appearance section. That section shall contain:

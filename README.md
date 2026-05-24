@@ -103,3 +103,9 @@ Be aware that doing this will **consume additional gigabytes** of your local sto
 If *Use taste-cli.sh for Commands* is selected, build/run/CLI commands are executed within docker image, with the local folder mounted to the docker. Fewer permissions are used in comparison to the original TASTE [Docker-run.sh](https://gitlab.esa.int/taste/taste-setup/-/blob/feature_trixie/Docker-run.sh?ref_type=heads).
 
 
+## Podman 
+[Podman](https://podman.io/) is an open-source container manager that allows to run Docker containers on various platforms, including Windows. It does it by using WSL2 or HyperV under the hood. 
+
+An an experiment, the capability to use TASTE docker image via Podman on Windows has been added. In order to use it, install Podman and select "Run build commands though taste-cli.bat using podman". Docker image address must be set up just as for taste-cli.sh. Default installation settings are recommended, as non-defaults tend to create issues to be resolved using Linux and WSL2/Podman related knowledge. 
+
+Unfortunatelly, the experiment is only partially succesfull so far, as building TASTE projects on NTFS partitions seems to fail. However, project can be built by entering CLI, and copying data between the source NTFS folder and a helper native Linux folder within the container. It is assumed that the issue is to be resolved on TASTE side, though TASTE was not designed to work outside of Linux.

@@ -646,7 +646,7 @@ function DvDiagramEditor() {
                     { label: 'Clean', onClick: () => post({ type: 'buildDv', mode: 'clean' } satisfies DvWebviewMessage) },
                     { label: 'Build Debug', onClick: () => post({ type: 'buildDv', mode: 'debug' } satisfies DvWebviewMessage) },
                     { label: 'Build Release', onClick: () => post({ type: 'buildDv', mode: 'release' } satisfies DvWebviewMessage) },
-                    ...(options.useTasteCliShForCommands
+                    ...((options.useTasteCliShForCommands || options.useTasteCliBatForCommands)
                         ? [{ label: 'CLI', onClick: () => post({ type: 'buildDv', mode: 'cli' } satisfies DvWebviewMessage) }]
                         : []),
                     { label: 'Run', onClick: () => post({ type: 'buildDv', mode: 'run' } satisfies DvWebviewMessage) },
@@ -768,7 +768,11 @@ function DvDiagramEditor() {
                             <span style={LABEL}>Use taste-cli.sh for Commands</span>
                             <label><input type="checkbox" checked={options.useTasteCliShForCommands} onChange={event => updateOptions({ useTasteCliShForCommands: event.target.checked })} /> Run Build commands through taste-cli.sh</label>
                         </div>
-                        <div style={ROW}><span style={LABEL}>taste-cli.sh Docker Image</span><input style={INPUT} value={options.tasteDockerImage} onChange={event => updateOptions({ tasteDockerImage: event.target.value })} /></div>
+                        <div style={ROW}>
+                            <span style={LABEL}>Use taste-cli.bat for Commands</span>
+                            <label><input type="checkbox" checked={options.useTasteCliBatForCommands} onChange={event => updateOptions({ useTasteCliBatForCommands: event.target.checked })} /> Run Build commands through taste-cli.bat with podman</label>
+                        </div>
+                        <div style={ROW}><span style={LABEL}>taste-cli Docker Image</span><input style={INPUT} value={options.tasteDockerImage} onChange={event => updateOptions({ tasteDockerImage: event.target.value })} /></div>
                         <details open style={DETAILS}>
                             <summary style={SUMMARY}>Appearance</summary>
                             <div style={{ padding: '0 10px 10px' }}>

@@ -2,7 +2,7 @@
   "name": "vscive",
   "displayName": "vscive",
   "description": "Interface View Editor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "vscive",
   "engines": {
     "vscode": "^1.90.0"
@@ -148,6 +148,11 @@
           "type": "boolean",
           "default": false,
           "description": "Use taste-cli.sh to run Build and Build Skeletons commands instead of invoking make directly."
+        },
+        "vscive.useTasteCliBatForCommands": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use taste-cli.bat with podman to run Build and Build Skeletons commands instead of invoking make directly. Defaults to enabled at runtime on Windows when no value is stored."
         }
       }
     }

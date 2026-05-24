@@ -5,6 +5,7 @@ import { log, showLog } from './logger';
 import { DvModel, DEFAULT_OPTIONS, EditorOptions, IvModel } from './model/types';
 import { serializeDvXml } from './serializers/DvXmlSerializer';
 import { serializeIvXml } from './serializers/IvXmlSerializer';
+import { isWindowsHost, resolveEditorOptions, shouldUseTasteCliWrapper } from './utils/editorOptions';
 import { basename, dirnameUri, extname, joinPathSegments } from './utils/platform';
 import { runInSharedTerminal } from './utils/terminal';
 
@@ -107,36 +108,57 @@ function shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function cmdQuote(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`;
+}
+
 function getTasteDockerImage(context: vscode.ExtensionContext): string {
-    const saved = context.globalState.get<Partial<EditorOptions>>('editorOptions', DEFAULT_OPTIONS);
-    return saved.tasteDockerImage ?? DEFAULT_OPTIONS.tasteDockerImage;
+    return getEditorOptions(context).tasteDockerImage;
 }
 
-function wrapTasteCliCommand(context: vscode.ExtensionContext, command: string): string {
-    const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
-    return `TASTE_DOCKER_IMAGE=${shellQuote(getTasteDockerImage(context))} bash ${shellQuote(tasteCliPath)} ${command}`;
-}
-
-function getUseTasteCliShForCommands(context: vscode.ExtensionContext): boolean {
+function getEditorOptions(context: vscode.ExtensionContext): EditorOptions {
     const saved = context.globalState.get<Partial<EditorOptions> & { useDockerWrapperForCommands?: boolean }>('editorOptions', DEFAULT_OPTIONS);
-    const configured = vscode.workspace
-        .getConfiguration('vscive')
-        .get<boolean>(
-            'useTasteCliShForCommands',
-            vscode.workspace
-                .getConfiguration('vscive')
-                .get<boolean>('useDockerWrapperForCommands', DEFAULT_OPTIONS.useTasteCliShForCommands),
-        );
-    return saved.useTasteCliShForCommands ?? saved.useDockerWrapperForCommands ?? configured;
+    return resolveEditorOptions(saved);
+}
+
+function wrapTasteCliCommand(context: vscode.ExtensionContext, args: string[]): string {
+    const options = getEditorOptions(context);
+    if (options.useTasteCliBatForCommands && isWindowsHost()) {
+        const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.bat').fsPath;
+        const suffix = args.map(arg => cmdQuote(arg)).join(' ');
+        return `set "TASTE_DOCKER_IMAGE=${options.tasteDockerImage.replace(/"/g, '""')}" && call ${cmdQuote(tasteCliPath)}${suffix ? ` ${suffix}` : ''}`;
+    }
+
+    const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+    const suffix = args.map(arg => shellQuote(arg)).join(' ');
+    if (isWindowsHost()) {
+        return `set "TASTE_DOCKER_IMAGE=${options.tasteDockerImage.replace(/"/g, '""')}" && bash ${cmdQuote(tasteCliPath)}${suffix ? ` ${suffix}` : ''}`;
+    }
+
+    return `TASTE_DOCKER_IMAGE=${shellQuote(getTasteDockerImage(context))} bash ${shellQuote(tasteCliPath)}${suffix ? ` ${suffix}` : ''}`;
 }
 
 function getTasteInitCommand(context: vscode.ExtensionContext): string {
     const tasteInitHerePath = joinPathSegments(context.extensionUri, 'scripts', 'taste-init-here.sh').fsPath;
-    if (!getUseTasteCliShForCommands(context)) {
+    const options = getEditorOptions(context);
+    if (!shouldUseTasteCliWrapper(options)) {
+        if (isWindowsHost()) {
+            return `bash ${cmdQuote(tasteInitHerePath)}`;
+        }
         return `bash ${shellQuote(tasteInitHerePath)}`;
     }
 
-    return wrapTasteCliCommand(context, `bash -s -- < ${shellQuote(tasteInitHerePath)}`);
+    if (options.useTasteCliBatForCommands && isWindowsHost()) {
+        const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.bat').fsPath;
+        return `set "TASTE_DOCKER_IMAGE=${options.tasteDockerImage.replace(/"/g, '""')}" && call ${cmdQuote(tasteCliPath)} bash -s -- < ${cmdQuote(tasteInitHerePath)}`;
+    }
+
+    if (isWindowsHost()) {
+        const tasteCliPath = joinPathSegments(context.extensionUri, 'scripts', 'taste-cli.sh').fsPath;
+        return `set "TASTE_DOCKER_IMAGE=${options.tasteDockerImage.replace(/"/g, '""')}" && bash ${cmdQuote(tasteCliPath)} bash -s -- < ${cmdQuote(tasteInitHerePath)}`;
+    }
+
+    return `${wrapTasteCliCommand(context, ['bash', '-s', '--'])} < ${shellQuote(tasteInitHerePath)}`;
 }
 
 async function runTasteInitHere(context: vscode.ExtensionContext, resource?: vscode.Uri): Promise<void> {
@@ -150,11 +172,12 @@ async function runTasteInitHere(context: vscode.ExtensionContext, resource?: vsc
 }
 
 function getWrappedCommand(context: vscode.ExtensionContext, command: string): string {
-    if (!getUseTasteCliShForCommands(context)) {
+    const options = getEditorOptions(context);
+    if (!shouldUseTasteCliWrapper(options)) {
         return command;
     }
 
-    return wrapTasteCliCommand(context, command);
+    return wrapTasteCliCommand(context, ['bash', '-lc', command]);
 }
 
 async function runTerminalCommand(context: vscode.ExtensionContext, terminalName: string, command: string, resource?: vscode.Uri): Promise<void> {
@@ -232,7 +255,13 @@ async function runTasteDvBuildCommand(context: vscode.ExtensionContext, resource
         return;
     }
 
-    runInSharedTerminal(getWrappedCommand(context, `make ${shellQuote(target.targetName)} ${action}`), target.targetDir);
+    const options = getEditorOptions(context);
+    if (!shouldUseTasteCliWrapper(options)) {
+        runInSharedTerminal(`make ${shellQuote(target.targetName)} ${action}`, target.targetDir);
+        return;
+    }
+
+    runInSharedTerminal(wrapTasteCliCommand(context, ['make', target.targetName, action]), target.targetDir);
 }
 
 export function activate(context: vscode.ExtensionContext): void {

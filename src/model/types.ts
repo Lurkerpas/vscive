@@ -318,6 +318,7 @@ export interface EditorOptions {
     attrFilePath: string;
     boardsFilePath: string;
     useTasteCliShForCommands: boolean;
+    useTasteCliBatForCommands: boolean;
     tasteDockerImage: string;
     /** Maximum number of undo steps retained per document. */
     undoDepth: number;
@@ -349,6 +350,7 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     attrFilePath: '',
     boardsFilePath: '',
     useTasteCliShForCommands: false,
+    useTasteCliBatForCommands: false,
     tasteDockerImage: DEFAULT_TASTE_DOCKER_IMAGE,
     undoDepth: 100,
     showDeviceNames: true,
