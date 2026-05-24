@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <InterfaceView version="" asn1file="basic-project.asn" UiFile="interfaceview.ui.xml" modifierHash="">
-  <Function id="bf45eae2-d1ec-4fe6-bb41-b05315628f4e" name="Sender" is_type="NO" language="C" default_implementation="default" fixed_system_element="NO" required_system_element="NO" startup_priority="1" instances_min="1" instances_max="1">
-    <Provided_Interface id="9f8f96f8-24d0-4efb-9502-09d8419c881c" name="trigger" kind="Cyclic" layer="default" enable_multicast="true" required_system_element="NO">
+  <Function id="{bf45eae2-d1ec-4fe6-bb41-b05315628f4e}" name="Sender" is_type="NO" language="C" default_implementation="default" fixed_system_element="NO" required_system_element="NO" startup_priority="1" instances_min="1" instances_max="1">
+    <Provided_Interface id="{9f8f96f8-24d0-4efb-9502-09d8419c881c}" name="trigger" kind="Cyclic" layer="default" enable_multicast="true" required_system_element="NO">
     </Provided_Interface>
-    <Required_Interface id="ce2363d9-3d1f-494d-9a58-881dbf6b2840" name="ping" kind="Sporadic" layer="default" enable_multicast="true" required_system_element="NO">
+    <Required_Interface id="{ce2363d9-3d1f-494d-9a58-881dbf6b2840}" name="ping" kind="Sporadic" layer="default" enable_multicast="true" required_system_element="NO">
       <Input_Parameter name="param" type="DataItem" encoding="ACN"/>
       <Property name="Taste::InheritPI" value="true"/>
       <Property name="Taste::Autonamed" value="true"/>
@@ -12,8 +12,8 @@
       <Implementation name="default" language="C"/>
     </Implementations>
   </Function>
-  <Function id="b8a56d60-706b-4554-b1cd-9c46d813754d" name="Receiver" is_type="NO" language="C" default_implementation="default" fixed_system_element="NO" required_system_element="NO" startup_priority="1" instances_min="1" instances_max="1">
-    <Provided_Interface id="a6a4bf65-a62f-4e7e-b2a3-8760a256260e" name="ping" kind="Sporadic" layer="default" enable_multicast="true" required_system_element="NO">
+  <Function id="{b8a56d60-706b-4554-b1cd-9c46d813754d}" name="Receiver" is_type="NO" language="C" default_implementation="default" fixed_system_element="NO" required_system_element="NO" startup_priority="1" instances_min="1" instances_max="1">
+    <Provided_Interface id="{a6a4bf65-a62f-4e7e-b2a3-8760a256260e}" name="ping" kind="Sporadic" layer="default" enable_multicast="true" required_system_element="NO">
       <Input_Parameter name="param" type="DataItem" encoding="ACN"/>
       <Property name="Taste::Autonamed" value="true"/>
     </Provided_Interface>
@@ -21,9 +21,9 @@
       <Implementation name="default" language="C"/>
     </Implementations>
   </Function>
-  <Connection id="949cd9d3-2e8b-4c37-81c7-17693960f294" name="ping_to_ping">
-    <Source iface_id="ce2363d9-3d1f-494d-9a58-881dbf6b2840" func_name="Sender" ri_name="ping"/>
-    <Target iface_id="a6a4bf65-a62f-4e7e-b2a3-8760a256260e" func_name="Receiver" pi_name="ping"/>
+  <Connection id="{949cd9d3-2e8b-4c37-81c7-17693960f294}" name="ping_to_ping">
+    <Source iface_id="{ce2363d9-3d1f-494d-9a58-881dbf6b2840}" func_name="Sender" ri_name="ping"/>
+    <Target iface_id="{a6a4bf65-a62f-4e7e-b2a3-8760a256260e}" func_name="Receiver" pi_name="ping"/>
   </Connection>
   <Comment id="" name="Welcome to TASTE!\n============\n\nRight click to add a function, and use Ctrl-Click to connect functions together.\n\nYou can split the screen in multiple windows using Ctrl-E-3" required_system_element="NO"></Comment>
 </InterfaceView>
