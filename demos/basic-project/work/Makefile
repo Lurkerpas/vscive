@@ -33,7 +33,7 @@ check_targets:
 dataview:	${DATAVIEW_UNIQ} dataview/C/built
 
 # Generate the complete dataview, including Python bindings if there is a GUI
-${DATAVIEW_PATH}/built:  dataview/C/built dataview
+${DATAVIEW_PATH}/built:  dataview/C/built dataview/Ada/built dataview
 	touch $@
 
 ${DATAVIEW_AADLV1}: ${DATAVIEW_UNIQ}
@@ -103,6 +103,12 @@ dataview/C/built: ${DATAVIEW_UNIQ} ${DATAVIEW_ACN} ${CP_FILES}
 	touch $@
 
 
+dataview/Ada/built: ${DATAVIEW_UNIQ} ${CP_FILES}
+	$(info [-] Compiling the dataview in Ada)
+	mkdir -p $(dir $@)
+	asn2dataModel -allboards -o $(dir $@) -toAda $^
+	touch $@
+	cd dataview/Ada && rm -f gnat.cfg GPS_project.gpr IgnoredExaminerWarnings.wrn runSpark.sh
 
 simulink_skeletons:
 	# target required only for SIMULINK and VHDL, which use specific DMT paths

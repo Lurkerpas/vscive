@@ -1,8 +1,36 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { IvModel, UiModel } from '../src/model/types';
+import { parseIvXml } from '../src/parsers/IvXmlParser';
+import { parseUiXml } from '../src/parsers/UiXmlParser';
 import { buildGraph } from '../webview/src/transform';
 import { functionHeaderHeight } from '../webview/src/functionLayout';
+
+test('buildGraph applies parsed UI coordinates for brace-wrapped IV ids', () => {
+        const iv = parseIvXml(`<?xml version="1.0"?>
+<InterfaceView version="1.0" UiFile="interfaceview.ui.xml">
+    <Function id="{fn}" name="Function" is_type="NO" language="C" default_implementation="default" fixed_system_element="NO" required_system_element="NO">
+        <Implementations>
+            <Implementation name="default" language="C"/>
+        </Implementations>
+    </Function>
+</InterfaceView>`);
+        const ui = parseUiXml(`<?xml version="1.0"?>
+<UI version="1.0">
+    <Entity id="{fn}">
+        <Taste coordinates="1000 2000 7000 8000"/>
+    </Entity>
+</UI>`);
+
+        const { nodes } = buildGraph(iv, ui);
+        const fnNode = nodes.find(node => node.id === '{fn}');
+
+        assert.ok(fnNode);
+        assert.equal(fnNode.position.x, 50);
+        assert.equal(fnNode.position.y, 100);
+        assert.equal(fnNode.style?.width, 300);
+        assert.equal(fnNode.style?.height, 300);
+});
 
 test('buildGraph uses external interface coordinates when both coordinate spaces exist', () => {
     const iv: IvModel = {

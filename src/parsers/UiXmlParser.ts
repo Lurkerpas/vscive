@@ -30,11 +30,10 @@ export function parseUiXml(xml: string): UiModel {
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
     const root = doc.documentElement;
     if (!root) { return { version: '1.0', entities: {} }; }
-    const entities: Record<string, EntityLayout> = {};
-    const wrappedIdByEntity = new Map<string, boolean>();
+    const entityEntries = new Map<string, { key: string; isWrapped: boolean; layout: EntityLayout }>();
 
     for (const entity of childElements(root, 'Entity')) {
-        const rawId = entity.getAttribute('id') ?? '';
+        const rawId = (entity.getAttribute('id') ?? '').trim();
         const id = normalizeEntityId(rawId);
         if (!id) { continue; }
         const tastEl = childElements(entity, 'Taste')[0] as XmlElement | undefined;
@@ -46,11 +45,16 @@ export function parseUiXml(xml: string): UiModel {
         const layout: EntityLayout = { coordinates };
         if (rcNums.length >= 2) { layout.rootCoordinates = rcNums; }
         const isWrapped = isBraceWrappedId(rawId);
-        const existingIsWrapped = wrappedIdByEntity.get(id);
-        if (existingIsWrapped === undefined || existingIsWrapped || !isWrapped) {
-            entities[id] = layout;
-            wrappedIdByEntity.set(id, isWrapped);
+
+        const existing = entityEntries.get(id);
+        if (!existing || existing.isWrapped || !isWrapped) {
+            entityEntries.set(id, { key: isWrapped ? rawId : id, isWrapped, layout });
         }
+    }
+
+    const entities: Record<string, EntityLayout> = {};
+    for (const entry of entityEntries.values()) {
+        entities[entry.key] = entry.layout;
     }
 
     return { version: root.getAttribute('version') ?? '1.0', entities };
