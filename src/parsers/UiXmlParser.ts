@@ -13,14 +13,30 @@ function childElements(el: XmlElement | XmlDocument, tagName: string): XmlElemen
     return out;
 }
 
+function normalizeEntityId(id: string): string {
+    const trimmed = id.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}') && trimmed.length > 2) {
+        return trimmed.slice(1, -1);
+    }
+    return trimmed;
+}
+
+function isBraceWrappedId(id: string): boolean {
+    const trimmed = id.trim();
+    return trimmed.startsWith('{') && trimmed.endsWith('}') && trimmed.length > 2;
+}
+
 export function parseUiXml(xml: string): UiModel {
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
     const root = doc.documentElement;
     if (!root) { return { version: '1.0', entities: {} }; }
     const entities: Record<string, EntityLayout> = {};
+    const wrappedIdByEntity = new Map<string, boolean>();
 
     for (const entity of childElements(root, 'Entity')) {
-        const id = entity.getAttribute('id') ?? '';
+        const rawId = entity.getAttribute('id') ?? '';
+        const id = normalizeEntityId(rawId);
+        if (!id) { continue; }
         const tastEl = childElements(entity, 'Taste')[0] as XmlElement | undefined;
         if (!tastEl) { continue; }
         const raw = tastEl.getAttribute('coordinates') ?? '';
@@ -29,7 +45,12 @@ export function parseUiXml(xml: string): UiModel {
         const rcNums = rawRc.trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
         const layout: EntityLayout = { coordinates };
         if (rcNums.length >= 2) { layout.rootCoordinates = rcNums; }
-        entities[id] = layout;
+        const isWrapped = isBraceWrappedId(rawId);
+        const existingIsWrapped = wrappedIdByEntity.get(id);
+        if (existingIsWrapped === undefined || existingIsWrapped || !isWrapped) {
+            entities[id] = layout;
+            wrappedIdByEntity.set(id, isWrapped);
+        }
     }
 
     return { version: root.getAttribute('version') ?? '1.0', entities };

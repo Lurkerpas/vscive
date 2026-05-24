@@ -1,7 +1,9 @@
-<UI version="1.0" ><Entity id="{b84ebe66-5189-41c8-9acc-7044d867f9bb}">
-</Entity><Entity id="{88598203-48ac-4c5c-8c37-840233f64a7c}"><Taste coordinates="0 0 24000 16000">
-</Taste>
-</Entity><Entity id="{18bf9c44-c5f9-49f9-85f0-b42737cbd870}"><Taste coordinates="16600 0">
-</Taste>
-</Entity>
+<?xml version="1.0"?>
+<UI version="1.0">
+  <Entity id="88598203-48ac-4c5c-8c37-840233f64a7c">
+    <Taste coordinates="-8000 0 12000 12000"/>
+  </Entity>
+  <Entity id="18bf9c44-c5f9-49f9-85f0-b42737cbd870">
+    <Taste coordinates="12600 4800"/>
+  </Entity>
 </UI>
