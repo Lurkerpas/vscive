@@ -39,6 +39,7 @@ import {
 import { post, vscodeApi } from './vscodeApi';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { buildDvGraph, connectionEndpointsByDeviceId, deviceById, DV_DEVICE_HEIGHT, DV_DEVICE_WIDTH, DV_NODE_HEIGHT, DV_NODE_WIDTH, snapDeviceToEdge } from './dvTransform';
+import { preferBracedId } from '../../src/utils/id';
 
 type Selection =
     | { kind: 'node'; id: string }
@@ -78,7 +79,7 @@ const DV_NODE_BODY_FONT_SIZE = 11;
 const DV_DEVICE_FONT_SIZE = 10;
 
 function uuid(): string {
-    return crypto.randomUUID();
+    return preferBracedId(crypto.randomUUID());
 }
 
 function scaleDvFont(baseSize: number, configuredSize: number, defaultSize: number, minSize: number): number {

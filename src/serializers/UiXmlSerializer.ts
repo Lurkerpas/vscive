@@ -1,4 +1,5 @@
 import { UiModel } from '../model/types';
+import { preferBracedId } from '../utils/id';
 
 export function serializeUiXml(ui: UiModel): string {
     const lines: string[] = [
@@ -10,7 +11,7 @@ export function serializeUiXml(ui: UiModel): string {
         const rcAttr = (layout.rootCoordinates?.length ?? 0) >= 2
             ? ` RootCoordinates="${layout.rootCoordinates!.join(' ')}"`
             : '';
-        lines.push(`  <Entity id="${id}">`);
+        lines.push(`  <Entity id="${preferBracedId(id)}">`);
         lines.push(`    <Taste${rcAttr} coordinates="${coords}"/>`);
         lines.push(`  </Entity>`);
     }

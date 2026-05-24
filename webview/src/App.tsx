@@ -29,6 +29,7 @@ import { Palette } from './components/Palette';
 import { renderDiagramImage } from './exportImage';
 import { computeFocusEdges, computeFocusVisibility } from './focus';
 import { Waypoint, isWaypointNodeId, parseWaypointNodeId, waypointCenterFromNode } from './waypoints';
+import { preferBracedId } from '../../src/utils/id';
 
 const nodeTypes = {
     functionNode: FunctionNode,
@@ -41,7 +42,7 @@ const edgeTypes = {
 };
 
 function uuid(): string {
-    return crypto.randomUUID();
+    return preferBracedId(crypto.randomUUID());
 }
 
 /** Search all functions (incl. nested) for an entity matching id. */

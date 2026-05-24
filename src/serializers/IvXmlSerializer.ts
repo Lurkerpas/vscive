@@ -1,6 +1,7 @@
 import {
     IvModel, FunctionModel, InterfaceModel, ConnectionModel, ParameterModel, CommentModel, ContextParameterModel,
 } from '../model/types';
+import { preferBracedId } from '../utils/id';
 
 function esc(s: string): string {
     return s
@@ -22,7 +23,7 @@ function serializeParam(p: ParameterModel, indent: string): string {
 function serializeInterface(iface: InterfaceModel, indent: string): string {
     const tag = iface.type === 'provided' ? 'Provided_Interface' : 'Required_Interface';
     const attrs: Record<string, string> = {
-        id: iface.id,
+        id: preferBracedId(iface.id),
         name: iface.name,
         kind: iface.kind,
         ...iface.extraAttrs,
@@ -82,7 +83,7 @@ function serializeFunction(
     connectionsByOwner: Map<string | undefined, ConnectionModel[]>,
 ): string {
     const knownAttrs: Record<string, string> = {
-        id: fn.id,
+        id: preferBracedId(fn.id),
         name: fn.name,
         is_type: fn.isType ? 'YES' : 'NO',
         language: fn.language,
@@ -127,7 +128,7 @@ function serializeFunction(
 }
 
 function serializeConnection(conn: ConnectionModel, indent: string): string {
-    const attrs: Record<string, string> = { id: conn.id };
+    const attrs: Record<string, string> = { id: preferBracedId(conn.id) };
     if (conn.nameExplicit ?? conn.name.length > 0) {
         attrs.name = conn.name;
     }
@@ -135,7 +136,7 @@ function serializeConnection(conn: ConnectionModel, indent: string): string {
     const lines: string[] = [`${indent}<Connection${toAttrStr(attrs)}>`];
     const sourceAttrs: string[] = [];
     if (conn.sourceIfaceIdExplicit ?? conn.sourceIfaceId.length > 0) {
-        sourceAttrs.push(`iface_id="${esc(conn.sourceIfaceId)}"`);
+        sourceAttrs.push(`iface_id="${esc(preferBracedId(conn.sourceIfaceId))}"`);
     }
     sourceAttrs.push(`func_name="${esc(conn.sourceFuncName)}"`);
     sourceAttrs.push(`${conn.sourceNameAttr ?? 'ri_name'}="${esc(conn.sourceRiName)}"`);
@@ -143,7 +144,7 @@ function serializeConnection(conn: ConnectionModel, indent: string): string {
 
     const targetAttrs: string[] = [];
     if (conn.targetIfaceIdExplicit ?? conn.targetIfaceId.length > 0) {
-        targetAttrs.push(`iface_id="${esc(conn.targetIfaceId)}"`);
+        targetAttrs.push(`iface_id="${esc(preferBracedId(conn.targetIfaceId))}"`);
     }
     targetAttrs.push(`func_name="${esc(conn.targetFuncName)}"`);
     targetAttrs.push(`${conn.targetNameAttr ?? 'pi_name'}="${esc(conn.targetPiName)}"`);
@@ -167,7 +168,7 @@ function serializeContextParameter(contextParameter: ContextParameterModel, inde
 
 function serializeComment(comment: CommentModel, indent: string): string {
     const attrs: Record<string, string> = {
-        id: comment.id,
+        id: preferBracedId(comment.id),
         name: comment.name,
         required_system_element: comment.requiredSystemElement ? 'YES' : 'NO',
         ...comment.extraAttrs,

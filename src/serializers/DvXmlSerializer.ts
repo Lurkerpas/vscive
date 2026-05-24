@@ -8,6 +8,7 @@ import {
     DvPartitionModel,
     PropertyModel,
 } from '../model/types';
+import { preferBracedId } from '../utils/id';
 
 function esc(value: string): string {
     return value
@@ -51,7 +52,7 @@ function serializeProperties(properties: PropertyModel[], indent: string): strin
 
 function serializeFunction(fn: DvFunctionModel, indent: string): string {
     const attrs: Record<string, string> = {
-        id: fn.id,
+        id: preferBracedId(fn.id),
         name: fn.name,
         path: fn.path,
         ...fn.extraAttrs,
@@ -64,7 +65,7 @@ function serializeFunction(fn: DvFunctionModel, indent: string): string {
 
 function serializePartition(partition: DvPartitionModel, indent: string): string {
     const attrs: Record<string, string> = {
-        id: partition.id,
+        id: preferBracedId(partition.id),
         name: partition.name,
         ...partition.extraAttrs,
     };
@@ -79,7 +80,7 @@ function serializePartition(partition: DvPartitionModel, indent: string): string
 
 function serializeDevice(device: DvDeviceModel, indent: string): string {
     const attrs: Record<string, string> = {
-        id: device.id,
+        id: preferBracedId(device.id),
         name: device.name,
         requires_bus_access: device.requiresBusAccess,
         packetizer: device.packetizer,
@@ -102,7 +103,7 @@ function serializeDevice(device: DvDeviceModel, indent: string): string {
 
 function serializeNode(node: DvNodeModel, indent: string): string {
     const attrs: Record<string, string> = {
-        id: node.id,
+        id: preferBracedId(node.id),
         name: node.name,
         type: node.type,
         node_label: node.nodeLabel,
@@ -121,7 +122,7 @@ function serializeNode(node: DvNodeModel, indent: string): string {
 
 function serializeMessage(message: DvMessageModel, indent: string): string {
     const attrs: Record<string, string> = {
-        id: message.id,
+        id: preferBracedId(message.id),
         name: message.name,
         from_function: message.fromFunction,
         from_interface: message.fromInterface,
@@ -137,7 +138,7 @@ function serializeMessage(message: DvMessageModel, indent: string): string {
 
 function serializeConnection(connection: DvConnectionModel, indent: string): string {
     const attrs: Record<string, string> = {
-        id: connection.id,
+        id: preferBracedId(connection.id),
         name: connection.name,
         from_node: connection.fromNode,
         from_port: connection.fromPort,

@@ -43,3 +43,31 @@ test('round-trips all TASTE reference interfaceview.xml files ignoring whitespac
         });
     }
 });
+
+test('IV parsing and serialization prefer brace-wrapped UUID ids', () => {
+        const xml = `<?xml version="1.0"?>
+<InterfaceView version="1.0" UiFile="interfaceview.ui.xml">
+    <Function id="88598203-48ac-4c5c-8c37-840233f64a7c" name="Function" is_type="NO" language="C" default_implementation="default" fixed_system_element="NO" required_system_element="NO">
+        <Provided_Interface id="18bf9c44-c5f9-49f9-85f0-b42737cbd870" name="trigger" kind="Cyclic"></Provided_Interface>
+        <Implementations>
+            <Implementation name="default" language="C"/>
+        </Implementations>
+    </Function>
+    <Connection id="2f53a9e2-9139-4db0-9af5-bc35cc7f0ac0">
+        <Source iface_id="18bf9c44-c5f9-49f9-85f0-b42737cbd870" func_name="Function" ri_name="trigger"/>
+        <Target iface_id="18bf9c44-c5f9-49f9-85f0-b42737cbd870" func_name="Function" pi_name="trigger"/>
+    </Connection>
+</InterfaceView>`;
+
+        const iv = parseIvXml(xml);
+        assert.equal(iv.functions[0].id, '{88598203-48ac-4c5c-8c37-840233f64a7c}');
+        assert.equal(iv.functions[0].providedInterfaces[0].id, '{18bf9c44-c5f9-49f9-85f0-b42737cbd870}');
+        assert.equal(iv.connections[0].id, '{2f53a9e2-9139-4db0-9af5-bc35cc7f0ac0}');
+        assert.equal(iv.connections[0].sourceIfaceId, '{18bf9c44-c5f9-49f9-85f0-b42737cbd870}');
+
+        const serialized = serializeIvXml(iv);
+        assert.match(serialized, /Function id="\{88598203-48ac-4c5c-8c37-840233f64a7c\}"/u);
+        assert.match(serialized, /Provided_Interface id="\{18bf9c44-c5f9-49f9-85f0-b42737cbd870\}"/u);
+        assert.match(serialized, /Connection id="\{2f53a9e2-9139-4db0-9af5-bc35cc7f0ac0\}"/u);
+        assert.match(serialized, /iface_id="\{18bf9c44-c5f9-49f9-85f0-b42737cbd870\}"/u);
+});

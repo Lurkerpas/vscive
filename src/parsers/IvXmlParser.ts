@@ -4,6 +4,7 @@ import {
     LayerModel, PropertyModel, ParameterModel, ImplementationModel, CommentModel, ContextParameterModel,
     ParameterEncoding,
 } from '../model/types';
+import { preferBracedId } from '../utils/id';
 
 function attrs(el: XmlElement): Record<string, string> {
     const result: Record<string, string> = {};
@@ -92,7 +93,7 @@ function parseInterface(el: XmlElement, type: 'provided' | 'required'): Interfac
         ...parseParams(el, 'output', 'Output_Parameter'),
     ];
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         type,
         kind: attr(el, 'kind', 'Sporadic') as InterfaceModel['kind'],
@@ -119,7 +120,7 @@ function parseFunction(el: XmlElement): FunctionModel {
     }));
 
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         language: attr(el, 'language', ''),
         defaultImplementation: attr(el, 'default_implementation', ''),
@@ -184,8 +185,8 @@ export function parseIvXml(xml: string): IvModel {
 
         const sourceIfaceIdExplicit = src ? src.hasAttribute('iface_id') : false;
         const targetIfaceIdExplicit = tgt ? tgt.hasAttribute('iface_id') : false;
-        let sourceIfaceId = src ? attr(src, 'iface_id') : '';
-        let targetIfaceId = tgt ? attr(tgt, 'iface_id') : '';
+        let sourceIfaceId = src ? preferBracedId(attr(src, 'iface_id')) : '';
+        let targetIfaceId = tgt ? preferBracedId(attr(tgt, 'iface_id')) : '';
 
         // Legacy format: no iface_id — resolve by func_name + ri/pi_name
         if (!sourceIfaceId && sourceFuncName && sourceRiName) {
@@ -201,7 +202,7 @@ export function parseIvXml(xml: string): IvModel {
         const fallbackName = sourceRiName || targetPiName;
 
         return {
-            id:   attr(c, 'id')   || fallbackId,
+            id:   preferBracedId(attr(c, 'id') || fallbackId),
             name: attr(c, 'name') || fallbackName,
             nameExplicit,
             sourceIfaceId,
@@ -220,7 +221,7 @@ export function parseIvXml(xml: string): IvModel {
     });
 
     const comments: CommentModel[] = childElements(root, 'Comment').map(comment => ({
-        id: attr(comment, 'id'),
+        id: preferBracedId(attr(comment, 'id')),
         name: attr(comment, 'name'),
         requiredSystemElement: boolAttr(comment, 'required_system_element'),
         extraAttrs: unknownAttrs(comment, new Set(['id', 'name', 'required_system_element'])),

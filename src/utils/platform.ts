@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { preferBracedId } from './id';
 
 const SCHEME_PREFIX = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 const textDecoder = new TextDecoder();
@@ -20,14 +21,14 @@ export async function dataUrlToBytes(dataUrl: string): Promise<Uint8Array> {
 
 export function createUuid(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
+        return preferBracedId(crypto.randomUUID());
     }
 
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    return preferBracedId('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
         const random = Math.floor(Math.random() * 16);
         const value = char === 'x' ? random : (random & 0x3) | 0x8;
         return value.toString(16);
-    });
+    }));
 }
 
 export function dirnameUri(uri: vscode.Uri): vscode.Uri {

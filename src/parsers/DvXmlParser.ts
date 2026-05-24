@@ -9,6 +9,7 @@ import {
     DvPartitionModel,
     PropertyModel,
 } from '../model/types';
+import { preferBracedId } from '../utils/id';
 
 function childElements(el: XmlElement | XmlDocument, tagName: string): XmlElement[] {
     const out: XmlElement[] = [];
@@ -57,7 +58,7 @@ const KNOWN_MESSAGE_ATTRS = new Set(['id', 'name', 'from_function', 'from_interf
 
 function parseFunction(el: XmlElement): DvFunctionModel {
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         path: attr(el, 'path'),
         properties: parseProperties(el),
@@ -77,7 +78,7 @@ function parsePartition(el: XmlElement | undefined): DvPartitionModel {
     }
 
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         functions: childElements(el, 'Function').map(parseFunction),
         properties: parseProperties(el),
@@ -87,7 +88,7 @@ function parsePartition(el: XmlElement | undefined): DvPartitionModel {
 
 function parseDevice(el: XmlElement): DvDeviceModel {
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         port: attr(el, 'port'),
         requiresBusAccess: attr(el, 'requires_bus_access'),
@@ -108,7 +109,7 @@ function parseDevice(el: XmlElement): DvDeviceModel {
 
 function parseNode(el: XmlElement): DvNodeModel {
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         type: attr(el, 'type'),
         nodeLabel: attr(el, 'node_label'),
@@ -122,7 +123,7 @@ function parseNode(el: XmlElement): DvNodeModel {
 
 function parseMessage(el: XmlElement): DvMessageModel {
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         fromFunction: attr(el, 'from_function'),
         fromInterface: attr(el, 'from_interface'),
@@ -135,7 +136,7 @@ function parseMessage(el: XmlElement): DvMessageModel {
 
 function parseConnection(el: XmlElement): DvConnectionModel {
     return {
-        id: attr(el, 'id') || attr(el, 'name'),
+        id: preferBracedId(attr(el, 'id') || attr(el, 'name')),
         name: attr(el, 'name'),
         fromNode: attr(el, 'from_node'),
         fromPort: attr(el, 'from_port'),

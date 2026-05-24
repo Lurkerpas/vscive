@@ -1,5 +1,6 @@
 import { DOMParser, Element as XmlElement, Document as XmlDocument } from '@xmldom/xmldom';
 import { UiModel, EntityLayout } from '../model/types';
+import { canonicalIdKey, isBraceWrappedId, preferBracedId } from '../utils/id';
 
 function childElements(el: XmlElement | XmlDocument, tagName: string): XmlElement[] {
     const out: XmlElement[] = [];
@@ -13,19 +14,6 @@ function childElements(el: XmlElement | XmlDocument, tagName: string): XmlElemen
     return out;
 }
 
-function normalizeEntityId(id: string): string {
-    const trimmed = id.trim();
-    if (trimmed.startsWith('{') && trimmed.endsWith('}') && trimmed.length > 2) {
-        return trimmed.slice(1, -1);
-    }
-    return trimmed;
-}
-
-function isBraceWrappedId(id: string): boolean {
-    const trimmed = id.trim();
-    return trimmed.startsWith('{') && trimmed.endsWith('}') && trimmed.length > 2;
-}
-
 export function parseUiXml(xml: string): UiModel {
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
     const root = doc.documentElement;
@@ -34,7 +22,7 @@ export function parseUiXml(xml: string): UiModel {
 
     for (const entity of childElements(root, 'Entity')) {
         const rawId = (entity.getAttribute('id') ?? '').trim();
-        const id = normalizeEntityId(rawId);
+        const id = preferBracedId(rawId);
         if (!id) { continue; }
         const tastEl = childElements(entity, 'Taste')[0] as XmlElement | undefined;
         if (!tastEl) { continue; }
@@ -44,11 +32,11 @@ export function parseUiXml(xml: string): UiModel {
         const rcNums = rawRc.trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
         const layout: EntityLayout = { coordinates };
         if (rcNums.length >= 2) { layout.rootCoordinates = rcNums; }
-        const isWrapped = isBraceWrappedId(rawId);
+        const isWrapped = isBraceWrappedId(id);
 
-        const existing = entityEntries.get(id);
-        if (!existing || existing.isWrapped || !isWrapped) {
-            entityEntries.set(id, { key: isWrapped ? rawId : id, isWrapped, layout });
+        const existing = entityEntries.get(canonicalIdKey(rawId));
+        if (!existing || (isWrapped && !existing.isWrapped) || existing.isWrapped === isWrapped) {
+            entityEntries.set(canonicalIdKey(rawId), { key: id, isWrapped, layout });
         }
     }
 
