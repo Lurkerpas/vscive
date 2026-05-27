@@ -2,7 +2,7 @@
   "name": "vscive",
   "displayName": "vscive",
   "description": "Interface View Editor",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "lurkerpas",
   "engines": {
     "vscode": "^1.90.0"
