@@ -29,17 +29,21 @@ The tool does not implement all SpaceCreator features, and does not expose all T
 Only the most basic usage will be described here. For information regarding general TASTE usage and semantics, refer to the [TASTE main site](taste.tools) and its [wiki](https://gitlab.esa.int/taste/taste-setup/-/wikis/home).
 
 The main use is inspecting existing TASTE projects. Just open interfaceview.xml file, and a visual editor for InterfaceView should open:
+
 ![Main view/Interface View](assets/demo_main.png)
 
 Similarly, when opening a *.dv.xml file, a visual editor for Deployment View should open.
+
 ![Deployment View](assets/demo_dv.png)
 
 The diagrams can be edited, visualisation can be adjusted by opening the options. In particular, the "Focus" command can be usefull for inspecting large systems, as it shows only the nodes connected to the current one, facilitating tracing component interactions. When a Function, Interface, Node or Connection is selected, its properties can be edited. Unlike in SpaceCreator, most options are treated as text strings, without validation, so care should be taken.
+
 ![Function properties](assets/demo_function_properties.png)
 
 New TASTE projects can be created by right clicking on a folder in Explorer and selecting *vscive: taste init here* command, which should create a new project under the selected location, named after the selected directory. This functionality uses standard TASTE commands under the hood.
 
 New Functions can be created either by right clicking on empty space and selecting *New Function* entry, or by selecting *Add Function* from the command palette.
+
 ![Canvas context menu](assets/demo_canvas_context.png)
 
 New Interfaces can be created either by right clicking on a Function and selecting *New Provided/Required Interface* entry, or by selecting *Add Connection* from the command palette and clicking the source and target Functions in order.
@@ -108,4 +112,8 @@ If *Use taste-cli.sh for Commands* is selected, build/run/CLI commands are execu
 
 An an experiment, the capability to use TASTE docker image via Podman on Windows has been added. In order to use it, install Podman and select "Run build commands though taste-cli.bat using podman". Docker image address must be set up just as for taste-cli.sh. Default installation settings are recommended, as non-defaults tend to create issues to be resolved using Linux and WSL2/Podman related knowledge. 
 
-Unfortunatelly, the experiment is only partially succesfull so far, as building TASTE projects on NTFS partitions seems to fail. However, project can be built by entering CLI, and copying data between the source NTFS folder and a helper native Linux folder within the container. It is assumed that the issue is to be resolved on TASTE side, though TASTE was not designed to work outside of Linux.
+Unfortunatelly, building TASTE projects on NTFS partitions fails out of the box. However, there are two workarounds:
+- project can be built by entering CLI, and copying data between the source NTFS folder and a helper native Linux folder within the container,
+- use fsutil to make the target project folder case sensitive, as shown e.g., [here](https://www.thewindowsclub.com/enable-case-sensitive-attribute-folders).
+
+It is assumed that the issue is to be resolved on TASTE side, though TASTE was not designed to work outside of Linux.
