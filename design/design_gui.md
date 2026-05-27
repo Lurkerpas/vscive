@@ -289,4 +289,106 @@ Focus mode shall work analogously to Interface View:
 - if a Device is selected, only the owning Node, the selected Device and connected Devices and Connections shall remain visible,
 - if a Connection is selected, only the connection and its endpoint Nodes and Devices shall remain visible.
 
+The SDL editor shall re-use the same overall layout and interaction model as Interface View and Deployment View: main canvas in the centre, palette on the left, minimap in the upper right, and properties panel on the right.
+
+Because creating and deleting SDL symbols is out of scope (REQ-0740), the palette shall contain only navigation and view commands:
+- Zoom In,
+- Zoom Out,
+- Zoom to Fit,
+- Snap to Grid,
+- Exit (available when inside a procedure or nested state),
+- Export Diagram as Image,
+- Show Options,
+- Lock Diagram from Modification.
+
+SDL symbols shall be rendered following the graphical notation defined in ITU-T Z.100. Each symbol type has a distinctive appearance.
+
+Start — a horizontal oblong (pill shape), placed at the top of a transition sequence. Start symbols shall be coloured distinctly to make entry points immediately visible.
+
+State — a rectangle with rounded corners. The state name is centred inside.
+
+State aggregation — visually identical to State but with a double border, indicating it contains nested sub-states.
+
+Input — a rectangle with a step-shaped cut on the upper-left corner, making that corner into an L-shape. Contains the received signal name and optional formal parameters.
+
+Continuous Signal (Provided) — visually similar to Input but with the step-shaped cut on the upper-right corner, distinguishing it as a guard condition. Contains the condition expression preceded by `provided`.
+
+Output — a rectangle with a step-shaped cut on the lower-right corner. Contains the output signal name and optional parameters.
+
+Task — a plain rectangle without distinguishing marks. Contains an assignment or informal task expression.
+
+Decision — a rhombus (diamond). Contains the condition or question. Branch lines exit from the left, right, and bottom vertices.
+
+Answer — a small rectangle with rounded corners, placed at the terminus of each Decision branch. Contains the answer value, range, or keyword such as `true`, `false`, or `else`. Answer symbols may be repositioned independently by dragging, but shall move together with their parent Decision or Alternative when it is moved.
+
+Alternative — a rhombus visually identical to Decision, used to model input alternatives.
+
+Nextstate — a rectangle with strongly rounded ends (a pill or stadium shape). Contains the target state name, or the dash character `–` to indicate a history transition.
+
+Procedure (definition) — a rectangle with a double vertical bar on each of its left and right sides. Contains the procedure name.
+
+Procedure call — a rectangle with a double vertical bar on each side, visually identical to the Procedure definition symbol. Contains the call expression.
+
+Return — an oblong shape, placed at the end of a procedure transition sequence. Contains an optional return expression.
+
+Join — a small filled circle with a short label beside it, identifying the target connector.
+
+Label — a small outlined circle containing the connector label. Marks the destination of one or more Join symbols.
+
+Connect (state aggregation) — a small filled circle, visually similar to Join, placed at the boundary of a State aggregation symbol to indicate an entry or exit connection point.
+
+Comment — a rectangle with a dog-ear fold on the upper-right corner, containing free text. Connected to its annotated symbol by a dashed line.
+
+Text area — a rectangle with a dashed border. Contains SDL declarations such as variables, signals, timers, procedures or type definitions.
+
+Connections between symbols shall be rendered as solid straight lines with filled arrowheads indicating the direction of control flow. Comment connections shall be rendered as dashed lines without arrowheads. When a symbol is moved, all connection lines attached to it shall be redrawn so that they continue to connect the same pair of endpoints (REQ-0661). Manual waypoint routing is not required for SDL connections.
+
+It shall be possible to move any symbol by dragging it across the canvas. It shall be possible to resize symbols by dragging a border or corner handle. Connector-type symbols (Join, Label, Connect) shall have a minimum size below which they may not be reduced.
+
+Double-clicking on a symbol shall activate inline text editing. For symbols whose content spans multiple lines (Text area, Comment), the properties panel shall be the primary editing surface.
+
+Right-clicking on the canvas shall present a menu with the following options:
+- Export Diagram as Image.
+
+Right-clicking on a symbol shall present a menu with the following options:
+- Edit Text (opens the properties panel focused on the text field for that symbol),
+- Export Diagram as Image.
+
+Right-clicking on a symbol of procedures, procedure calls or nested states shall present a menu with additional "Enter" item, which transports the view to the implementation of the given entity.
+
+When a symbol is selected, the properties panel shall show editable plain-text fields appropriate to that symbol type. All fields shall accept any text without syntax validation (REQ-0752). The fields per symbol type shall be:
+- Start: no editable text fields.
+- State, State aggregation: state name.
+- Input: signal expression (signal name and actual parameters on a single line).
+- Continuous Signal (Provided): condition expression.
+- Output: output expression (signal name and actual parameters).
+- Task: task expression, one or more lines.
+- Decision: condition or question.
+- Answer: answer value or range (e.g. `true`, `(1 .. 10)`, `else`).
+- Alternative: condition.
+- Nextstate: target state name or `–`.
+- Procedure (definition): procedure name.
+- Procedure call: call expression.
+- Return: return expression, or empty.
+- Join: connector label.
+- Label: connector label.
+- Connect: label, or empty.
+- Comment: comment text, multiline.
+- Text area: SDL declarations, multiline.
+
+When Show Options is clicked, the properties panel shall show the following settings:
+- Snap to Grid toggle,
+- Snap grid size,
+- Show minimap toggle,
+- Undo / redo depth,
+- appearance related settings.
+
+Appearance-related settings shall be grouped at the end of the options panel under a collapsible Appearance section. That section shall contain:
+- Canvas background colour,
+- Symbol text font size,
+- Connection thickness,
+- For each symbol type (Start, State, State aggregation, Input, Continuous Signal, Output, Task, Decision, Answer, Alternative, Nextstate, Procedure, Procedure call, Return, Join, Label, Connect, Comment, Text area): default fill colour, border colour and text colour. Default colors for all symbols except states shall be pastel yellow. Default color for states shall be pastel pink.
+
+All colour and font settings shall be stored as VS Code user preferences, independently of the Interface View and Deployment View appearance settings (REQ-0762).
+
 
