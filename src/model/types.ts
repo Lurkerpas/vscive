@@ -394,7 +394,7 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     sdlInputColor: '#313244',
     sdlOutputColor: '#313244',
     sdlTaskColor: '#313244',
-    sdlDecisionColor: '#1e1e2e',
+    sdlDecisionColor: '#f9e2af',
     sdlProcedureColor: '#313244',
     sdlStartColor: '#a6e3a1',
     sdlNextstateColor: '#a6e3a1',
