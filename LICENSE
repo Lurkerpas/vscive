@@ -1,5 +1,4 @@
-The code of this extension is licensed under MIT License.
-- The direct dependencies are as follows:
+The code of this extension is licensed under MIT License. The direct dependencies are as follows:
 - xmldom - MIT License,
 - xyflow (React Flow) - MIT License,
 - react - MIT License.
@@ -8,9 +7,10 @@ References are sourced from different repositories, copyrighted by their respect
 - kazoo, included as submodule,
 - opus2, included as submodule,
 - TASTE-SAMV71-RTEMS-Tests, included as submodule,
+- OpenGEODE, included as submodule,
 - taste-setup, 3 files coped (including license file).
 
-No code from these repositories is used, compiled or linked. For kazoo, opus2 and TASTE-SAMV71-RTEMS-Tests, only Interface View and Deployment view files (xml data) have been used as references for development and testing. For taste-setup, Board1.xml and default_attributes.xml files (xml configuration) are used as reference and user configuration. None of these files are distributed as a part of the packaged extension.
+No code from these repositories is used, compiled or linked. For kazoo, opus2 and TASTE-SAMV71-RTEMS-Tests, only Interface View and Deployment view files (xml data) have been used as references for development and testing. For taste-setup, Board1.xml and default_attributes.xml files (xml configuration) are used as reference and user configuration. For OpenGEODE, only SDL files are used as references and to test the parser. None of these files are distributed as a part of the packaged extension.
 
 MIT License
 

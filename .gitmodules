@@ -7,3 +7,6 @@
 [submodule "references/opus2"]
 	path = references/opus2
 	url = https://gitlab.esa.int/PUS-C/opus2.git
+[submodule "references/opengeode"]
+	path = references/opengeode
+	url = https://github.com/esa/opengeode.git

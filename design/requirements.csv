@@ -65,3 +65,33 @@ REQ-0510; It shall be possible to create and delete Connections between Devices 
 REQ-0520; It shall be possible to create, delete and edit Messages within a Connection.; A Message shall store and save at least name, from_function, from_interface, to_function and to_interface.
 REQ-0530; Software shall retain all attributes and child elements of Deployment View entities when loading and saving, even if unknown to the Software.; This includes identifiers and additional Property elements.
 REQ-0540; Software shall save the Deployment View to file when user selects "Save" from the Visual Studio Code menu or presses the corresponding shortcut key.;
+REQ-0610; It shall be possible to open and visualise SDL files created in OpenGEODE.
+REQ-0620; It shall be possible to parse SDL files that contain only the process specification, without the entire system specification.; Usually system specification is auto-generated from Interface View, and only the process is stored in the repository
+REQ-0630; The editor for SDL files shall be associated with .pr file extension; This extension is used by OpenGEODE.
+REQ-0640; SDL shall be visualised as a graph of symbols, consistent with SDL graphical notation.
+REQ-0641; Supported SDL symbols shall include at least:  Alternative, Answer, Comment, Connect, Decision, Input, Join, Label, Nextstate, Output, Procedure, Procedure call, Provided, Return, Start, State, State aggregation, Task, Text area.
+REQ-0642; SDL Connections shall be visualised as lines connecting the symbols, consistent with SDL graphical notation.
+REQ-0643; It shall be possible to visualise the implementation of SDL procedure.
+REQ-0644; It shall be possible to visualise nested states.
+REQ-0650; Graph layout for SDL diagrams shall be read from the coordinates provided within comments in the SDL file.
+REQ-0660; It shall be possible to edit SDL diagrams by moving symbols.
+REQ-0661; When a symbol in SDL diagram is moved, all its connections shall move together with it.
+REQ-0662; It shall be possible to resize symbols in SDL diagrams.
+REQ-0670; It shall be possible to edit SDL diagrams by editing textual data within the symbols, such as names, conditions, declarations and tasks.
+REQ-0680; When SDL diagram is saved, all entities shall be saved in exactly the same order as they were read; The intent is to minimize the diff between original and changed version.
+REQ-0690; The layout and organization of SDL Editor shall be visually consistent with the Interface View and Deployment View editors, to provide a unified user experience across the extension.
+REQ-0700; It shall be possible to export SDL diagrams as image files. PNG and SVG formats shall be supported. Target file name shall be selectable by the user.
+REQ-0710; Software shall save the SDL diagram to file when user selects "Save" from the Visual Studio Code menu or presses the corresponding shortcut key.
+REQ-0720; It shall be possible to zoom in and out smoothly on the SDL diagram.
+REQ-0721; It shall be possible to fit the SDL diagram to the available space.
+REQ-0722; It shall be possible to pan the SDL diagram by dragging the background.
+REQ-0730; The SDL editor shall support undo and redo of the following operations: movement and resizing of symbols, and textual edits within symbols.; The depth of undo and redo shall be configurable; default depth shall be 100, consistent with REQ-0350.
+REQ-0740; The SDL editor shall not support creating, deleting or reordering SDL symbols.; The editor targets viewing with simple in-place patching; structural editing is out of scope.
+REQ-0741; When saving an SDL diagram, the file content shall be updated in-place: only CIF coordinate comments and edited symbol text shall be modified; all other file content, including ordering and non-CIF comments, shall be preserved unchanged.; This ensures metadata such as KEEP SPECIFIC GEODE comments is not lost on save.
+REQ-0750; If a parsed SDL file contains SYSTEM, BLOCK, SIGNALROUTE or CHANNEL declarations, those shall be parsed but otherwise ignored; only the content of the process shall be visualised.
+REQ-0751; The SDL editor shall support files containing exactly one process.; If a file contains more than one process declaration, only the first process shall be opened.
+REQ-0752; Textual edits made within SDL symbols shall not be syntax-validated by the SDL editor.; The user is responsible for entering valid SDL text.
+REQ-0753; If CIF coordinates are absent or incomplete in an SDL file, the SDL editor shall apply automatic layout for the symbols lacking coordinates.
+REQ-0760; It shall be possible to set the colors of the SDL symbols, connections and the background of the SDL diagram.;
+REQ-0761; It shall be possible to configure the fonts (color and size) used for text in SDL symbols.; Font configuration shall be consistent with REQ-0200 for Interface View and Deployment View diagrams.
+REQ-0762; Color and font settings for the SDL editor shall be independent from those in the Interface View and Deployment View editors, and saved as user preferences in Visual Studio Code, exactly the same way as for the other editors.
