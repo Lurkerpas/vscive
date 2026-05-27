@@ -335,6 +335,23 @@ export interface EditorOptions {
     dvNodeFontColor: string;
     dvConnectionThickness: number;
     dvNodeBodyColor: string;
+    sdlCanvasColor: string;
+    sdlFontSize: number;
+    sdlConnectionThickness: number;
+    sdlConnectionColor: string;
+    sdlDefaultFillColor: string;
+    sdlDefaultBorderColor: string;
+    sdlDefaultTextColor: string;
+    sdlStateColor: string;
+    sdlInputColor: string;
+    sdlOutputColor: string;
+    sdlTaskColor: string;
+    sdlDecisionColor: string;
+    sdlProcedureColor: string;
+    sdlStartColor: string;
+    sdlNextstateColor: string;
+    sdlCommentColor: string;
+    sdlTextAreaColor: string;
 }
 
 export const DEFAULT_OPTIONS: EditorOptions = {
@@ -366,6 +383,23 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     dvNodeFontColor: '#cdd6f4',
     dvConnectionThickness: 2,
     dvNodeBodyColor: '#1e1e2e',
+    sdlCanvasColor: '#1e1e2e',
+    sdlFontSize: 12,
+    sdlConnectionThickness: 2,
+    sdlConnectionColor: '#6c7086',
+    sdlDefaultFillColor: '#313244',
+    sdlDefaultBorderColor: '#89b4fa',
+    sdlDefaultTextColor: '#cdd6f4',
+    sdlStateColor: '#45475a',
+    sdlInputColor: '#313244',
+    sdlOutputColor: '#313244',
+    sdlTaskColor: '#313244',
+    sdlDecisionColor: '#1e1e2e',
+    sdlProcedureColor: '#313244',
+    sdlStartColor: '#a6e3a1',
+    sdlNextstateColor: '#a6e3a1',
+    sdlCommentColor: '#585b70',
+    sdlTextAreaColor: '#585b70',
 };
 
 // ── postMessage protocol ───────────────────────────────────────────────────
@@ -478,4 +512,54 @@ export type DvWebviewMessage =
     | { type: 'buildDv'; mode: 'clean' | 'skeletons' | 'debug' | 'release' | 'run' | 'cli' }
     | { type: 'updateOptions'; options: EditorOptions }
     | { type: 'browseBoardsFile' }
+    | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };
+
+// ── SDL model ──────────────────────────────────────────────────────────────
+
+export type SdlSymbolKind =
+    | 'start' | 'state' | 'stateAggregation' | 'input' | 'continuousSignal'
+    | 'output' | 'task' | 'decision' | 'answer' | 'alternative'
+    | 'nextstate' | 'procedure' | 'procedureCall' | 'return' | 'join' | 'label'
+    | 'connect' | 'comment' | 'textArea';
+
+export interface SdlCifCoords { x: number; y: number; w: number; h: number; }
+
+export interface SdlSymbol {
+    id: string;
+    kind: SdlSymbolKind;
+    /** CIF coordinates; null if no CIF annotation was present */
+    cif: SdlCifCoords | null;
+    /** 0-based line index of the CIF comment line; null if absent */
+    cifLine: number | null;
+    /** The raw CIF comment text, for round-trip preservation */
+    cifRaw: string;
+    /** Editable text content of this symbol (trimmed) */
+    text: string;
+    /** 0-based line index of the first line of editable text (the SDL keyword line) */
+    textLineStart: number;
+    /** 0-based line index (exclusive) of the end of editable text */
+    textLineEnd: number;
+    children: SdlSymbol[];
+}
+
+export interface SdlModel {
+    /** Original file split into lines (LF-terminated; last line may have no LF) */
+    lines: string[];
+    /** Hierarchical tree of symbols at process level; empty if no PROCESS found */
+    tree: SdlSymbol[];
+}
+
+export interface SdlDiagramData { sdl: SdlModel; }
+
+export type SdlExtensionMessage =
+    | { type: 'loadSdl'; data: SdlDiagramData }
+    | { type: 'options'; options: EditorOptions }
+    | { type: 'requestExport'; format: 'png' | 'svg' };
+
+export type SdlWebviewMessage =
+    | { type: 'ready' }
+    | { type: 'sdlSymbolMoved'; id: string; x: number; y: number; w: number; h: number }
+    | { type: 'sdlTextEdited'; id: string; text: string }
+    | { type: 'updateOptions'; options: EditorOptions }
+    | { type: 'requestExport' }
     | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };

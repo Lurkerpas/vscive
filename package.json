@@ -13,6 +13,7 @@
   "activationEvents": [
     "onCustomEditor:vscive.interfaceViewEditor",
     "onCustomEditor:vscive.deploymentViewEditor",
+    "onCustomEditor:vscive.sdlEditor",
     "onCommand:vscive.createIv",
     "onCommand:vscive.createDv",
     "onCommand:vscive.tasteInitHere",
@@ -129,6 +130,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "vscive.sdlEditor",
+        "displayName": "SDL Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.pr"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "configuration": {
@@ -196,7 +207,8 @@
     "@xmldom/xmldom": "^0.9.10",
     "@xyflow/react": "^12.10.2",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "typescript-parsec": "^0.3.4"
   },
   "overrides": {
     "undici": "5"
