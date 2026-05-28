@@ -92,6 +92,9 @@ export function buildSdlGraph(
     const isExecutionBreak = (sym: SdlSymbol): boolean =>
         sym.kind === 'nextstate' || sym.kind === 'join' || sym.kind === 'return';
 
+    const isFloatingLabel = (sym: SdlSymbol): boolean =>
+        sym.kind === 'label' && /^connection\b/i.test(sym.text.trim());
+
     // ── Helpers ─────────────────────────────────────────────────────────────
     function pushNode(sym: SdlSymbol, navigable: boolean): void {
         let x = 0, y = 0, w = DEFAULT_WIDTH, h = DEFAULT_HEIGHT;
@@ -159,14 +162,49 @@ export function buildSdlGraph(
 
     function renderActionSequence(children: SdlSymbol[], incomingIds: string[]): string[] {
         let openExits = [...incomingIds];
-        for (const action of children) {
+        for (let index = 0; index < children.length; index++) {
+            const action = children[index];
             if (action.kind === 'comment') continue;
+
+            if (isFloatingLabel(action)) {
+                index = renderFloatingLabelSequence(children, index) - 1;
+                continue;
+            }
+
             for (const srcId of openExits) {
                 pushEdge(srcId, action.id, 'seq', 'vertical');
             }
             openExits = renderActionFlow(action);
         }
         return openExits;
+    }
+
+    function renderFloatingLabelSequence(children: SdlSymbol[], startIndex: number): number {
+        let branchOpenExits = [children[startIndex].id];
+        let index = startIndex + 1;
+
+        while (index < children.length) {
+            const action = children[index];
+            if (action.kind === 'comment') {
+                index++;
+                continue;
+            }
+            if (isFloatingLabel(action)) {
+                break;
+            }
+
+            for (const srcId of branchOpenExits) {
+                pushEdge(srcId, action.id, 'seq', 'vertical');
+            }
+            branchOpenExits = renderActionFlow(action);
+            index++;
+
+            if (branchOpenExits.length === 0) {
+                break;
+            }
+        }
+
+        return index;
     }
 
     function renderDecisionFlow(decSym: SdlSymbol): string[] {
