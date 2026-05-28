@@ -154,5 +154,6 @@ function shiftSymbols(symbols: SdlSymbol[], afterLine: number, delta: number): v
             s.textLineEnd   += delta;
         }
         shiftSymbols(s.children, afterLine, delta);
+        shiftSymbols(s.nestedChildren, afterLine, delta);
     }
 }

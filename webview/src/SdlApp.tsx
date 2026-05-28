@@ -31,7 +31,7 @@ import { buildSdlGraph, SDL_SYMBOL_NODE, SdlNodeData, sdlFillColor } from './sdl
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { SdlEdge } from './components/SdlEdge';
 import { formatSdlDisplayText, shouldLeftAlignSdlText } from './sdlTextLayout';
-import { inputShapePoints, outputShapePoints } from './sdlShapeGeometry';
+import { inputShapePoints, outputShapePoints, returnCrossLines } from './sdlShapeGeometry';
 
 // ── Style helpers ────────────────────────────────────────────────────────────
 
@@ -124,6 +124,26 @@ function CircleShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.Rea
     return <circle cx={cx} cy={cy} r={r} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
 }
 
+function ReturnShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.ReactElement {
+    const lines = returnCrossLines(w, h, strokeWidth);
+    return (
+        <g>
+            <CircleShape w={w} h={h} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+            {lines.map((line, index) => (
+                <line
+                    key={index}
+                    x1={line.x1}
+                    y1={line.y1}
+                    x2={line.x2}
+                    y2={line.y2}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                />
+            ))}
+        </g>
+    );
+}
+
 function DoubleCircleShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.ReactElement {
     const cx = w / 2, cy = h / 2;
     const r1 = Math.min(w, h) / 2 - strokeWidth / 2;
@@ -140,8 +160,8 @@ function renderShape(kind: SdlSymbolKind, w: number, h: number, fill: string, st
     const props: ShapeProps = { w, h, fill, stroke, strokeWidth: sw };
     switch (kind) {
         case 'start':
-        case 'nextstate':
-        case 'return':         return <PillShape {...props} />;
+        case 'nextstate':      return <PillShape {...props} />;
+        case 'return':         return <ReturnShape {...props} />;
         case 'state':          return <RoundedRectShape {...props} />;
         case 'stateAggregation': return <DoubleRectShape {...props} />;
         case 'input':
@@ -175,36 +195,64 @@ function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNode
     const sw     = selected ? 2 : options.sdlConnectionThickness;
     const leftAlignedText = shouldLeftAlignSdlText(kind);
     const displayText = formatSdlDisplayText(kind, text);
+    const allowTextOverflow = kind === 'return';
+    const textInset = sw + 2;
+    const textBoxWidth = Math.max(0, w - sw * 2 - 4);
+    const textBoxHeight = Math.max(0, h - sw * 2 - 4);
 
     return (
-        <div style={{ width: w, height: h, position: 'relative', background: 'transparent' }}>
+        <div style={{ width: w, height: h, position: 'relative', background: 'transparent', overflow: 'visible' }}>
             {/* Invisible handles so ReactFlow can draw edges */}
             <Handle type="target" position={Position.Top} style={HANDLE_STYLE} />
             <svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
                 {renderShape(kind, w, h, fill, stroke, sw)}
-                <foreignObject x={sw + 2} y={sw + 2} width={w - sw * 2 - 4} height={h - sw * 2 - 4}>
-                    <div
-                        style={{
-                            width: '100%', height: '100%',
-                            display: 'flex',
-                            alignItems: leftAlignedText ? 'flex-start' : 'center',
-                            justifyContent: leftAlignedText ? 'flex-start' : 'center',
-                            overflow: 'hidden', color: options.sdlDefaultTextColor,
-                            fontSize: options.sdlFontSize, fontFamily: 'monospace',
-                            padding: '2px 4px', boxSizing: 'border-box',
-                            wordBreak: leftAlignedText ? 'normal' : 'break-all',
-                            overflowWrap: 'anywhere',
-                            textAlign: leftAlignedText ? 'left' : 'center',
-                            whiteSpace: 'pre-wrap',
-                        }}
-                    >
-                        {displayText}
-                        {hasChildren && (
-                            <span style={{ fontSize: 9, marginLeft: 3, opacity: 0.6 }}>▶</span>
-                        )}
-                    </div>
-                </foreignObject>
             </svg>
+            {allowTextOverflow ? (
+                <div
+                    style={{
+                        position: 'absolute',
+                        left: '50%',
+                        top: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        color: options.sdlDefaultTextColor,
+                        fontSize: options.sdlFontSize,
+                        fontFamily: 'monospace',
+                        padding: '2px 4px',
+                        boxSizing: 'border-box',
+                        textAlign: 'center',
+                        whiteSpace: 'pre',
+                        overflow: 'visible',
+                        pointerEvents: 'none',
+                    }}
+                >
+                    {displayText}
+                </div>
+            ) : (
+                <svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
+                    <foreignObject x={textInset} y={textInset} width={textBoxWidth} height={textBoxHeight}>
+                        <div
+                            style={{
+                                width: '100%', height: '100%',
+                                display: 'flex',
+                                alignItems: leftAlignedText ? 'flex-start' : 'center',
+                                justifyContent: leftAlignedText ? 'flex-start' : 'center',
+                                overflow: 'hidden', color: options.sdlDefaultTextColor,
+                                fontSize: options.sdlFontSize, fontFamily: 'monospace',
+                                padding: '2px 4px', boxSizing: 'border-box',
+                                wordBreak: leftAlignedText ? 'normal' : 'break-all',
+                                overflowWrap: 'anywhere',
+                                textAlign: leftAlignedText ? 'left' : 'center',
+                                whiteSpace: 'pre-wrap',
+                            }}
+                        >
+                            {displayText}
+                            {hasChildren && (
+                                <span style={{ fontSize: 9, marginLeft: 3, opacity: 0.6 }}>▶</span>
+                            )}
+                        </div>
+                    </foreignObject>
+                </svg>
+            )}
             <Handle type="source" position={Position.Bottom} style={HANDLE_STYLE} />
         </div>
     );
@@ -386,8 +434,24 @@ function findSymbol(tree: SdlSymbol[], id: string): SdlSymbol | null {
         if (s.id === id) return s;
         const found = findSymbol(s.children, id);
         if (found) return found;
+        const nestedFound = findSymbol(s.nestedChildren, id);
+        if (nestedFound) return nestedFound;
     }
     return null;
+}
+
+function getNavigableChildren(sym: SdlSymbol): SdlSymbol[] {
+    return sym.nestedChildren.length > 0 ? sym.nestedChildren : sym.children;
+}
+
+function hasNavigableChildren(sym: SdlSymbol): boolean {
+    if (sym.nestedChildren.length > 0) return true;
+    if (sym.kind === 'state') return false;
+    return sym.children.length > 0;
+}
+
+function navigationParentKind(sym: SdlSymbol): SdlSymbolKind | null {
+    return sym.nestedChildren.length > 0 ? null : sym.kind;
 }
 
 interface PropsPanelProps { selectedId: string | null; sdl: SdlModel; }
@@ -454,10 +518,10 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
     // Current level's flat symbol list and parent kind
     const currentSymbols = levelPath.length === 0
         ? sdl.tree
-        : levelPath[levelPath.length - 1].children;
+        : getNavigableChildren(levelPath[levelPath.length - 1]);
     const parentKind: SdlSymbolKind | null = levelPath.length === 0
         ? null
-        : levelPath[levelPath.length - 1].kind;
+        : navigationParentKind(levelPath[levelPath.length - 1]);
 
     // Rebuild graph whenever level or options change
     useEffect(() => {
@@ -537,7 +601,7 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
                 onClick: () => { setSelectedId(node.id); setShowOptions(false); },
             },
         ];
-        if (sym && sym.children.length > 0) {
+        if (sym && hasNavigableChildren(sym)) {
             items.push({
                 label: 'Navigate Into',
                 onClick: () => {

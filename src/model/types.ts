@@ -542,7 +542,10 @@ export interface SdlSymbol {
     textLineStart: number;
     /** 0-based line index (exclusive) of the end of editable text */
     textLineEnd: number;
+    /** Executable children: state handlers, decision answers, procedure bodies, etc. */
     children: SdlSymbol[];
+    /** Nested state-machine content declared inside a SUBSTRUCTURE of this symbol. */
+    nestedChildren: SdlSymbol[];
 }
 
 export interface SdlModel {

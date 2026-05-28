@@ -329,12 +329,41 @@ describe('SDL parser — targeted construct samples', () => {
 
         const model = parsePr(source);
         const flat = flattenSymbols(model.tree);
+        const aggregation = model.tree[0];
 
-        assert.strictEqual(flat.length, 2);
-        assert.strictEqual(flat[0].kind, 'stateAggregation');
-        assert.strictEqual(flat[1].kind, 'start');
-        assertCoords(flat[0], { x: 15, y: 20, w: 130, h: 35 });
-        assertCoords(flat[1], { x: 30, y: 90, w: 70, h: 35 });
+        assert.strictEqual(aggregation.kind, 'stateAggregation');
+        assertCoords(aggregation, { x: 15, y: 20, w: 130, h: 35 });
+        assert.strictEqual(aggregation.nestedChildren.length, 1);
+        assert.strictEqual(aggregation.nestedChildren[0].kind, 'start');
+        assertCoords(aggregation.nestedChildren[0], { x: 999, y: 999, w: 70, h: 35 });
+        assert.strictEqual(flat.filter(symbol => symbol.kind === 'start').length, 2);
+    });
+
+    it('attaches nested substructures to the owning state in the battery reference file', async () => {
+        let src: string;
+        try {
+            src = await readUtf8('references/opengeode/tests/testsuite/test-battery/og.pr');
+        } catch {
+            return;
+        }
+
+        const model = parsePr(src);
+        const nominal = model.tree.find(symbol => symbol.kind === 'state' && symbol.text.includes('STATE nominal;'));
+
+        assert.ok(nominal, 'Expected outer nominal state');
+        assert.strictEqual(nominal.children.length, 1);
+        assert.strictEqual(nominal.children[0].kind, 'connect');
+        assert.strictEqual(nominal.nestedChildren.some(symbol => symbol.kind === 'start'), true);
+
+        const nestedBattery = nominal.nestedChildren.find(symbol => symbol.kind === 'state' && symbol.text.includes('STATE battery;'));
+        assert.ok(nestedBattery, 'Expected nested battery state');
+        assert.strictEqual(nestedBattery.children.length, 1);
+        assert.strictEqual(nestedBattery.children[0].kind, 'connect');
+        assert.strictEqual(nestedBattery.nestedChildren.some(symbol => symbol.kind === 'start'), true);
+
+        const discharge = nestedBattery.nestedChildren.find(symbol => symbol.kind === 'state' && symbol.text.includes('STATE discharge;'));
+        assert.ok(discharge, 'Expected nested discharge state');
+        assert.strictEqual(discharge.children.map(symbol => symbol.kind).join(','), 'input,continuousSignal,continuousSignal');
     });
 });
 

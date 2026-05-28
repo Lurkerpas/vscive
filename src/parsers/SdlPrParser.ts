@@ -268,6 +268,11 @@ function extractInlineText(lines: string[], startLine: number, endLine: number):
         .trim();
 }
 
+function stateSymbolKey(text: string): string | null {
+    const match = /^\s*state(?:\s+aggregation)?\s+([^;\s]+)/i.exec(text.trim());
+    return match ? match[1].toLowerCase() : null;
+}
+
 // ── Recursive descent ───────────────────────────────────────────────────────
 
 /** Skip an entire SUBSTRUCTURE…ENDSUBSTRUCTURE block, handling nesting. */
@@ -299,6 +304,7 @@ function parseSymbolList(
     breakCifKinds?: string | string[],
 ): SdlSymbol[] {
     const symbols: SdlSymbol[] = [];
+    const pendingNestedByState = new Map<string, SdlSymbol[]>();
 
     while (cursor.pos < cursor.tokens.length) {
         if (cursor.is(...stopKinds)) break;
@@ -311,6 +317,12 @@ function parseSymbolList(
         }
 
         if (tok.kind !== TK.CifCoord) {
+            const nestedDeclaration = parseStandaloneStateSubstructure(cursor, lines);
+            if (nestedDeclaration) {
+                pendingNestedByState.set(nestedDeclaration.stateKey, nestedDeclaration.children);
+                continue;
+            }
+
             // Skip SUBSTRUCTURE blocks wholesale — inner CIF annotations belong
             // to the nested state diagram, not the current level.
             if (tok.kind === TK.KwSubstructure) {
@@ -360,6 +372,7 @@ function parseSymbolList(
                 textLineStart: tsStart,
                 textLineEnd: tsEnd,
                 children: [],
+                nestedChildren: [],
             };
             symbols.push(sym);
             skipToEndText(cursor);
@@ -394,6 +407,7 @@ function parseSymbolList(
                 textLineStart: tsStart,
                 textLineEnd: tsEnd,
                 children: [],
+                nestedChildren: [],
             });
             continue;
         }
@@ -436,10 +450,20 @@ function parseSymbolList(
             textLineStart: tsStart,
             textLineEnd: tsEnd,
             children: [],
+            nestedChildren: [],
         };
 
         symbols.push(sym);
         recurse(symKind, cursor, lines, sym);
+
+        if ((sym.kind === 'state' || sym.kind === 'stateAggregation') && sym.nestedChildren.length === 0) {
+            const key = stateSymbolKey(sym.text);
+            const pendingNested = key ? pendingNestedByState.get(key) : undefined;
+            if (key && pendingNested) {
+                sym.nestedChildren = pendingNested;
+                pendingNestedByState.delete(key);
+            }
+        }
     }
 
     return symbols;
@@ -492,11 +516,57 @@ function recurseSymbol(kind: SdlSymbolKind, cursor: Cursor, lines: string[], sym
 /** CIF annotation kinds that represent state-level transition handlers. */
 const STATE_HANDLER_CIF_KINDS = ['input', 'provided', 'connect'];
 
+function parseSubstructureBody(cursor: Cursor, lines: string[]): SdlSymbol[] {
+    cursor.consume();
+    const children = parseSymbolList(cursor, lines, [TK.KwEndSubstructure], recurseSymbol);
+    if (cursor.is(TK.KwEndSubstructure)) cursor.consume();
+    return children;
+}
+
+function parseStandaloneStateSubstructure(
+    cursor: Cursor,
+    lines: string[],
+): { stateKey: string; children: SdlSymbol[] } | null {
+    if (!cursor.is(TK.KwState)) return null;
+
+    const startPos = cursor.pos;
+    cursor.consume();
+
+    if (cursor.is(TK.KwAggregation)) {
+        cursor.pos = startPos;
+        return null;
+    }
+
+    let stateKey: string | null = null;
+    while (cursor.pos < cursor.tokens.length) {
+        const tok = cursor.peek();
+        if (!tok) break;
+        if (tok.kind === TK.CifCoord || isEndKeyword(tok.kind)) break;
+        if (tok.kind === TK.Ident && stateKey === null) {
+            stateKey = tok.text.toLowerCase();
+        }
+        if (tok.kind === TK.KwSubstructure) {
+            const children = parseSubstructureBody(cursor, lines);
+            if (!stateKey) {
+                cursor.pos = startPos;
+                return null;
+            }
+            return { stateKey, children };
+        }
+        if (isStructuralToken(tok.kind) && tok.kind !== TK.Semicolon) break;
+        cursor.consume();
+    }
+
+    cursor.pos = startPos;
+    return null;
+}
+
 function parseStateBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
     // Consume STATE keyword (leave AGGREGATION / name tokens for the loop below)
     advancePastKeyword(cursor);
 
     const handlers: SdlSymbol[] = [];
+    let nestedChildren: SdlSymbol[] = [];
 
     while (cursor.pos < cursor.tokens.length) {
         if (cursor.is(TK.KwEndState)) break;
@@ -543,6 +613,7 @@ function parseStateBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
                 textLineStart: tsStart,
                 textLineEnd: tsEnd,
                 children: [],
+                nestedChildren: [],
             };
             handlers.push(handlerSym);
 
@@ -562,9 +633,9 @@ function parseStateBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
             continue;
         }
 
-        // Non-CIF token: skip SUBSTRUCTURE blocks wholesale; consume others
+        // SUBSTRUCTURE defines the nested diagram owned by this state.
         if (tok.kind === TK.KwSubstructure) {
-            skipSubstructure(cursor);
+            nestedChildren = parseSubstructureBody(cursor, lines);
             if (sym.kind === 'stateAggregation') break;
         } else {
             cursor.consume();
@@ -573,6 +644,7 @@ function parseStateBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
 
     if (cursor.is(TK.KwEndState)) cursor.consume();
     sym.children = handlers;
+    sym.nestedChildren = nestedChildren;
 }
 
 function parseActionList(cursor: Cursor, lines: string[], sym: SdlSymbol, stopKinds: TK[]): void {
@@ -667,6 +739,7 @@ function parseAnswerList(cursor: Cursor, lines: string[], endKind: TK): SdlSymbo
             textLineStart: cifLine + 1,
             textLineEnd: labelEndLine,
             children: [],
+            nestedChildren: [],
         };
 
         // Parse the action sequence inside this answer.  Stop before the next
@@ -769,6 +842,7 @@ export function flattenSymbols(symbols: SdlSymbol[]): SdlSymbol[] {
         for (const s of syms) {
             result.push(s);
             if (s.children.length > 0) walk(s.children);
+            if (s.nestedChildren.length > 0) walk(s.nestedChildren);
         }
     }
     walk(symbols);
@@ -781,6 +855,8 @@ export function findSymbolById(symbols: SdlSymbol[], id: string): SdlSymbol | nu
         if (s.id === id) return s;
         const found = findSymbolById(s.children, id);
         if (found) return found;
+        const nestedFound = findSymbolById(s.nestedChildren, id);
+        if (nestedFound) return nestedFound;
     }
     return null;
 }

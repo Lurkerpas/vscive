@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { inputShapePoints, outputShapePoints } from '../webview/src/sdlShapeGeometry';
+import { inputShapePoints, outputShapePoints, returnCrossLines } from '../webview/src/sdlShapeGeometry';
 
 function parsePoints(points: string): Array<{ x: number; y: number }> {
     return points.split(' ').map(pair => {
@@ -31,6 +31,13 @@ describe('SDL shape geometry', () => {
             { x: 99, y: 20 },
             { x: 88, y: 39 },
             { x: 1, y: 39 },
+        ]);
+    });
+
+    it('renders return with a diagonal cross inside the circle', () => {
+        assert.deepStrictEqual(returnCrossLines(35, 35, 2), [
+            { x1: 9, y1: 9, x2: 26, y2: 26 },
+            { x1: 26, y1: 9, x2: 9, y2: 26 },
         ]);
     });
 });

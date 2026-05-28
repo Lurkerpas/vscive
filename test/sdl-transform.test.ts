@@ -235,4 +235,76 @@ describe('SDL graph transform — decision flow', () => {
         assert.ok(hasEdge(graph.edges, elseAnswer.id, notifyCall.id));
         assert.ok(hasEdge(graph.edges, notifyCall.id, nextstate.id));
     });
+
+    it('keeps text areas visible but out of execution flow', () => {
+        const source = [
+            'process Notes;',
+            '    /* CIF START (0, 0), (70, 35) */',
+            '    START;',
+            '    /* CIF TEXT (0, 50), (120, 60) */',
+            '    dcl charge Integer;',
+            '    /* CIF ENDTEXT */',
+            '    /* CIF TASK (0, 130), (120, 35) */',
+            '    task setup;',
+            '    /* CIF NEXTSTATE (0, 190), (90, 35) */',
+            '    NEXTSTATE done;',
+            'endprocess Notes;',
+        ].join('\n');
+
+        const model = parsePr(source);
+        const graph = buildSdlGraph(model.tree, null, DEFAULT_OPTIONS);
+
+        const start = findByKind(model.tree, 'start');
+        const textArea = findByKind(model.tree, 'textArea');
+        const task = findByKind(model.tree, 'task');
+        const nextstate = findByKind(model.tree, 'nextstate');
+
+        assert.ok(findNode(graph, textArea.id));
+        assert.ok(hasEdge(graph.edges, start.id, task.id));
+        assert.ok(hasEdge(graph.edges, task.id, nextstate.id));
+        assert.ok(!hasEdge(graph.edges, start.id, textArea.id));
+        assert.ok(!hasEdge(graph.edges, textArea.id, task.id));
+        assert.ok(!graph.edges.some(edge => edge.source === textArea.id || edge.target === textArea.id));
+    });
+
+    it('exposes nested state substructures as navigable diagrams without losing outer handlers', async () => {
+        const src = await readUtf8('references/opengeode/tests/testsuite/test-battery/og.pr');
+        const model = parsePr(src);
+
+        const nominal = model.tree.find(symbol => symbol.kind === 'state' && symbol.text.includes('STATE nominal;'));
+        assert.ok(nominal, 'Expected outer nominal state');
+        const processGraph = buildSdlGraph(model.tree, null, DEFAULT_OPTIONS);
+        const nominalNode = findNode(processGraph, nominal.id);
+        const backup = model.tree.find(symbol => symbol.kind === 'state' && symbol.text.includes('STATE backup;'));
+
+        assert.strictEqual(nominalNode.data.hasChildren, true);
+        assert.strictEqual(nominal.children.length, 1);
+        assert.strictEqual(nominal.nestedChildren.some(symbol => symbol.kind === 'state' && symbol.text.includes('STATE battery;')), true);
+        assert.ok(backup, 'Expected backup state');
+        assert.ok(hasEdge(processGraph.edges, nominal.id, backup.id));
+
+        const nominalNestedGraph = buildSdlGraph(nominal.nestedChildren, null, DEFAULT_OPTIONS);
+        const nestedStart = findByKind(nominal.nestedChildren, 'start');
+        const nestedNextstate = findByKind(nominal.nestedChildren, 'nextstate');
+        const nestedBattery = nominal.nestedChildren.find(symbol => symbol.kind === 'state' && symbol.text.includes('STATE battery;'));
+        assert.ok(nestedBattery, 'Expected nested battery state');
+        const nestedConnect = nestedBattery.children.find(symbol => symbol.kind === 'connect');
+        const nestedReturn = nestedConnect?.children.find(symbol => symbol.kind === 'return');
+
+        assert.ok(hasEdge(nominalNestedGraph.edges, nestedStart.id, nestedNextstate.id));
+        assert.ok(!hasEdge(nominalNestedGraph.edges, nestedNextstate.id, nestedBattery.id));
+        assert.strictEqual(findNode(nominalNestedGraph, nestedBattery.id).data.hasChildren, true);
+        assert.ok(nestedConnect, 'Expected connect battery_discharged');
+        assert.ok(nestedReturn, 'Expected return battery_discharged');
+    assert.ok(hasEdge(nominalNestedGraph.edges, nestedBattery.id, nestedReturn.id));
+        assert.ok(hasEdge(nominalNestedGraph.edges, nestedReturn.id, nestedConnect.id));
+
+        const batteryNestedGraph = buildSdlGraph(nestedBattery.nestedChildren, null, DEFAULT_OPTIONS);
+        const discharge = nestedBattery.nestedChildren.find(symbol => symbol.kind === 'state' && symbol.text.includes('STATE discharge;'));
+        assert.ok(discharge, 'Expected nested discharge state');
+        const dischargeNode = findNode(batteryNestedGraph, discharge.id);
+
+        assert.strictEqual(dischargeNode.data.hasChildren, false);
+        assert.strictEqual(discharge.children.map(symbol => symbol.kind).join(','), 'input,continuousSignal,continuousSignal');
+    });
 });
