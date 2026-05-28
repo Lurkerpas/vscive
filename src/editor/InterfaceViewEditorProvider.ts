@@ -202,6 +202,12 @@ export class InterfaceViewEditorProvider
             return;
         }
 
+        // SDL functions: open the .pr file in the SDL custom editor.
+        if (sourceLanguage.toUpperCase() === 'SDL') {
+            await this.openSdlSource(document, fn);
+            return;
+        }
+
         const extension = this.sourceExtensionForLanguage(sourceLanguage);
         if (!extension) {
             void vscode.window.showErrorMessage(`Edit Function supports only C, CPP, and Ada. ${fn.name} uses ${sourceLanguage}.`);
@@ -232,6 +238,20 @@ export class InterfaceViewEditorProvider
         void vscode.window.showErrorMessage(
             `Could not locate source for ${fn.name}. Tried: ${attemptedPaths.join(' ; ')}`,
         );
+    }
+
+    private async openSdlSource(document: InterfaceViewDocument, fn: FunctionModel): Promise<void> {
+        const normalizedName = this.normalizeFunctionName(fn.name);
+        const baseFolder = dirnameUri(document.uri);
+        const fileUri = joinPathSegments(baseFolder, 'work', normalizedName, 'SDL', 'src', `${normalizedName}.pr`);
+        try {
+            await vscode.workspace.fs.stat(fileUri);
+            await vscode.commands.executeCommand('vscode.openWith', fileUri, 'vscive.sdlEditor');
+        } catch {
+            void vscode.window.showErrorMessage(
+                `Could not locate SDL source for ${fn.name}. Tried: ${displayUri(fileUri)}`,
+            );
+        }
     }
 
     async openCustomDocument(uri: vscode.Uri): Promise<InterfaceViewDocument> {

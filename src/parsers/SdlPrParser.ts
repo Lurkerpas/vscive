@@ -233,7 +233,7 @@ function textSpan(tokens: Tok[], kwIdx: number, lines: string[]): [number, numbe
     // Find the next CIF or END token after kwIdx
     for (let i = kwIdx + 1; i < tokens.length; i++) {
         const k = tokens[i].kind;
-        if (k === TK.CifCoord || k === TK.CifEndText) {
+        if (k === TK.CifCoord || k === TK.CifEndText || k === TK.CifKeep) {
             return [kwLine, tokens[i].line];
         }
         if (isEndKeyword(k)) {

@@ -48,7 +48,7 @@ function shouldDrawSequential(parentKind: SdlSymbolKind | null): boolean {
 const TRANSITION_KINDS = new Set<SdlSymbolKind>([
     'start', 'task', 'output', 'procedureCall', 'decision', 'alternative',
     'answer', 'nextstate', 'join', 'label', 'connect', 'return',
-    'input', 'continuousSignal', 'comment',
+    'input', 'continuousSignal',
 ]);
 
 // ── Build graph ─────────────────────────────────────────────────────────────
@@ -81,6 +81,7 @@ export function buildSdlGraph(
 
     // ── Nodes ───────────────────────────────────────────────────────────────
     for (const sym of symbols) {
+        if (sym.kind === 'comment') { continue; }
         let x = 0, y = 0, w = DEFAULT_WIDTH, h = DEFAULT_HEIGHT;
         if (sym.cif) {
             x = sym.cif.x; y = sym.cif.y; w = sym.cif.w; h = sym.cif.h;
@@ -104,35 +105,25 @@ export function buildSdlGraph(
 
     // At process level: only wire transition-kind symbols together.
     // At other levels: wire all siblings sequentially.
-    const connectible = parentKind === null
+    // Comment symbols are never rendered, so exclude them from both lists.
+    const connectible = (parentKind === null
         ? symbols.filter(s => TRANSITION_KINDS.has(s.kind))
-        : symbols;
+        : symbols
+    ).filter(s => s.kind !== 'comment');
 
     let prev: SdlSymbol | null = null;
     for (const sym of connectible) {
-        if (sym.kind === 'comment') {
-            if (prev) {
-                edges.push({
-                    id: `cmt-${sym.id}--${prev.id}`,
-                    source: sym.id,
-                    target: prev.id,
-                    type: 'smoothstep',
-                    style: { ...edgeStyle, strokeDasharray: '5 4' },
-                });
-            }
-        } else {
-            if (prev && prev.kind !== 'comment') {
-                edges.push({
-                    id: `seq-${prev.id}--${sym.id}`,
-                    source: prev.id,
-                    target: sym.id,
-                    type: 'smoothstep',
-                    style: edgeStyle,
-                    markerEnd,
-                });
-            }
-            prev = sym;
+        if (prev) {
+            edges.push({
+                id: `seq-${prev.id}--${sym.id}`,
+                source: prev.id,
+                target: sym.id,
+                type: 'smoothstep',
+                style: edgeStyle,
+                markerEnd,
+            });
         }
+        prev = sym;
     }
 
     return { nodes, edges };
