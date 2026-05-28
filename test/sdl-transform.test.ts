@@ -198,4 +198,41 @@ describe('SDL graph transform — decision flow', () => {
         assert.ok(!hasEdge(graph.edges, setup.id, floatingLabel.id));
         assert.ok(!hasEdge(graph.edges, branchNextstate.id, mainNextstate.id));
     });
+
+    it('connects consecutive alternatives when the first one is empty', () => {
+        const source = [
+            'process Alternatives;',
+            '    /* CIF START (0, 0), (70, 35) */',
+            '    START;',
+            '    /* CIF alternative (40, 60), (70, 50) */',
+            '    alternative cond_a;',
+            '    endalternative;',
+            '    /* CIF alternative (40, 130), (70, 50) */',
+            '    alternative cond_b;',
+            '    /* CIF ANSWER (20, 200), (70, 23) */',
+            '    else:',
+            '        /* CIF PROCEDURECALL (10, 245), (130, 35) */',
+            '        call notify_ok;',
+            '    endalternative;',
+            '    /* CIF NEXTSTATE (40, 300), (70, 35) */',
+            '    NEXTSTATE done;',
+            'endprocess Alternatives;',
+        ].join('\n');
+
+        const model = parsePr(source);
+        const graph = buildSdlGraph(model.tree, null, DEFAULT_OPTIONS);
+
+        const alternatives = model.tree.filter(symbol => symbol.kind === 'alternative');
+        assert.strictEqual(alternatives.length, 2);
+        const firstAlternative = alternatives[0];
+        const secondAlternative = alternatives[1];
+        const elseAnswer = findByText(secondAlternative.children, 'else:');
+        const notifyCall = findByKind(elseAnswer.children, 'procedureCall');
+        const nextstate = findByKind(model.tree, 'nextstate');
+
+        assert.ok(hasEdge(graph.edges, firstAlternative.id, secondAlternative.id));
+        assert.ok(hasEdge(graph.edges, secondAlternative.id, elseAnswer.id));
+        assert.ok(hasEdge(graph.edges, elseAnswer.id, notifyCall.id));
+        assert.ok(hasEdge(graph.edges, notifyCall.id, nextstate.id));
+    });
 });

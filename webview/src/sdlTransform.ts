@@ -215,6 +215,13 @@ export function buildSdlGraph(
             const branchExits = renderActionSequence(answer.children, [answer.id]);
             openExits.push(...branchExits);
         }
+
+        // Empty ALTERNATIVE symbols act as a no-op guard and fall through
+        // to the next symbol in sequence when no branch is rendered.
+        if (openExits.length === 0 && decSym.kind === 'alternative') {
+            return [decSym.id];
+        }
+
         return openExits;
     }
 
