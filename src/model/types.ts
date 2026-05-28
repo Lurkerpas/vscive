@@ -352,6 +352,8 @@ export interface EditorOptions {
     sdlNextstateColor: string;
     sdlCommentColor: string;
     sdlTextAreaColor: string;
+    /** Incremented when SDL symbol color defaults change, to trigger a one-time migration of saved settings. */
+    sdlColorsVersion: number;
 }
 
 export const DEFAULT_OPTIONS: EditorOptions = {
@@ -384,22 +386,23 @@ export const DEFAULT_OPTIONS: EditorOptions = {
     dvConnectionThickness: 2,
     dvNodeBodyColor: '#1e1e2e',
     sdlCanvasColor: '#1e1e2e',
-    sdlFontSize: 12,
+    sdlFontSize: 8,
     sdlConnectionThickness: 2,
     sdlConnectionColor: '#6c7086',
     sdlDefaultFillColor: '#313244',
     sdlDefaultBorderColor: '#89b4fa',
     sdlDefaultTextColor: '#cdd6f4',
-    sdlStateColor: '#45475a',
-    sdlInputColor: '#313244',
-    sdlOutputColor: '#313244',
-    sdlTaskColor: '#313244',
-    sdlDecisionColor: '#f9e2af',
-    sdlProcedureColor: '#313244',
-    sdlStartColor: '#a6e3a1',
-    sdlNextstateColor: '#a6e3a1',
-    sdlCommentColor: '#585b70',
-    sdlTextAreaColor: '#585b70',
+    sdlStateColor: '#1d3a5c',
+    sdlInputColor: '#1a4040',
+    sdlOutputColor: '#402a10',
+    sdlTaskColor: '#2e3a2e',
+    sdlDecisionColor: '#2a2214',
+    sdlProcedureColor: '#3a1a5c',
+    sdlStartColor: '#1a2a1a',
+    sdlNextstateColor: '#1a2a1a',
+    sdlCommentColor: '#3a3028',
+    sdlTextAreaColor: '#28283a',
+    sdlColorsVersion: 1,
 };
 
 // ── postMessage protocol ───────────────────────────────────────────────────

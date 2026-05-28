@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Background,
     Edge,
     Handle,
     MiniMap,
@@ -29,6 +28,7 @@ import {
 } from '../../src/model/types';
 import { post } from './vscodeApi';
 import { buildSdlGraph, SDL_SYMBOL_NODE, SdlNodeData, sdlFillColor } from './sdlTransform';
+import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 
 // ── Style helpers ────────────────────────────────────────────────────────────
 
@@ -216,15 +216,17 @@ function SdlPalette({ locked, showOptions, onToggleLock, onToggleOptions, onExpo
 
     return (
         <div style={{
-            position: 'absolute', left: 0, top: 0, bottom: 0,
-            display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 4px',
-            background: '#181825', borderRight: '1px solid #313244', zIndex: 20,
+            position: 'absolute', left: 0, top: 0,
+            display: 'inline-flex', flexDirection: 'column', gap: 4, padding: '8px 4px',
+            background: '#181825', borderRight: '1px solid #313244',
+            borderBottom: '1px solid #313244', borderBottomRightRadius: 6, zIndex: 20,
         }}>
             <button style={btnStyle()} title="Zoom in" onClick={() => zoomIn()}>+</button>
             <button style={btnStyle()} title="Zoom out" onClick={() => zoomOut()}>−</button>
             <button style={{ ...btnStyle(), fontSize: 14 }} title="Fit view" onClick={() => fitView({ padding: 0.1 })}>⊡</button>
             <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
             <button style={btnStyle()} title="Export image" onClick={onExport}>⬇</button>
+            <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
             <button style={btnStyle(showOptions)} title="Options" onClick={onToggleOptions}>⚙</button>
             <button style={btnStyle(locked)} title={locked ? 'Unlock layout' : 'Lock layout'} onClick={onToggleLock}>
                 {locked ? '🔒' : '🔓'}
@@ -427,6 +429,7 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
     const [showOptions, setShowOptions]  = useState(false);
     const [selectedId, setSelectedId]   = useState<string | null>(null);
     const [levelPath, setLevelPath]      = useState<SdlSymbol[]>([]);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
     // Current level's flat symbol list and parent kind
     const currentSymbols = levelPath.length === 0
@@ -486,11 +489,50 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
         post({ type: 'requestExport' } satisfies SdlWebviewMessage);
     }, []);
 
+    const handlePaneClick = useCallback(() => {
+        setSelectedId(null);
+    }, []);
+
+    const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        const items: ContextMenuItem[] = [];
+        if (levelPath.length > 0) {
+            items.push({ label: 'Go Up', onClick: () => navigateTo(levelPath.length - 2) });
+        }
+        items.push(
+            { label: 'Fit View', onClick: () => fitView({ padding: 0.1 }) },
+            { label: 'Export as Image', onClick: handleExport },
+            { label: showOptions ? 'Hide Options' : 'Options', onClick: () => setShowOptions(v => !v) },
+        );
+        setContextMenu({ x: e.clientX, y: e.clientY, items });
+    }, [levelPath, navigateTo, fitView, handleExport, showOptions]);
+
+    const handleNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
+        e.preventDefault();
+        const sym = findSymbol(sdl.tree, node.id);
+        const items: ContextMenuItem[] = [
+            {
+                label: 'Open Properties',
+                onClick: () => { setSelectedId(node.id); setShowOptions(false); },
+            },
+        ];
+        if (sym && sym.children.length > 0) {
+            items.push({
+                label: 'Navigate Into',
+                onClick: () => {
+                    setLevelPath(prev => [...prev, sym]);
+                    setSelectedId(null);
+                },
+            });
+        }
+        setContextMenu({ x: e.clientX, y: e.clientY, items });
+    }, [sdl]);
+
     const breadcrumbHeight = levelPath.length > 0 ? 28 : 0;
     const rightPanelWidth = showOptions || selectedId ? 300 : 0;
 
     return (
-        <div style={{ position: 'absolute', inset: 0 }}>
+        <div style={{ position: 'absolute', inset: 0, background: options.sdlCanvasColor }}>
             <SdlBreadcrumb levelPath={levelPath} onNavigateTo={navigateTo} />
 
             {/* Canvas area — inset from palette (left 44px) and breadcrumb (top) */}
@@ -509,6 +551,9 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
                     onNodeDragStop={handleNodeDragStop}
                     onNodeClick={handleNodeClick}
                     onNodeDoubleClick={handleNodeDoubleClick}
+                    onPaneClick={handlePaneClick}
+                    onPaneContextMenu={handlePaneContextMenu}
+                    onNodeContextMenu={handleNodeContextMenu}
                     nodeTypes={NODE_TYPES}
                     nodesDraggable={!locked}
                     nodesConnectable={false}
@@ -520,7 +565,6 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
                     maxZoom={4}
                     fitView
                 >
-                    <Background />
                     {options.showMinimap && (
                         <MiniMap pannable zoomable position="top-right" style={{ background: '#181825' }} />
                     )}
@@ -543,6 +587,14 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
                     ? <PropertiesPanel selectedId={selectedId} sdl={sdl} />
                     : null
             }
+            {contextMenu && (
+                <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    items={contextMenu.items}
+                    onClose={() => setContextMenu(null)}
+                />
+            )}
         </div>
     );
 }
