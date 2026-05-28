@@ -18,65 +18,68 @@ const enum TK {
     // CIF annotation comments (highest priority)
     CifCoord   = 0,   // /* CIF WORD (x, y), (w, h) */
     CifEndText = 1,   // /* CIF ENDTEXT */
-    CifKeep    = 2,   // /* CIF Keep ... */
+    CifEndLabel = 2,  // /* CIF End Label */
+    CifKeep    = 3,   // /* CIF Keep ... */
     // Other comments (skip)
-    BlockCmt   = 3,
-    LineCmt    = 4,
+    BlockCmt   = 4,
+    LineCmt    = 5,
     // String literals (kept to prevent keyword matches inside strings)
-    StrLit     = 5,
+    StrLit     = 6,
     // END keywords (before their non-end base keywords)
-    KwEndProcess      = 6,
-    KwEndState        = 7,
-    KwEndSubstructure = 8,
-    KwEndInput        = 9,
-    KwEndProvided     = 10,
-    KwEndDecision     = 11,
-    KwEndAlternative  = 12,
-    KwEndProcedure    = 13,
-    KwEndText         = 14,
-    KwEndSystem       = 15,
-    KwEndBlock        = 16,
-    KwEndChannel      = 17,
+    KwEndProcess      = 7,
+    KwEndState        = 8,
+    KwEndSubstructure = 9,
+    KwEndInput        = 10,
+    KwEndProvided     = 11,
+    KwEndDecision     = 12,
+    KwEndAlternative  = 13,
+    KwEndProcedure    = 14,
+    KwEndText         = 15,
+    KwEndConnection   = 16,
+    KwEndSystem       = 17,
+    KwEndBlock        = 18,
+    KwEndChannel      = 19,
     // Structural keywords
-    KwProcess     = 18,
-    KwSystem      = 19,
-    KwBlock       = 20,
-    KwChannel     = 21,
-    KwSignalRoute = 22,
-    KwState       = 23,
-    KwAggregation = 24,
-    KwSubstructure= 25,
-    KwInput       = 26,
-    KwProvided    = 27,
-    KwStart       = 28,
-    KwTask        = 29,
-    KwOutput      = 30,
-    KwNextstate   = 31,
-    KwDecision    = 32,
-    KwAlternative = 33,
-    KwProcedure   = 34,
-    KwCall        = 35,
-    KwReturn      = 36,
-    KwJoin        = 37,
-    KwLabel       = 38,
-    KwConnect     = 39,
-    KwComment     = 40,
-    KwText        = 41,
+    KwProcess     = 20,
+    KwSystem      = 21,
+    KwBlock       = 22,
+    KwChannel     = 23,
+    KwSignalRoute = 24,
+    KwState       = 25,
+    KwAggregation = 26,
+    KwSubstructure= 27,
+    KwInput       = 28,
+    KwProvided    = 29,
+    KwStart       = 30,
+    KwTask        = 31,
+    KwOutput      = 32,
+    KwNextstate   = 33,
+    KwDecision    = 34,
+    KwAlternative = 35,
+    KwProcedure   = 36,
+    KwCall        = 37,
+    KwReturn      = 38,
+    KwJoin        = 39,
+    KwLabel       = 40,
+    KwConnect     = 41,
+    KwComment     = 42,
+    KwText        = 43,
     // Punctuation
-    Lparen    = 42,
-    Rparen    = 43,
-    Semicolon = 44,
+    Lparen    = 44,
+    Rparen    = 45,
+    Semicolon = 46,
     // Generic
-    Ident    = 45,
-    Number   = 46,
-    Newline  = 47,
-    Other    = 48,
+    Ident    = 47,
+    Number   = 48,
+    Newline  = 49,
+    Other    = 50,
 }
 
 /** buildLexer requires patterns anchored with ^ at the start of each attempt. */
 const LEXER = buildLexer<TK>([
     // CIF annotations – must be before generic block-comment rule
     [true,  /^\/\*\s*CIF\s+ENDTEXT\s*\*\//gi,                                     TK.CifEndText],
+    [true,  /^\/\*\s*CIF\s+End\s+Label\s*\*\//gi,                                 TK.CifEndLabel],
     [true,  /^\/\*\s*CIF\s+Keep[^\n*]*(?:\*(?!\/)[^\n*]*)*\*\//gi,               TK.CifKeep],
     [true,  /^\/\*\s*CIF\s+\w+\s+\(-?\d+\s*,\s*-?\d+\s*\)\s*,\s*\(\s*\d+\s*,\s*\d+\s*\)\s*\*\//gi, TK.CifCoord],
     // Other block / line comments (skip)
@@ -94,6 +97,7 @@ const LEXER = buildLexer<TK>([
     [true, /^endalternative\b/gi,  TK.KwEndAlternative],
     [true, /^endprocedure\b/gi,    TK.KwEndProcedure],
     [true, /^endtext\b/gi,         TK.KwEndText],
+    [true, /^endconnection\b/gi,   TK.KwEndConnection],
     [true, /^endsystem\b/gi,       TK.KwEndSystem],
     [true, /^endblock\b/gi,        TK.KwEndBlock],
     [true, /^endchannel\b/gi,      TK.KwEndChannel],
@@ -169,7 +173,7 @@ class Cursor {
     skipUntil(...stopKinds: TK[]): void {
         while (this.pos < this.tokens.length) {
             const k = this.tokens[this.pos].kind;
-            if (stopKinds.includes(k) || k === TK.CifCoord || k === TK.CifEndText || k === TK.CifKeep) break;
+            if (stopKinds.includes(k) || k === TK.CifCoord || k === TK.CifEndText || k === TK.CifEndLabel || k === TK.CifKeep) break;
             this.pos++;
         }
     }
@@ -184,6 +188,7 @@ function nextId(): string { return `sdl-${++_idCounter}`; }
 // ── CIF parsing helpers ─────────────────────────────────────────────────────
 
 const CIF_COORD_RE = /\/\*\s*CIF\s+(\w+)\s+\((-?\d+)\s*,\s*(-?\d+)\s*\)\s*,\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\*\//i;
+const IGNORED_INLINE_CIF_LINE_RE = /^\s*\/\*\s*CIF\s+(?:Keep\b|End\s+Label\b).*\*\/\s*$/i;
 
 function parseCifCoords(raw: string): { kind: string; coords: SdlCifCoords } | null {
     const m = CIF_COORD_RE.exec(raw);
@@ -233,7 +238,7 @@ function textSpan(tokens: Tok[], kwIdx: number, lines: string[]): [number, numbe
     // Find the next CIF or END token after kwIdx
     for (let i = kwIdx + 1; i < tokens.length; i++) {
         const k = tokens[i].kind;
-        if (k === TK.CifCoord || k === TK.CifEndText || k === TK.CifKeep) {
+        if (k === TK.CifCoord || k === TK.CifEndText || k === TK.CifEndLabel || k === TK.CifKeep) {
             return [kwLine, tokens[i].line];
         }
         if (isEndKeyword(k)) {
@@ -247,11 +252,20 @@ const END_KEYWORDS: TK[] = [
     TK.KwEndProcess, TK.KwEndState, TK.KwEndSubstructure,
     TK.KwEndInput, TK.KwEndProvided, TK.KwEndDecision,
     TK.KwEndAlternative, TK.KwEndProcedure, TK.KwEndText,
+    TK.KwEndConnection,
     TK.KwEndSystem, TK.KwEndBlock, TK.KwEndChannel,
 ];
 
 function isEndKeyword(k: TK): boolean {
     return END_KEYWORDS.includes(k);
+}
+
+function extractInlineText(lines: string[], startLine: number, endLine: number): string {
+    return lines
+        .slice(startLine, endLine)
+        .filter(line => !IGNORED_INLINE_CIF_LINE_RE.test(line))
+        .join('\n')
+        .trim();
 }
 
 // ── Recursive descent ───────────────────────────────────────────────────────
@@ -291,7 +305,7 @@ function parseSymbolList(
 
         const tok = cursor.peek()!;
 
-        if (tok.kind === TK.CifEndText || tok.kind === TK.CifKeep) {
+        if (tok.kind === TK.CifEndText || tok.kind === TK.CifEndLabel || tok.kind === TK.CifKeep) {
             cursor.consume();
             continue;
         }
@@ -325,7 +339,7 @@ function parseSymbolList(
 
         // TEXT areas have no following keyword — handle specially
         if (cifParsed.kind === 'text') {
-            const tsStart = cifTok.line;
+            const tsStart = cifTok.line + 1;
             // scan to find end of text area
             let tsEnd = lines.length;
             for (let i = cursor.pos; i < cursor.tokens.length; i++) {
@@ -335,7 +349,7 @@ function parseSymbolList(
                     break;
                 }
             }
-            const textRaw = lines.slice(tsStart, tsEnd).join('\n').trim();
+            const textRaw = extractInlineText(lines, tsStart, tsEnd);
             const sym: SdlSymbol = {
                 id: nextId(),
                 kind: 'textArea',
@@ -349,6 +363,38 @@ function parseSymbolList(
             };
             symbols.push(sym);
             skipToEndText(cursor);
+            continue;
+        }
+
+        if (cifParsed.kind === 'label') {
+            const tsStart = cifTok.line + 1;
+            let tsEnd = lines.length;
+            for (let i = cursor.pos; i < cursor.tokens.length; i++) {
+                const k2 = cursor.tokens[i].kind;
+                if (k2 === TK.CifKeep) continue;
+                if (k2 === TK.CifCoord || k2 === TK.CifEndLabel || isEndKeyword(k2)) {
+                    tsEnd = cursor.tokens[i].line;
+                    break;
+                }
+            }
+
+            while (cursor.pos < cursor.tokens.length) {
+                const k = cursor.peek()!.kind;
+                if (k === TK.CifCoord || k === TK.CifEndLabel || isEndKeyword(k)) break;
+                cursor.consume();
+            }
+
+            symbols.push({
+                id: nextId(),
+                kind: 'label',
+                cif: cifParsed.coords,
+                cifLine,
+                cifRaw: cifTok.text,
+                text: extractInlineText(lines, tsStart, tsEnd),
+                textLineStart: tsStart,
+                textLineEnd: tsEnd,
+                children: [],
+            });
             continue;
         }
 
@@ -457,7 +503,7 @@ function parseStateBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
 
         const tok = cursor.peek()!;
 
-        if (tok.kind === TK.CifEndText || tok.kind === TK.CifKeep) {
+        if (tok.kind === TK.CifEndText || tok.kind === TK.CifEndLabel || tok.kind === TK.CifKeep) {
             cursor.consume();
             continue;
         }
@@ -519,6 +565,7 @@ function parseStateBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
         // Non-CIF token: skip SUBSTRUCTURE blocks wholesale; consume others
         if (tok.kind === TK.KwSubstructure) {
             skipSubstructure(cursor);
+            if (sym.kind === 'stateAggregation') break;
         } else {
             cursor.consume();
         }
@@ -568,7 +615,7 @@ function parseAnswerList(cursor: Cursor, lines: string[], endKind: TK): SdlSymbo
 
         // Skip non-CIF tokens (identifiers, punctuation in condition text, keywords
         // like COMMENT that follow non-answer CIF annotations, etc.)
-        if (tok.kind === TK.CifEndText || tok.kind === TK.CifKeep) {
+        if (tok.kind === TK.CifEndText || tok.kind === TK.CifEndLabel || tok.kind === TK.CifKeep) {
             cursor.consume();
             continue;
         }
@@ -593,7 +640,7 @@ function parseAnswerList(cursor: Cursor, lines: string[], endKind: TK): SdlSymbo
         let labelEndLine = lines.length;
         for (let i = cursor.pos; i < cursor.tokens.length; i++) {
             const k = cursor.tokens[i].kind;
-            if (k === TK.CifCoord || k === TK.CifEndText || k === TK.CifKeep || k === endKind) {
+            if (k === TK.CifCoord || k === TK.CifEndText || k === TK.CifEndLabel || k === TK.CifKeep || k === endKind) {
                 labelEndLine = cursor.tokens[i].line;
                 break;
             }
@@ -647,6 +694,10 @@ function skipToEndText(cursor: Cursor): void {
         if (k === TK.CifEndText || k === TK.KwEndText) {
             cursor.consume();
             return;
+        }
+        if (k === TK.CifEndLabel || k === TK.KwEndConnection) {
+            cursor.consume();
+            continue;
         }
         if (k === TK.CifCoord) return; // next symbol starts
         cursor.consume();

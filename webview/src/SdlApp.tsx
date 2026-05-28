@@ -29,6 +29,7 @@ import {
 import { post } from './vscodeApi';
 import { buildSdlGraph, SDL_SYMBOL_NODE, SdlNodeData, sdlFillColor } from './sdlTransform';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
+import { SdlEdge } from './components/SdlEdge';
 
 // ── Style helpers ────────────────────────────────────────────────────────────
 
@@ -205,6 +206,7 @@ function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNode
 }
 
 const NODE_TYPES = { [SDL_SYMBOL_NODE]: SdlSymbolNode };
+const EDGE_TYPES = { sdlEdge: SdlEdge };
 
 // ── Left palette (zoom/fit/export/options/lock) ──────────────────────────────
 
@@ -569,6 +571,7 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
                     onPaneContextMenu={handlePaneContextMenu}
                     onNodeContextMenu={handleNodeContextMenu}
                     nodeTypes={NODE_TYPES}
+                    edgeTypes={EDGE_TYPES}
                     nodesDraggable={!locked}
                     nodesConnectable={false}
                     elementsSelectable={!locked}

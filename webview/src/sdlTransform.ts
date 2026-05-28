@@ -26,6 +26,10 @@ export interface SdlNodeData extends Record<string, unknown> {
     hasChildren: boolean;
 }
 
+export interface SdlEdgeData {
+    kind: 'vertical' | 'rake';
+}
+
 // ── Edge strategy ────────────────────────────────────────────────────────────
 
 /**
@@ -79,6 +83,15 @@ export function buildSdlGraph(
         color: options.sdlConnectionColor,
     };
 
+    const isInlineDecision = (sym: SdlSymbol): boolean =>
+        sym.kind === 'decision' || sym.kind === 'alternative';
+
+    const isStateHandler = (sym: SdlSymbol): boolean =>
+        sym.kind === 'input' || sym.kind === 'continuousSignal' || sym.kind === 'connect';
+
+    const isExecutionBreak = (sym: SdlSymbol): boolean =>
+        sym.kind === 'nextstate' || sym.kind === 'join' || sym.kind === 'return';
+
     // ── Helpers ─────────────────────────────────────────────────────────────
     function pushNode(sym: SdlSymbol, navigable: boolean): void {
         let x = 0, y = 0, w = DEFAULT_WIDTH, h = DEFAULT_HEIGHT;
@@ -99,75 +112,98 @@ export function buildSdlGraph(
         });
     }
 
-    function pushEdge(srcId: string, tgtId: string, prefix = 'br'): void {
+    function pushEdge(srcId: string, tgtId: string, prefix = 'br', kind: SdlEdgeData['kind'] = 'vertical'): void {
         edges.push({
             id: `${prefix}-${srcId}--${tgtId}`,
             source: srcId,
             target: tgtId,
-            type: 'smoothstep',
+            type: 'sdlEdge',
             style: edgeStyle,
             markerEnd,
+            data: { kind } satisfies SdlEdgeData,
         });
     }
 
-    /**
-     * Render a sequence of action symbols (task, output, procedureCall, decision, …)
-     * starting from prevId.  Decisions are inlined; sequential flow continues
-     * past each decision to handle cases like two consecutive decisions.
-     */
-    function unfoldActionSequence(children: SdlSymbol[], startPrevId: string): void {
-        let prevId = startPrevId;
+    function pushActionNodes(children: SdlSymbol[]): void {
         for (const action of children) {
             if (action.kind === 'comment') continue;
-            const isDecision = action.kind === 'decision' || action.kind === 'alternative';
-            pushNode(action, !isDecision);
-            pushEdge(prevId, action.id);
-            prevId = action.id;
-            if (isDecision) {
-                // Branches are rendered inline; sequential flow continues after.
-                unfoldDecision(action);
+            pushNode(action, !isInlineDecision(action));
+            if (isInlineDecision(action)) {
+                pushDecisionNodes(action);
             }
         }
     }
 
-    /**
-     * Inline-unfold a decision / alternative:
-     * decision → answer → [action sequence…]
-     * Nested decisions are handled recursively via unfoldActionSequence.
-     */
-    function unfoldDecision(decSym: SdlSymbol): void {
+    function pushDecisionNodes(decSym: SdlSymbol): void {
         for (const answer of decSym.children) {
             if (answer.kind === 'comment') continue;
             pushNode(answer, false);
-            pushEdge(decSym.id, answer.id);
-            unfoldActionSequence(answer.children, answer.id);
+            pushActionNodes(answer.children);
         }
     }
 
-    /**
-     * Inline-unfold a state: state → input/continuousSignal → [action sequence…]
-     * Other child kinds (textArea, comment) are ignored at this level.
-     */
-    function unfoldState(stateSym: SdlSymbol): void {
+    function pushStateNodes(stateSym: SdlSymbol): void {
         for (const handler of stateSym.children) {
-            if (handler.kind !== 'input' && handler.kind !== 'continuousSignal' && handler.kind !== 'connect') continue;
+            if (!isStateHandler(handler)) continue;
             pushNode(handler, false);
-            pushEdge(stateSym.id, handler.id);
-            unfoldActionSequence(handler.children, handler.id);
+            pushActionNodes(handler.children);
+        }
+    }
+
+    function renderActionFlow(action: SdlSymbol): string[] {
+        if (isInlineDecision(action)) {
+            return renderDecisionFlow(action);
+        }
+        return isExecutionBreak(action) ? [] : [action.id];
+    }
+
+    function renderActionSequence(children: SdlSymbol[], incomingIds: string[]): string[] {
+        let openExits = [...incomingIds];
+        for (const action of children) {
+            if (action.kind === 'comment') continue;
+            for (const srcId of openExits) {
+                pushEdge(srcId, action.id, 'seq', 'vertical');
+            }
+            openExits = renderActionFlow(action);
+        }
+        return openExits;
+    }
+
+    function renderDecisionFlow(decSym: SdlSymbol): string[] {
+        const openExits: string[] = [];
+        for (const answer of decSym.children) {
+            if (answer.kind === 'comment') continue;
+            pushEdge(decSym.id, answer.id, 'br', 'rake');
+            const branchExits = renderActionSequence(answer.children, [answer.id]);
+            openExits.push(...branchExits);
+        }
+        return openExits;
+    }
+
+    function renderStateFlow(stateSym: SdlSymbol): void {
+        for (const handler of stateSym.children) {
+            if (!isStateHandler(handler)) continue;
+            pushEdge(stateSym.id, handler.id, 'br', 'rake');
+            renderActionSequence(handler.children, [handler.id]);
         }
     }
 
     // ── Nodes ───────────────────────────────────────────────────────────────
     for (const sym of symbols) {
         if (sym.kind === 'comment') continue;
-        const isDecision = sym.kind === 'decision' || sym.kind === 'alternative';
         const isState    = sym.kind === 'state';    // stateAggregation stays navigable
-        pushNode(sym, !isDecision && !isState);
-        if (isDecision)  unfoldDecision(sym);
-        else if (isState) unfoldState(sym);
+        pushNode(sym, !isInlineDecision(sym) && !isState);
+        if (isInlineDecision(sym)) pushDecisionNodes(sym);
+        else if (isState) pushStateNodes(sym);
     }
 
     // ── Edges ───────────────────────────────────────────────────────────────
+    for (const sym of symbols) {
+        if (sym.kind === 'state') {
+            renderStateFlow(sym);
+        }
+    }
+
     if (!shouldDrawSequential(parentKind)) return { nodes, edges };
 
     // At process level: only wire transition-kind symbols together.
@@ -178,13 +214,7 @@ export function buildSdlGraph(
         : symbols
     ).filter(s => s.kind !== 'comment');
 
-    let prev: SdlSymbol | null = null;
-    for (const sym of connectible) {
-        if (prev) {
-            pushEdge(prev.id, sym.id, 'seq');
-        }
-        prev = sym;
-    }
+    renderActionSequence(connectible, []);
 
     return { nodes, edges };
 }
