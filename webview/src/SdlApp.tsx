@@ -30,6 +30,7 @@ import { post } from './vscodeApi';
 import { buildSdlGraph, SDL_SYMBOL_NODE, SdlNodeData, sdlFillColor } from './sdlTransform';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { SdlEdge } from './components/SdlEdge';
+import { formatSdlDisplayText, shouldLeftAlignSdlText } from './sdlTextLayout';
 
 // ── Style helpers ────────────────────────────────────────────────────────────
 
@@ -167,10 +168,8 @@ function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNode
     const fill   = sdlFillColor(kind, options);
     const stroke = selected ? '#cba6f7' : options.sdlDefaultBorderColor;
     const sw     = selected ? 2 : options.sdlConnectionThickness;
-    const isTextArea = kind === 'textArea';
-    const displayText = isTextArea
-        ? text.split('\n').filter(line => !/^\s*\/\*\s*CIF\b/.test(line)).join('\n').trim()
-        : text.length > 80 ? text.slice(0, 77) + '…' : text;
+    const leftAlignedText = shouldLeftAlignSdlText(kind);
+    const displayText = formatSdlDisplayText(kind, text);
 
     return (
         <div style={{ width: w, height: h, position: 'relative', background: 'transparent' }}>
@@ -183,13 +182,14 @@ function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNode
                         style={{
                             width: '100%', height: '100%',
                             display: 'flex',
-                            alignItems: isTextArea ? 'flex-start' : 'center',
-                            justifyContent: isTextArea ? 'flex-start' : 'center',
+                            alignItems: leftAlignedText ? 'flex-start' : 'center',
+                            justifyContent: leftAlignedText ? 'flex-start' : 'center',
                             overflow: 'hidden', color: options.sdlDefaultTextColor,
                             fontSize: options.sdlFontSize, fontFamily: 'monospace',
                             padding: '2px 4px', boxSizing: 'border-box',
-                            wordBreak: 'break-all',
-                            textAlign: isTextArea ? 'left' : 'center',
+                            wordBreak: leftAlignedText ? 'normal' : 'break-all',
+                            overflowWrap: 'anywhere',
+                            textAlign: leftAlignedText ? 'left' : 'center',
                             whiteSpace: 'pre-wrap',
                         }}
                     >

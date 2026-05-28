@@ -16,6 +16,7 @@
     "src/parsers/**/*.ts",
     "src/serializers/**/*.ts",
     "webview/src/exportImage.ts",
+    "webview/src/sdlTextLayout.ts",
     "webview/src/sdlTransform.ts",
     "webview/src/transform.ts",
     "webview/src/waypoints.ts",
