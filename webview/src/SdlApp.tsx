@@ -32,6 +32,7 @@ import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { SdlEdge } from './components/SdlEdge';
 import { formatSdlDisplayText, shouldLeftAlignSdlText } from './sdlTextLayout';
 import { inputShapePoints, outputShapePoints, returnCrossLines } from './sdlShapeGeometry';
+import { renderSdlDiagramImage } from './sdlExportImage';
 
 // ── Style helpers ────────────────────────────────────────────────────────────
 
@@ -502,9 +503,11 @@ interface SdlEditorProps {
     sdl: SdlModel;
     options: EditorOptions;
     onOptionsChange: (patch: Partial<EditorOptions>) => void;
+    pendingExportFormat: 'png' | 'svg' | null;
+    onExportHandled: () => void;
 }
 
-function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.ReactElement {
+function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExportHandled }: SdlEditorProps): React.ReactElement {
     const { fitView } = useReactFlow();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node<SdlNodeData>>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -531,6 +534,53 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
         setTimeout(() => fitView({ padding: 0.1 }), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sdl, levelPath, options, setNodes, setEdges, fitView]);
+
+    useEffect(() => {
+        if (!pendingExportFormat) return;
+        let cancelled = false;
+
+        void (async () => {
+            const rendered = await renderSdlDiagramImage({
+                nodes,
+                edges,
+                options,
+                format: pendingExportFormat,
+                rasterizeSvgToPngDataUrl: async ({ svg, canvasWidth, canvasHeight }) => {
+                    const svgDataUrl = `data:image/svg+xml;base64,${btoa(Array.from(new TextEncoder().encode(svg), byte => String.fromCharCode(byte)).join(''))}`;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = canvasWidth;
+                    canvas.height = canvasHeight;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        return null;
+                    }
+
+                    await new Promise<void>(resolve => {
+                        const img = new Image();
+                        img.onload = () => {
+                            ctx.drawImage(img, 0, 0);
+                            resolve();
+                        };
+                        img.onerror = () => resolve();
+                        img.src = svgDataUrl;
+                    });
+
+                    return canvas.toDataURL('image/png');
+                },
+            });
+
+            if (!cancelled && rendered) {
+                post({ type: 'exportImage', format: pendingExportFormat, dataUrl: rendered.dataUrl } satisfies SdlWebviewMessage);
+            }
+            if (!cancelled) {
+                onExportHandled();
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [pendingExportFormat, nodes, edges, options, onExportHandled]);
 
     const handleNodesChange = useCallback(
         (changes: NodeChange[]) => { if (!locked) onNodesChange(changes); },
@@ -690,6 +740,7 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
 export default function SdlApp(): React.ReactElement {
     const [sdl, setSdl]         = useState<SdlModel | null>(null);
     const [options, setOptions] = useState<EditorOptions>(DEFAULT_OPTIONS);
+    const [pendingExportFormat, setPendingExportFormat] = useState<'png' | 'svg' | null>(null);
 
     const handleOptionsChange = useCallback((patch: Partial<EditorOptions>) => {
         setOptions(prev => {
@@ -710,8 +761,7 @@ export default function SdlApp(): React.ReactElement {
                     setOptions(msg.options);
                     break;
                 case 'requestExport':
-                    // Extension is requesting an image export — not yet implemented for SDL.
-                    // Silently ignore to avoid re-posting and creating an infinite loop.
+                    setPendingExportFormat(msg.format);
                     break;
             }
         };
@@ -731,7 +781,13 @@ export default function SdlApp(): React.ReactElement {
     return (
         <div style={{ width: '100%', height: '100%', position: 'relative' }}>
             <ReactFlowProvider>
-                <SdlEditor sdl={sdl} options={options} onOptionsChange={handleOptionsChange} />
+                <SdlEditor
+                    sdl={sdl}
+                    options={options}
+                    onOptionsChange={handleOptionsChange}
+                    pendingExportFormat={pendingExportFormat}
+                    onExportHandled={() => setPendingExportFormat(null)}
+                />
             </ReactFlowProvider>
         </div>
     );
