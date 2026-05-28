@@ -31,6 +31,7 @@ import { buildSdlGraph, SDL_SYMBOL_NODE, SdlNodeData, sdlFillColor } from './sdl
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
 import { SdlEdge } from './components/SdlEdge';
 import { formatSdlDisplayText, shouldLeftAlignSdlText } from './sdlTextLayout';
+import { inputShapePoints, outputShapePoints } from './sdlShapeGeometry';
 
 // ── Style helpers ────────────────────────────────────────────────────────────
 
@@ -92,9 +93,13 @@ function DiamondShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.Re
     return <polygon points={points} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
 }
 
-function StepCutRectShape({ w, h, fill, stroke, strokeWidth, cut = 10 }: ShapeProps & { cut?: number }): React.ReactElement {
-    const pad = strokeWidth / 2;
-    const points = `${pad + cut},${pad} ${w - pad},${pad} ${w - pad},${h - pad} ${pad},${h - pad} ${pad},${pad + cut}`;
+function InputShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.ReactElement {
+    const points = inputShapePoints(w, h, strokeWidth);
+    return <polygon points={points} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+}
+
+function OutputShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.ReactElement {
+    const points = outputShapePoints(w, h, strokeWidth);
     return <polygon points={points} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
 }
 
@@ -140,8 +145,8 @@ function renderShape(kind: SdlSymbolKind, w: number, h: number, fill: string, st
         case 'state':          return <RoundedRectShape {...props} />;
         case 'stateAggregation': return <DoubleRectShape {...props} />;
         case 'input':
-        case 'continuousSignal':
-        case 'output':         return <StepCutRectShape {...props} />;
+        case 'continuousSignal': return <InputShape {...props} />;
+        case 'output':         return <OutputShape {...props} />;
         case 'task':           return <RectShape {...props} />;
         case 'decision':
         case 'alternative':    return <DiamondShape {...props} />;
