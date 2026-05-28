@@ -66,6 +66,12 @@ function RectShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.React
     return <rect x={pad} y={pad} width={w - strokeWidth} height={h - strokeWidth} rx={4} ry={4} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
 }
 
+function RoundedRectShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.ReactElement {
+    const pad = strokeWidth / 2;
+    const rx = Math.min(h / 4, w / 4);
+    return <rect x={pad} y={pad} width={w - strokeWidth} height={h - strokeWidth} rx={rx} ry={rx} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+}
+
 function DoubleRectShape({ w, h, fill, stroke, strokeWidth }: ShapeProps): React.ReactElement {
     const pad = strokeWidth / 2;
     const inner = 4;
@@ -129,7 +135,7 @@ function renderShape(kind: SdlSymbolKind, w: number, h: number, fill: string, st
         case 'start':
         case 'nextstate':
         case 'return':         return <PillShape {...props} />;
-        case 'state':          return <RectShape {...props} />;
+        case 'state':          return <RoundedRectShape {...props} />;
         case 'stateAggregation': return <DoubleRectShape {...props} />;
         case 'input':
         case 'continuousSignal':
@@ -160,7 +166,10 @@ function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNode
     const fill   = sdlFillColor(kind, options);
     const stroke = selected ? '#cba6f7' : options.sdlDefaultBorderColor;
     const sw     = selected ? 2 : options.sdlConnectionThickness;
-    const displayText = text.length > 80 ? text.slice(0, 77) + '…' : text;
+    const isTextArea = kind === 'textArea';
+    const displayText = isTextArea
+        ? text.split('\n').filter(line => !/^\s*\/\*\s*CIF\b/.test(line)).join('\n').trim()
+        : text.length > 80 ? text.slice(0, 77) + '…' : text;
 
     return (
         <div style={{ width: w, height: h, position: 'relative', background: 'transparent' }}>
@@ -172,11 +181,15 @@ function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNode
                     <div
                         style={{
                             width: '100%', height: '100%',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            display: 'flex',
+                            alignItems: isTextArea ? 'flex-start' : 'center',
+                            justifyContent: isTextArea ? 'flex-start' : 'center',
                             overflow: 'hidden', color: options.sdlDefaultTextColor,
                             fontSize: options.sdlFontSize, fontFamily: 'monospace',
                             padding: '2px 4px', boxSizing: 'border-box',
-                            wordBreak: 'break-all', textAlign: 'center', whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-all',
+                            textAlign: isTextArea ? 'left' : 'center',
+                            whiteSpace: 'pre-wrap',
                         }}
                     >
                         {displayText}
@@ -465,8 +478,9 @@ function SdlEditor({ sdl, options, onOptionsChange }: SdlEditorProps): React.Rea
     }, []);
 
     const handleNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
+        if (!node.data.hasChildren) return;
         const sym = findSymbol(sdl.tree, node.id);
-        if (sym && sym.children.length > 0) {
+        if (sym) {
             setLevelPath(prev => [...prev, sym]);
             setSelectedId(null);
         }

@@ -256,15 +256,33 @@ function isEndKeyword(k: TK): boolean {
 
 // ── Recursive descent ───────────────────────────────────────────────────────
 
+/** Skip an entire SUBSTRUCTURE…ENDSUBSTRUCTURE block, handling nesting. */
+function skipSubstructure(cursor: Cursor): void {
+    cursor.consume(); // consume SUBSTRUCTURE keyword
+    let depth = 1;
+    while (cursor.pos < cursor.tokens.length && depth > 0) {
+        const k = cursor.peek()!.kind;
+        if (k === TK.KwSubstructure) depth++;
+        else if (k === TK.KwEndSubstructure) depth--;
+        cursor.consume();
+    }
+}
+
 /**
  * Parse a list of CIF-annotated symbols until one of `stopKinds` is found
  * (or end of token stream).  Non-CIF content is skipped.
+ * SUBSTRUCTURE blocks are skipped wholesale (inner CIF annotations belong
+ * to the nested diagram, not the current level).
+ * @param breakCifKinds  If set, stop BEFORE consuming a CIF annotation whose
+ *   parsed kind is in this list (e.g. ['answer'] or 'answer' to stop before
+ *   the next answer; ['input','provided','connect'] to stop before next handler).
  */
 function parseSymbolList(
     cursor: Cursor,
     lines: string[],
     stopKinds: TK[],
     recurse: (kind: SdlSymbolKind, cursor: Cursor, lines: string[], sym: SdlSymbol) => void,
+    breakCifKinds?: string | string[],
 ): SdlSymbol[] {
     const symbols: SdlSymbol[] = [];
 
@@ -279,8 +297,23 @@ function parseSymbolList(
         }
 
         if (tok.kind !== TK.CifCoord) {
-            cursor.consume();
+            // Skip SUBSTRUCTURE blocks wholesale — inner CIF annotations belong
+            // to the nested state diagram, not the current level.
+            if (tok.kind === TK.KwSubstructure) {
+                skipSubstructure(cursor);
+            } else {
+                cursor.consume();
+            }
             continue;
+        }
+
+        // ── Stop before this CIF if its kind is in breakCifKinds ─────────
+        if (breakCifKinds) {
+            const peeked = parseCifCoords(tok.text);
+            if (peeked) {
+                const kinds = Array.isArray(breakCifKinds) ? breakCifKinds : [breakCifKinds];
+                if (kinds.includes(peeked.kind)) break;
+            }
         }
 
         // ── Found a CIF annotation ───────────────────────────────────────
@@ -410,20 +443,89 @@ function recurseSymbol(kind: SdlSymbolKind, cursor: Cursor, lines: string[], sym
     }
 }
 
+/** CIF annotation kinds that represent state-level transition handlers. */
+const STATE_HANDLER_CIF_KINDS = ['input', 'provided', 'connect'];
+
 function parseStateBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
-    // Optional `state foo;` or `state aggregation foo;` — skip the keyword lines
+    // Consume STATE keyword (leave AGGREGATION / name tokens for the loop below)
     advancePastKeyword(cursor);
 
-    // Check for SUBSTRUCTURE
-    // Parse inputs / provided until ENDSTATE
-    const inputKinds: TK[] = [TK.KwEndState];
-    const children = parseSymbolList(cursor, lines, inputKinds, recurseSymbol);
-    sym.children = children;
+    const handlers: SdlSymbol[] = [];
 
-    // Handle substructure (nested state content)
-    if (cursor.is(TK.KwEndState)) {
-        cursor.consume(); // consume ENDSTATE
+    while (cursor.pos < cursor.tokens.length) {
+        if (cursor.is(TK.KwEndState)) break;
+
+        const tok = cursor.peek()!;
+
+        if (tok.kind === TK.CifEndText || tok.kind === TK.CifKeep) {
+            cursor.consume();
+            continue;
+        }
+
+        if (tok.kind === TK.CifCoord) {
+            const cifParsed = parseCifCoords(tok.text);
+            if (!cifParsed || !STATE_HANDLER_CIF_KINDS.includes(cifParsed.kind)) {
+                cursor.consume();   // non-handler CIF (comment anchor, text area, …)
+                continue;
+            }
+
+            // ── State-level handler: INPUT, PROVIDED, or CONNECT ──────────
+            const cifTok = cursor.consume()!;
+            const cifLine = cifTok.line;
+
+            // Skip any non-structural tokens between the CIF annotation and keyword
+            while (cursor.pos < cursor.tokens.length && !isStructuralToken(cursor.peek()!.kind)) {
+                cursor.consume();
+            }
+            const kwTok = cursor.peek();
+            if (!kwTok || cursor.is(TK.KwEndState)) break;
+
+            const symKind = cifKindToSymbolKind(cifParsed.kind, kwTok.kind);
+            if (symKind === null) continue;
+
+            const kwIdx = cursor.pos;
+            const [tsStart, tsEnd] = textSpan(cursor.tokens, kwIdx, lines);
+            const textRaw = lines.slice(tsStart, tsEnd).join('\n').trim();
+
+            const handlerSym: SdlSymbol = {
+                id: nextId(),
+                kind: symKind,
+                cif: cifParsed.coords,
+                cifLine,
+                cifRaw: cifTok.text,
+                text: textRaw,
+                textLineStart: tsStart,
+                textLineEnd: tsEnd,
+                children: [],
+            };
+            handlers.push(handlerSym);
+
+            // Consume handler keyword (INPUT, PROVIDED, or CONNECT)
+            cursor.consume();
+
+            // Parse the action sequence, stopping before the next handler CIF
+            // annotation or ENDSTATE.  ENDINPUT/ENDPROVIDED are also honoured for
+            // files that include explicit end-keywords.
+            handlerSym.children = parseSymbolList(
+                cursor, lines,
+                [TK.KwEndState, TK.KwEndInput, TK.KwEndProvided],
+                recurseSymbol,
+                STATE_HANDLER_CIF_KINDS,
+            );
+            if (cursor.is(TK.KwEndInput, TK.KwEndProvided)) cursor.consume();
+            continue;
+        }
+
+        // Non-CIF token: skip SUBSTRUCTURE blocks wholesale; consume others
+        if (tok.kind === TK.KwSubstructure) {
+            skipSubstructure(cursor);
+        } else {
+            cursor.consume();
+        }
     }
+
+    if (cursor.is(TK.KwEndState)) cursor.consume();
+    sym.children = handlers;
 }
 
 function parseActionList(cursor: Cursor, lines: string[], sym: SdlSymbol, stopKinds: TK[]): void {
@@ -435,19 +537,99 @@ function parseActionList(cursor: Cursor, lines: string[], sym: SdlSymbol, stopKi
 
 function parseDecisionBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
     advancePastKeyword(cursor);
-    // Collect ANSWER children
-    const stopKinds: TK[] = [TK.KwEndDecision];
-    const children = parseSymbolList(cursor, lines, stopKinds, recurseSymbol);
-    sym.children = children;
+    sym.children = parseAnswerList(cursor, lines, TK.KwEndDecision);
     if (cursor.is(TK.KwEndDecision)) cursor.consume();
 }
 
 function parseAlternativeBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {
     advancePastKeyword(cursor);
-    const stopKinds: TK[] = [TK.KwEndAlternative];
-    const children = parseSymbolList(cursor, lines, stopKinds, recurseSymbol);
-    sym.children = children;
+    sym.children = parseAnswerList(cursor, lines, TK.KwEndAlternative);
     if (cursor.is(TK.KwEndAlternative)) cursor.consume();
+}
+
+/**
+ * Parse the body of a DECISION or ALTERNATIVE: a sequence of CIF ANSWER blocks.
+ * Each answer gets:
+ *   - text:     the raw label lines between the CIF ANSWER annotation and the
+ *               first inner CIF annotation (e.g. "(TRUE):", "ELSE:")
+ *   - children: the action sequence inside that answer, stopping before the
+ *               next CIF ANSWER or the endKind keyword
+ *
+ * Non-ANSWER CIF annotations before the first answer (e.g. a COMMENT on the
+ * decision condition) are skipped safely.
+ */
+function parseAnswerList(cursor: Cursor, lines: string[], endKind: TK): SdlSymbol[] {
+    const answers: SdlSymbol[] = [];
+
+    while (cursor.pos < cursor.tokens.length) {
+        if (cursor.is(endKind)) break;
+
+        const tok = cursor.peek()!;
+
+        // Skip non-CIF tokens (identifiers, punctuation in condition text, keywords
+        // like COMMENT that follow non-answer CIF annotations, etc.)
+        if (tok.kind === TK.CifEndText || tok.kind === TK.CifKeep) {
+            cursor.consume();
+            continue;
+        }
+        if (tok.kind !== TK.CifCoord) {
+            cursor.consume();
+            continue;
+        }
+
+        // Only handle CIF ANSWER annotations; skip anything else (e.g. CIF COMMENT
+        // that annotates the decision condition).
+        const cifParsed = parseCifCoords(tok.text);
+        if (!cifParsed || cifParsed.kind !== 'answer') {
+            cursor.consume(); // consume the CIF token; the following keyword / content
+            continue;         // will be consumed by the non-CIF branch above
+        }
+
+        const cifTok = cursor.consume()!;
+        const cifLine = cifTok.line;
+
+        // Find where the first inner CIF annotation (or endKind) starts, so we can
+        // extract the answer label text (e.g. "(TRUE):", "ELSE:") from the raw lines.
+        let labelEndLine = lines.length;
+        for (let i = cursor.pos; i < cursor.tokens.length; i++) {
+            const k = cursor.tokens[i].kind;
+            if (k === TK.CifCoord || k === TK.CifEndText || k === TK.CifKeep || k === endKind) {
+                labelEndLine = cursor.tokens[i].line;
+                break;
+            }
+        }
+
+        // Skip over the answer-label tokens in the token stream (e.g. `(TRUE):`)
+        // without consuming any inner CIF annotations.
+        while (cursor.pos < cursor.tokens.length) {
+            const k = cursor.peek()!.kind;
+            if (k === TK.CifCoord || k === endKind) break;
+            if (isEndKeyword(k)) break;
+            cursor.consume();
+        }
+
+        const answerLabel = lines.slice(cifLine + 1, labelEndLine).join('\n').trim();
+
+        const sym: SdlSymbol = {
+            id: nextId(),
+            kind: 'answer',
+            cif: cifParsed.coords,
+            cifLine,
+            cifRaw: cifTok.text,
+            text: answerLabel,
+            textLineStart: cifLine + 1,
+            textLineEnd: labelEndLine,
+            children: [],
+        };
+
+        // Parse the action sequence inside this answer.  Stop before the next
+        // CIF ANSWER annotation (breakCifKind) or when endKind is reached.
+        sym.children = parseSymbolList(cursor, lines, [endKind], recurseSymbol, 'answer');
+
+        answers.push(sym);
+    }
+
+    return answers;
 }
 
 function parseProcedureBody(cursor: Cursor, lines: string[], sym: SdlSymbol): void {

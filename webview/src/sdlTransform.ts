@@ -79,9 +79,8 @@ export function buildSdlGraph(
         color: options.sdlConnectionColor,
     };
 
-    // ── Nodes ───────────────────────────────────────────────────────────────
-    for (const sym of symbols) {
-        if (sym.kind === 'comment') { continue; }
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    function pushNode(sym: SdlSymbol, navigable: boolean): void {
         let x = 0, y = 0, w = DEFAULT_WIDTH, h = DEFAULT_HEIGHT;
         if (sym.cif) {
             x = sym.cif.x; y = sym.cif.y; w = sym.cif.w; h = sym.cif.h;
@@ -93,11 +92,79 @@ export function buildSdlGraph(
             id: sym.id,
             type: SDL_SYMBOL_NODE,
             position: { x, y },
-            data: { kind: sym.kind, text: sym.text, options, hasChildren: sym.children.length > 0 },
+            data: { kind: sym.kind, text: sym.text, options, hasChildren: navigable && sym.children.length > 0 },
             style: { width: w, height: h },
             width: w,
             height: h,
         });
+    }
+
+    function pushEdge(srcId: string, tgtId: string, prefix = 'br'): void {
+        edges.push({
+            id: `${prefix}-${srcId}--${tgtId}`,
+            source: srcId,
+            target: tgtId,
+            type: 'smoothstep',
+            style: edgeStyle,
+            markerEnd,
+        });
+    }
+
+    /**
+     * Render a sequence of action symbols (task, output, procedureCall, decision, …)
+     * starting from prevId.  Decisions are inlined; sequential flow continues
+     * past each decision to handle cases like two consecutive decisions.
+     */
+    function unfoldActionSequence(children: SdlSymbol[], startPrevId: string): void {
+        let prevId = startPrevId;
+        for (const action of children) {
+            if (action.kind === 'comment') continue;
+            const isDecision = action.kind === 'decision' || action.kind === 'alternative';
+            pushNode(action, !isDecision);
+            pushEdge(prevId, action.id);
+            prevId = action.id;
+            if (isDecision) {
+                // Branches are rendered inline; sequential flow continues after.
+                unfoldDecision(action);
+            }
+        }
+    }
+
+    /**
+     * Inline-unfold a decision / alternative:
+     * decision → answer → [action sequence…]
+     * Nested decisions are handled recursively via unfoldActionSequence.
+     */
+    function unfoldDecision(decSym: SdlSymbol): void {
+        for (const answer of decSym.children) {
+            if (answer.kind === 'comment') continue;
+            pushNode(answer, false);
+            pushEdge(decSym.id, answer.id);
+            unfoldActionSequence(answer.children, answer.id);
+        }
+    }
+
+    /**
+     * Inline-unfold a state: state → input/continuousSignal → [action sequence…]
+     * Other child kinds (textArea, comment) are ignored at this level.
+     */
+    function unfoldState(stateSym: SdlSymbol): void {
+        for (const handler of stateSym.children) {
+            if (handler.kind !== 'input' && handler.kind !== 'continuousSignal' && handler.kind !== 'connect') continue;
+            pushNode(handler, false);
+            pushEdge(stateSym.id, handler.id);
+            unfoldActionSequence(handler.children, handler.id);
+        }
+    }
+
+    // ── Nodes ───────────────────────────────────────────────────────────────
+    for (const sym of symbols) {
+        if (sym.kind === 'comment') continue;
+        const isDecision = sym.kind === 'decision' || sym.kind === 'alternative';
+        const isState    = sym.kind === 'state';    // stateAggregation stays navigable
+        pushNode(sym, !isDecision && !isState);
+        if (isDecision)  unfoldDecision(sym);
+        else if (isState) unfoldState(sym);
     }
 
     // ── Edges ───────────────────────────────────────────────────────────────
@@ -114,14 +181,7 @@ export function buildSdlGraph(
     let prev: SdlSymbol | null = null;
     for (const sym of connectible) {
         if (prev) {
-            edges.push({
-                id: `seq-${prev.id}--${sym.id}`,
-                source: prev.id,
-                target: sym.id,
-                type: 'smoothstep',
-                style: edgeStyle,
-                markerEnd,
-            });
+            pushEdge(prev.id, sym.id, 'seq');
         }
         prev = sym;
     }
