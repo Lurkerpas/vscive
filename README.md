@@ -54,6 +54,10 @@ When skeletons are built, Function sources can be edited by either navigating to
 
 When all sources are ready, project can be built using *Build->Build Debug/Release* canvas context menu entry and then executed using *Build->Run* (works only for default target).  
 
+TASTE uses an SDL dialect supported by [ESA's OpenGEODE editor](https://github.com/esa/opengeode/), which is characterized by required embedded directives that contain e.g., layout information. SDL editing is not available at the moment, however, thanks to these directives, a light viewer has been introduced to facilitate model inspections. As it only renders the parsed symbols, at indicated locations, only visual (font, color) options are available.
+
+![SDL Example](assets/demo_sdl.png)
+
 # Installation
 ## General
 VSCIVE is intended to be used on Linux, and was tested on Debian 13 and Ubuntu 24.04. Some capabilities may be available on other platforms. 
