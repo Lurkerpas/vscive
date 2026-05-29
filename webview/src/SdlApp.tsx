@@ -464,13 +464,48 @@ function navigationParentKind(sym: SdlSymbol): SdlSymbolKind | null {
     return sym.nestedChildren.length > 0 ? null : sym.kind;
 }
 
-interface PropsPanelProps { selectedId: string | null; sdl: SdlModel; }
+function updateSymbolText(tree: SdlSymbol[], id: string, text: string): SdlSymbol[] {
+    return tree.map(symbol => {
+        const children = updateSymbolText(symbol.children, id, text);
+        const nestedChildren = updateSymbolText(symbol.nestedChildren, id, text);
+        if (symbol.id !== id && children === symbol.children && nestedChildren === symbol.nestedChildren) {
+            return symbol;
+        }
+        return {
+            ...symbol,
+            text: symbol.id === id ? text : symbol.text,
+            children,
+            nestedChildren,
+        };
+    });
+}
 
-function PropertiesPanel({ selectedId, sdl }: PropsPanelProps): React.ReactElement | null {
+function updateSymbolGeometry(tree: SdlSymbol[], id: string, x: number, y: number, w: number, h: number): SdlSymbol[] {
+    return tree.map(symbol => {
+        const children = updateSymbolGeometry(symbol.children, id, x, y, w, h);
+        const nestedChildren = updateSymbolGeometry(symbol.nestedChildren, id, x, y, w, h);
+        if (symbol.id !== id && children === symbol.children && nestedChildren === symbol.nestedChildren) {
+            return symbol;
+        }
+        return {
+            ...symbol,
+            cif: symbol.id === id && symbol.cif
+                ? { x, y, w, h }
+                : symbol.cif,
+            children,
+            nestedChildren,
+        };
+    });
+}
+
+interface PropsPanelProps {
+    selectedId: string | null;
+    sdl: SdlModel;
+    onTextChange: (id: string, text: string) => void;
+}
+
+function PropertiesPanel({ selectedId, sdl, onTextChange }: PropsPanelProps): React.ReactElement | null {
     const sym = selectedId ? findSymbol(sdl.tree, selectedId) : null;
-    const [editText, setEditText] = useState('');
-
-    useEffect(() => { setEditText(sym?.text ?? ''); }, [sym]);
 
     if (!sym) return null;
 
@@ -483,16 +518,10 @@ function PropertiesPanel({ selectedId, sdl }: PropsPanelProps): React.ReactEleme
                 <label style={LABEL}>Text</label>
                 <textarea
                     style={TEXTAREA_STYLE}
-                    value={editText}
-                    onChange={e => setEditText(e.target.value)}
+                    value={sym.text}
+                    onChange={e => onTextChange(sym.id, e.target.value)}
                     rows={5}
                 />
-            </div>
-            <div style={{ marginTop: 6 }}>
-                <button
-                    style={{ background: '#89b4fa', color: '#1e1e2e', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer', fontSize: 11 }}
-                    onClick={() => post({ type: 'sdlTextEdited', id: sym.id, text: editText } satisfies SdlWebviewMessage)}
-                >Apply</button>
             </div>
             {sym.cif && (
                 <>
@@ -512,11 +541,13 @@ interface SdlEditorProps {
     sdl: SdlModel;
     options: EditorOptions;
     onOptionsChange: (patch: Partial<EditorOptions>) => void;
+    onSymbolGeometryChange: (id: string, x: number, y: number, w: number, h: number) => void;
+    onSymbolTextChange: (id: string, text: string) => void;
     pendingExportFormat: 'png' | 'svg' | null;
     onExportHandled: () => void;
 }
 
-function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExportHandled }: SdlEditorProps): React.ReactElement {
+function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSymbolTextChange, pendingExportFormat, onExportHandled }: SdlEditorProps): React.ReactElement {
     const { fitView } = useReactFlow();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node<SdlNodeData>>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -535,6 +566,24 @@ function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExpor
         ? null
         : navigationParentKind(levelPath[levelPath.length - 1]);
 
+    useEffect(() => {
+        setLevelPath(prev => {
+            if (prev.length === 0) {
+                return prev;
+            }
+
+            const nextPath = prev
+                .map(symbol => findSymbol(sdl.tree, symbol.id))
+                .filter((symbol): symbol is SdlSymbol => symbol !== null);
+
+            if (nextPath.length === prev.length && nextPath.every((symbol, index) => symbol === prev[index])) {
+                return prev;
+            }
+
+            return nextPath;
+        });
+    }, [sdl]);
+
     // Rebuild graph whenever level or options change
     useEffect(() => {
         const graph = buildSdlGraph(currentSymbols, parentKind, options);
@@ -551,9 +600,12 @@ function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExpor
                 }),
         );
         setEdges(graph.edges);
-        setTimeout(() => fitView({ padding: 0.1 }), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sdl, levelPath, options, locked, setNodes, setEdges, fitView]);
+    }, [sdl, levelPath, options, locked, setNodes, setEdges]);
+
+    useEffect(() => {
+        setTimeout(() => fitView({ padding: 0.1 }), 50);
+    }, [fitView, levelPath]);
 
     useEffect(() => {
         if (!pendingExportFormat) return;
@@ -626,11 +678,14 @@ function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExpor
 
                 const width = Math.max(35, Math.round(dimensions.width));
                 const height = Math.max(35, Math.round(dimensions.height));
+                const x = Math.round(node.position.x);
+                const y = Math.round(node.position.y);
+                onSymbolGeometryChange(node.id, x, y, width, height);
                 post({
                     type: 'sdlSymbolMoved',
                     id: node.id,
-                    x: Math.round(node.position.x),
-                    y: Math.round(node.position.y),
+                    x,
+                    y,
                     w: width,
                     h: height,
                 } satisfies SdlWebviewMessage);
@@ -644,18 +699,23 @@ function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExpor
                 };
             }));
         }
-    }, [locked, onNodesChange, setNodes]);
+    }, [locked, onNodesChange, onSymbolGeometryChange, setNodes]);
 
     const handleNodeDragStop: NodeDragHandler = useCallback((_event, node) => {
+        const x = Math.round(node.position.x);
+        const y = Math.round(node.position.y);
+        const w = Math.round(node.width ?? 150);
+        const h = Math.round(node.height ?? 60);
+        onSymbolGeometryChange(node.id, x, y, w, h);
         post({
             type: 'sdlSymbolMoved',
             id: node.id,
-            x: Math.round(node.position.x),
-            y: Math.round(node.position.y),
-            w: Math.round(node.width ?? 150),
-            h: Math.round(node.height ?? 60),
+            x,
+            y,
+            w,
+            h,
         } satisfies SdlWebviewMessage);
-    }, []);
+    }, [onSymbolGeometryChange]);
 
     const handleNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
         if (!node.data.hasChildren) return;
@@ -779,7 +839,7 @@ function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExpor
             {showOptions
                 ? <SdlOptionsPanel options={options} onChange={onOptionsChange} onClose={() => setShowOptions(false)} />
                 : selectedId
-                    ? <PropertiesPanel selectedId={selectedId} sdl={sdl} />
+                    ? <PropertiesPanel selectedId={selectedId} sdl={sdl} onTextChange={onSymbolTextChange} />
                     : null
             }
             {contextMenu && (
@@ -807,6 +867,15 @@ export default function SdlApp(): React.ReactElement {
             post({ type: 'updateOptions', options: updated } satisfies SdlWebviewMessage);
             return updated;
         });
+    }, []);
+
+    const handleSymbolGeometryChange = useCallback((id: string, x: number, y: number, w: number, h: number) => {
+        setSdl(prev => prev ? { ...prev, tree: updateSymbolGeometry(prev.tree, id, x, y, w, h) } : prev);
+    }, []);
+
+    const handleSymbolTextChange = useCallback((id: string, text: string) => {
+        setSdl(prev => prev ? { ...prev, tree: updateSymbolText(prev.tree, id, text) } : prev);
+        post({ type: 'sdlTextEdited', id, text } satisfies SdlWebviewMessage);
     }, []);
 
     useEffect(() => {
@@ -844,6 +913,8 @@ export default function SdlApp(): React.ReactElement {
                     sdl={sdl}
                     options={options}
                     onOptionsChange={handleOptionsChange}
+                    onSymbolGeometryChange={handleSymbolGeometryChange}
+                    onSymbolTextChange={handleSymbolTextChange}
                     pendingExportFormat={pendingExportFormat}
                     onExportHandled={() => setPendingExportFormat(null)}
                 />

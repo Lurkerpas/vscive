@@ -11,9 +11,9 @@ import { flattenSymbols } from '../parsers/SdlPrParser';
 // ── CIF comment formatting ──────────────────────────────────────────────────
 
 /** Build a new CIF coordinate comment with the given kind name and coordinates. */
-export function formatCifComment(cifKind: string, coords: SdlCifCoords): string {
+export function formatCifComment(cifKind: string, coords: SdlCifCoords, indent = ''): string {
     const { x, y, w, h } = coords;
-    return `/* CIF ${cifKind} (${x}, ${y}), (${w}, ${h}) */`;
+    return `${indent}/* CIF ${cifKind} (${x}, ${y}), (${w}, ${h}) */`;
 }
 
 /** Extract the CIF kind name from a raw CIF comment string. */
@@ -63,7 +63,11 @@ function collectPatches(original: SdlModel, modified: SdlModel): Patch[] {
             patches.push({
                 kind: 'cif',
                 lineIndex: modSym.cifLine,
-                newText: formatCifComment(extractCifKindRaw(modSym.cifRaw), modSym.cif),
+                newText: formatCifComment(
+                    extractCifKindRaw(modSym.cifRaw),
+                    modSym.cif,
+                    detectLineIndent(original.lines, modSym.cifLine),
+                ),
             });
         }
 
@@ -119,7 +123,11 @@ export function patchPr(original: SdlModel, modified: SdlModel): string {
 export function applySymbolMove(model: SdlModel, sym: SdlSymbol, x: number, y: number, w: number, h: number): void {
     if (sym.cifLine === null) return;
     sym.cif = { x, y, w, h };
-    const newComment = formatCifComment(extractCifKindRaw(sym.cifRaw), sym.cif);
+    const newComment = formatCifComment(
+        extractCifKindRaw(sym.cifRaw),
+        sym.cif,
+        detectLineIndent(model.lines, sym.cifLine),
+    );
     if (sym.cifLine >= 0 && sym.cifLine < model.lines.length) {
         model.lines[sym.cifLine] = newComment;
     }
@@ -130,22 +138,47 @@ export function applySymbolMove(model: SdlModel, sym: SdlSymbol, x: number, y: n
  * Mutate `model.lines` to reflect a symbol text edit.
  */
 export function applySymbolTextEdit(model: SdlModel, sym: SdlSymbol, newText: string): void {
-    const newLines = newText.split('\n');
     const start = Math.max(0, sym.textLineStart);
     const end   = Math.min(model.lines.length, sym.textLineEnd);
+    const oldLineCount = end - start;
+    const indent = detectIndent(model.lines, start, end);
+    const newLines = newText.split('\n').map(line => line.length > 0 ? `${indent}${line}` : line);
     model.lines.splice(start, end - start, ...newLines);
 
     // Adjust textLineEnd to reflect new span length
-    const delta = newLines.length - (end - start);
+    const delta = newLines.length - oldLineCount;
     sym.text = newText;
     sym.textLineEnd = sym.textLineStart + newLines.length;
 
     // Shift all other symbols whose lines come after
-    shiftSymbols(model.tree, start, delta);
+    if (delta !== 0) {
+        shiftSymbols(model.tree, end - 1, delta, sym.id);
+    }
 }
 
-function shiftSymbols(symbols: SdlSymbol[], afterLine: number, delta: number): void {
+function detectIndent(lines: string[], start: number, end: number): string {
+    for (let index = start; index < end; index++) {
+        const line = lines[index] ?? '';
+        if (line.trim().length === 0) {
+            continue;
+        }
+        return /^\s*/.exec(line)?.[0] ?? '';
+    }
+    return '';
+}
+
+function detectLineIndent(lines: string[], lineIndex: number): string {
+    const line = lines[lineIndex] ?? '';
+    return /^\s*/.exec(line)?.[0] ?? '';
+}
+
+function shiftSymbols(symbols: SdlSymbol[], afterLine: number, delta: number, skipId: string): void {
     for (const s of symbols) {
+        if (s.id === skipId) {
+            shiftSymbols(s.children, afterLine, delta, skipId);
+            shiftSymbols(s.nestedChildren, afterLine, delta, skipId);
+            continue;
+        }
         if (s.cifLine !== null && s.cifLine > afterLine) s.cifLine += delta;
         if (s.textLineStart > afterLine) {
             s.textLineStart += delta;
@@ -153,7 +186,7 @@ function shiftSymbols(symbols: SdlSymbol[], afterLine: number, delta: number): v
         } else if (s.textLineEnd > afterLine) {
             s.textLineEnd   += delta;
         }
-        shiftSymbols(s.children, afterLine, delta);
-        shiftSymbols(s.nestedChildren, afterLine, delta);
+        shiftSymbols(s.children, afterLine, delta, skipId);
+        shiftSymbols(s.nestedChildren, afterLine, delta, skipId);
     }
 }
