@@ -7,6 +7,8 @@ import {
     NodeChange,
     NodeDragHandler,
     NodeMouseHandler,
+    NodeResizer,
+    OnNodesChange,
     NodeProps,
     Position,
     ReactFlow,
@@ -188,7 +190,7 @@ function renderShape(kind: SdlSymbolKind, w: number, h: number, fill: string, st
 const HANDLE_STYLE: React.CSSProperties = { opacity: 0, pointerEvents: 'none' };
 
 function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNodeData>>): React.ReactElement {
-    const { kind, text, options, hasChildren } = data;
+    const { kind, text, options, hasChildren, locked } = data;
     const w = width ?? 150;
     const h = height ?? 60;
     const fill   = sdlFillColor(kind, options);
@@ -196,13 +198,20 @@ function SdlSymbolNode({ data, width, height, selected }: NodeProps<Node<SdlNode
     const sw     = selected ? 2 : options.sdlConnectionThickness;
     const leftAlignedText = shouldLeftAlignSdlText(kind);
     const displayText = formatSdlDisplayText(kind, text);
-    const allowTextOverflow = kind === 'return';
+    const allowTextOverflow = kind === 'return' || kind === 'join';
     const textInset = sw + 2;
     const textBoxWidth = Math.max(0, w - sw * 2 - 4);
     const textBoxHeight = Math.max(0, h - sw * 2 - 4);
 
     return (
         <div style={{ width: w, height: h, position: 'relative', background: 'transparent', overflow: 'visible' }}>
+            <NodeResizer
+                isVisible={selected && !locked}
+                minWidth={35}
+                minHeight={35}
+                lineStyle={{ borderColor: '#89b4fa', borderWidth: 1 }}
+                handleStyle={{ width: 10, height: 10, background: '#89b4fa', borderRadius: 2 }}
+            />
             {/* Invisible handles so ReactFlow can draw edges */}
             <Handle type="target" position={Position.Top} style={HANDLE_STYLE} />
             <svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
@@ -529,11 +538,22 @@ function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExpor
     // Rebuild graph whenever level or options change
     useEffect(() => {
         const graph = buildSdlGraph(currentSymbols, parentKind, options);
-        setNodes(graph.nodes);
+        setNodes(
+            graph.nodes
+                .map(node => ({
+                    ...node,
+                    data: { ...node.data, locked },
+                }))
+                .sort((left, right) => {
+                    const leftTextArea = left.data.kind === 'textArea' ? -1 : 0;
+                    const rightTextArea = right.data.kind === 'textArea' ? -1 : 0;
+                    return leftTextArea - rightTextArea;
+                }),
+        );
         setEdges(graph.edges);
         setTimeout(() => fitView({ padding: 0.1 }), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sdl, levelPath, options, setNodes, setEdges, fitView]);
+    }, [sdl, levelPath, options, locked, setNodes, setEdges, fitView]);
 
     useEffect(() => {
         if (!pendingExportFormat) return;
@@ -582,10 +602,49 @@ function SdlEditor({ sdl, options, onOptionsChange, pendingExportFormat, onExpor
         };
     }, [pendingExportFormat, nodes, edges, options, onExportHandled]);
 
-    const handleNodesChange = useCallback(
-        (changes: NodeChange[]) => { if (!locked) onNodesChange(changes); },
-        [locked, onNodesChange],
-    );
+    const handleNodesChange: OnNodesChange<Node<SdlNodeData>> = useCallback((changes: NodeChange[]) => {
+        if (locked) {
+            return;
+        }
+
+        onNodesChange(changes);
+
+        for (const change of changes) {
+            if (change.type !== 'dimensions' || change.resizing !== false) {
+                continue;
+            }
+
+            const dimensions = (change as { dimensions?: { width: number; height: number } }).dimensions;
+            if (!dimensions) {
+                continue;
+            }
+
+            setNodes(existingNodes => existingNodes.map(node => {
+                if (node.id !== change.id) {
+                    return node;
+                }
+
+                const width = Math.max(35, Math.round(dimensions.width));
+                const height = Math.max(35, Math.round(dimensions.height));
+                post({
+                    type: 'sdlSymbolMoved',
+                    id: node.id,
+                    x: Math.round(node.position.x),
+                    y: Math.round(node.position.y),
+                    w: width,
+                    h: height,
+                } satisfies SdlWebviewMessage);
+
+                return {
+                    ...node,
+                    width,
+                    height,
+                    measured: { width, height },
+                    style: { ...node.style, width, height },
+                };
+            }));
+        }
+    }, [locked, onNodesChange, setNodes]);
 
     const handleNodeDragStop: NodeDragHandler = useCallback((_event, node) => {
         post({

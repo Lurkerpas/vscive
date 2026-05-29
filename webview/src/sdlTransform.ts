@@ -24,6 +24,7 @@ export interface SdlNodeData extends Record<string, unknown> {
     text: string;
     options: EditorOptions;
     hasChildren: boolean;
+    locked?: boolean;
 }
 
 export interface SdlEdgeData {
@@ -170,6 +171,7 @@ export function buildSdlGraph(
             style: { width: w, height: h },
             width: w,
             height: h,
+            zIndex: sym.kind === 'textArea' ? -1 : 0,
         });
     }
 

@@ -258,13 +258,16 @@ describe('SDL graph transform — decision flow', () => {
         const textArea = findByKind(model.tree, 'textArea');
         const task = findByKind(model.tree, 'task');
         const nextstate = findByKind(model.tree, 'nextstate');
+        const textAreaNode = findNode(graph, textArea.id);
+        const taskNode = findNode(graph, task.id);
 
-        assert.ok(findNode(graph, textArea.id));
+        assert.ok(textAreaNode);
         assert.ok(hasEdge(graph.edges, start.id, task.id));
         assert.ok(hasEdge(graph.edges, task.id, nextstate.id));
         assert.ok(!hasEdge(graph.edges, start.id, textArea.id));
         assert.ok(!hasEdge(graph.edges, textArea.id, task.id));
         assert.ok(!graph.edges.some(edge => edge.source === textArea.id || edge.target === textArea.id));
+        assert.ok((textAreaNode.zIndex ?? 0) < (taskNode.zIndex ?? 0));
     });
 
     it('exposes nested state substructures as navigable diagrams without losing outer handlers', async () => {
