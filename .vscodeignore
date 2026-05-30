@@ -9,6 +9,7 @@ assets
 demos
 deleteme
 *.vsix
+.gitmodules
 .gitignore
 .eslintrc*
 tsconfig.json

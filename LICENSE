@@ -1,7 +1,8 @@
 The code of this extension is licensed under MIT License. The direct dependencies are as follows:
 - xmldom - MIT License,
 - xyflow (React Flow) - MIT License,
-- react - MIT License.
+- react - MIT License,
+- typescript-parsec - MIT License.
 
 References are sourced from different repositories, copyrighted by their respective owners under respective licenses:
 - kazoo, included as submodule,
