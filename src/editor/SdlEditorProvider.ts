@@ -65,6 +65,14 @@ export class SdlEditorProvider implements vscode.CustomEditorProvider<SdlEditorD
                     return;
                 }
 
+                case 'sdlSymbolsDeleted': {
+                    const before = document.snapshot();
+                    document.deleteSymbols(message.ids);
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    return;
+                }
+
                 case 'updateOptions': {
                     await this.saveOptions(message.options);
                     // Propagate to all open SDL webviews

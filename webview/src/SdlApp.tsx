@@ -6,6 +6,7 @@ import {
     Node,
     NodeChange,
     NodeDragHandler,
+    OnNodesDelete,
     NodeMouseHandler,
     NodeResizer,
     OnNodesChange,
@@ -498,6 +499,16 @@ function updateSymbolGeometry(tree: SdlSymbol[], id: string, x: number, y: numbe
     });
 }
 
+function deleteSymbolsFromTree(tree: SdlSymbol[], idsToDelete: Set<string>): SdlSymbol[] {
+    return tree
+        .filter(symbol => !idsToDelete.has(symbol.id))
+        .map(symbol => ({
+            ...symbol,
+            children: deleteSymbolsFromTree(symbol.children, idsToDelete),
+            nestedChildren: deleteSymbolsFromTree(symbol.nestedChildren, idsToDelete),
+        }));
+}
+
 interface PropsPanelProps {
     selectedId: string | null;
     sdl: SdlModel;
@@ -543,11 +554,12 @@ interface SdlEditorProps {
     onOptionsChange: (patch: Partial<EditorOptions>) => void;
     onSymbolGeometryChange: (id: string, x: number, y: number, w: number, h: number) => void;
     onSymbolTextChange: (id: string, text: string) => void;
+    onSymbolsDelete: (ids: string[]) => void;
     pendingExportFormat: 'png' | 'svg' | null;
     onExportHandled: () => void;
 }
 
-function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSymbolTextChange, pendingExportFormat, onExportHandled }: SdlEditorProps): React.ReactElement {
+function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSymbolTextChange, onSymbolsDelete, pendingExportFormat, onExportHandled }: SdlEditorProps): React.ReactElement {
     const { fitView } = useReactFlow();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node<SdlNodeData>>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -745,7 +757,24 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
 
     const handlePaneClick = useCallback(() => {
         setSelectedId(null);
+        setContextMenu(null);
     }, []);
+
+    const deleteSymbols = useCallback((ids: string[]) => {
+        if (ids.length === 0) {
+            return;
+        }
+        onSymbolsDelete([...new Set(ids)]);
+        setSelectedId(null);
+        setContextMenu(null);
+    }, [onSymbolsDelete]);
+
+    const handleNodesDelete: OnNodesDelete<Node<SdlNodeData>> = useCallback((deletedNodes) => {
+        if (locked) {
+            return;
+        }
+        deleteSymbols(deletedNodes.map(node => node.id));
+    }, [deleteSymbols, locked]);
 
     const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -769,6 +798,11 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
                 label: 'Open Properties',
                 onClick: () => { setSelectedId(node.id); setShowOptions(false); },
             },
+            {
+                label: 'Delete',
+                danger: true,
+                onClick: () => deleteSymbols([node.id]),
+            },
         ];
         if (sym && hasNavigableChildren(sym)) {
             items.push({
@@ -780,7 +814,7 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
             });
         }
         setContextMenu({ x: e.clientX, y: e.clientY, items });
-    }, [sdl]);
+    }, [deleteSymbols, sdl]);
 
     const breadcrumbHeight = levelPath.length > 0 ? 28 : 0;
     const rightPanelWidth = showOptions || selectedId ? 300 : 0;
@@ -808,11 +842,13 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
                     onPaneClick={handlePaneClick}
                     onPaneContextMenu={handlePaneContextMenu}
                     onNodeContextMenu={handleNodeContextMenu}
+                    onNodesDelete={locked ? undefined : handleNodesDelete}
                     nodeTypes={NODE_TYPES}
                     edgeTypes={EDGE_TYPES}
                     nodesDraggable={!locked}
                     nodesConnectable={false}
                     elementsSelectable={!locked}
+                    deleteKeyCode={locked ? null : ['Delete']}
                     snapToGrid={options.snapEnabled}
                     snapGrid={[options.snapGridSize, options.snapGridSize]}
                     style={{ background: options.sdlCanvasColor }}
@@ -878,6 +914,12 @@ export default function SdlApp(): React.ReactElement {
         post({ type: 'sdlTextEdited', id, text } satisfies SdlWebviewMessage);
     }, []);
 
+    const handleSymbolsDelete = useCallback((ids: string[]) => {
+        const idsToDelete = new Set(ids);
+        setSdl(prev => prev ? { ...prev, tree: deleteSymbolsFromTree(prev.tree, idsToDelete) } : prev);
+        post({ type: 'sdlSymbolsDeleted', ids } satisfies SdlWebviewMessage);
+    }, []);
+
     useEffect(() => {
         const handler = (event: MessageEvent): void => {
             const msg = event.data as SdlExtensionMessage;
@@ -915,6 +957,7 @@ export default function SdlApp(): React.ReactElement {
                     onOptionsChange={handleOptionsChange}
                     onSymbolGeometryChange={handleSymbolGeometryChange}
                     onSymbolTextChange={handleSymbolTextChange}
+                    onSymbolsDelete={handleSymbolsDelete}
                     pendingExportFormat={pendingExportFormat}
                     onExportHandled={() => setPendingExportFormat(null)}
                 />

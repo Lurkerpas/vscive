@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { SdlModel, SdlSymbol } from '../model/types';
 import { parsePr, findSymbolById } from '../parsers/SdlPrParser';
-import { applySymbolMove, applySymbolTextEdit } from '../serializers/SdlPrSerializer';
+import { applySymbolMove, applySymbolTextEdit, applySymbolsDelete } from '../serializers/SdlPrSerializer';
 import { decodeUtf8, encodeUtf8 } from '../utils/platform';
 
 export class SdlEditorDocument implements vscode.CustomDocument {
@@ -47,6 +47,11 @@ export class SdlEditorDocument implements vscode.CustomDocument {
     editSymbolText(id: string, text: string): void {
         const sym = findSymbolById(this.sdl.tree, id);
         if (sym) applySymbolTextEdit(this.sdl, sym, text);
+    }
+
+    /** Delete one or more symbols and refresh the parsed SDL tree. */
+    deleteSymbols(ids: string[]): void {
+        applySymbolsDelete(this.sdl, ids);
     }
 
     /** Write the current model back to disk. */

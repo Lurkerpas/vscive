@@ -6,7 +6,7 @@
  */
 
 import type { SdlCifCoords, SdlModel, SdlSymbol } from '../model/types';
-import { flattenSymbols } from '../parsers/SdlPrParser';
+import { flattenSymbols, parsePr } from '../parsers/SdlPrParser';
 
 // ── CIF comment formatting ──────────────────────────────────────────────────
 
@@ -189,4 +189,157 @@ function shiftSymbols(symbols: SdlSymbol[], afterLine: number, delta: number, sk
         shiftSymbols(s.children, afterLine, delta, skipId);
         shiftSymbols(s.nestedChildren, afterLine, delta, skipId);
     }
+}
+
+type SymbolContainerKind = 'tree' | 'children' | 'nestedChildren';
+
+interface SymbolContext {
+    symbol: SdlSymbol;
+    parent: SdlSymbol | null;
+    siblings: SdlSymbol[];
+    indexInSiblings: number;
+    containerKind: SymbolContainerKind;
+}
+
+interface DeleteRange {
+    start: number;
+    endExclusive: number;
+}
+
+function symbolStartLine(symbol: SdlSymbol): number {
+    return symbol.cifLine ?? symbol.textLineStart;
+}
+
+function findSymbolContext(
+    siblings: SdlSymbol[],
+    id: string,
+    parent: SdlSymbol | null,
+    containerKind: SymbolContainerKind,
+): SymbolContext | null {
+    for (let index = 0; index < siblings.length; index++) {
+        const symbol = siblings[index];
+        if (symbol.id === id) {
+            return { symbol, parent, siblings, indexInSiblings: index, containerKind };
+        }
+
+        const inChildren = findSymbolContext(symbol.children, id, symbol, 'children');
+        if (inChildren) return inChildren;
+
+        const inNestedChildren = findSymbolContext(symbol.nestedChildren, id, symbol, 'nestedChildren');
+        if (inNestedChildren) return inNestedChildren;
+    }
+    return null;
+}
+
+function findFirstMatchingLineAfter(
+    lines: string[],
+    startLine: number,
+    matchers: RegExp[],
+): number | null {
+    for (let line = Math.max(0, startLine + 1); line < lines.length; line++) {
+        const text = lines[line] ?? '';
+        if (matchers.some(matcher => matcher.test(text))) {
+            return line;
+        }
+    }
+    return null;
+}
+
+function findContainerEndLineExclusive(model: SdlModel, context: SymbolContext, startLine: number): number {
+    const { parent, containerKind } = context;
+    const lines = model.lines;
+
+    let matchers: RegExp[] = [/^\s*endprocess\b/i];
+    if (parent === null) {
+        matchers = [/^\s*endprocess\b/i, /^\s*endsystem\b/i, /^\s*endblock\b/i, /^\s*endchannel\b/i];
+    } else if (containerKind === 'nestedChildren') {
+        matchers = [/^\s*endsubstructure\b/i, /^\s*endstate\b/i];
+    } else {
+        switch (parent.kind) {
+            case 'state':
+            case 'stateAggregation':
+                matchers = [/^\s*endstate\b/i];
+                break;
+            case 'decision':
+                matchers = [/^\s*enddecision\b/i];
+                break;
+            case 'alternative':
+                matchers = [/^\s*endalternative\b/i];
+                break;
+            case 'procedure':
+                matchers = [/^\s*endprocedure\b/i];
+                break;
+            case 'input':
+                matchers = [/^\s*endinput\b/i, /^\s*endstate\b/i];
+                break;
+            case 'continuousSignal':
+                matchers = [/^\s*endprovided\b/i, /^\s*endstate\b/i];
+                break;
+            case 'connect':
+                matchers = [/^\s*endconnection\b/i, /^\s*endstate\b/i];
+                break;
+            case 'answer':
+                matchers = [/^\s*enddecision\b/i, /^\s*endalternative\b/i];
+                break;
+            default:
+                matchers = [/^\s*endprocess\b/i];
+                break;
+        }
+    }
+
+    const boundaryLine = findFirstMatchingLineAfter(lines, startLine, matchers);
+    return boundaryLine ?? lines.length;
+}
+
+function mergeRanges(ranges: DeleteRange[]): DeleteRange[] {
+    if (ranges.length === 0) return [];
+
+    const sorted = [...ranges].sort((left, right) => left.start - right.start);
+    const merged: DeleteRange[] = [sorted[0]];
+
+    for (let index = 1; index < sorted.length; index++) {
+        const range = sorted[index];
+        const tail = merged[merged.length - 1];
+        if (range.start <= tail.endExclusive) {
+            tail.endExclusive = Math.max(tail.endExclusive, range.endExclusive);
+            continue;
+        }
+        merged.push({ ...range });
+    }
+
+    return merged;
+}
+
+/**
+ * Delete one or more symbols from an SDL model by removing their source line spans
+ * and reparsing the model to rebuild consistent symbol metadata.
+ */
+export function applySymbolsDelete(model: SdlModel, ids: string[]): void {
+    if (ids.length === 0) return;
+
+    const ranges: DeleteRange[] = [];
+    for (const id of ids) {
+        const context = findSymbolContext(model.tree, id, null, 'tree');
+        if (!context) continue;
+
+        const start = Math.max(0, symbolStartLine(context.symbol));
+        const nextSibling = context.siblings[context.indexInSiblings + 1];
+        const endExclusive = nextSibling
+            ? Math.max(start, symbolStartLine(nextSibling))
+            : Math.max(start, findContainerEndLineExclusive(model, context, start));
+
+        if (endExclusive > start) {
+            ranges.push({ start, endExclusive });
+        }
+    }
+
+    const merged = mergeRanges(ranges);
+    for (let index = merged.length - 1; index >= 0; index--) {
+        const range = merged[index];
+        model.lines.splice(range.start, range.endExclusive - range.start);
+    }
+
+    const reparsed = parsePr(model.lines.join('\n'));
+    model.lines = reparsed.lines;
+    model.tree = reparsed.tree;
 }

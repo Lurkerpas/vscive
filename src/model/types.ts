@@ -566,6 +566,7 @@ export type SdlWebviewMessage =
     | { type: 'ready' }
     | { type: 'sdlSymbolMoved'; id: string; x: number; y: number; w: number; h: number }
     | { type: 'sdlTextEdited'; id: string; text: string }
+    | { type: 'sdlSymbolsDeleted'; ids: string[] }
     | { type: 'updateOptions'; options: EditorOptions }
     | { type: 'requestExport' }
     | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };
