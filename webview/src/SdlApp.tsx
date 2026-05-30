@@ -24,11 +24,17 @@ import {
     DEFAULT_OPTIONS,
     EditorOptions,
     SdlExtensionMessage,
+    SdlInsertKind,
     SdlModel,
     SdlSymbol,
     SdlSymbolKind,
     SdlWebviewMessage,
 } from '../../src/model/types';
+import {
+    SDL_CANVAS_INSERT_TYPES,
+    SDL_FOLLOW_INSERT_TYPES_BY_SYMBOL,
+    SDL_INSERT_LABELS,
+} from '../../src/model/sdlInsertRules';
 import { post } from './vscodeApi';
 import { buildSdlGraph, SDL_SYMBOL_NODE, SdlNodeData, sdlFillColor } from './sdlTransform';
 import { ContextMenu, ContextMenuItem } from './components/ContextMenu';
@@ -560,7 +566,7 @@ interface SdlEditorProps {
 }
 
 function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSymbolTextChange, onSymbolsDelete, pendingExportFormat, onExportHandled }: SdlEditorProps): React.ReactElement {
-    const { fitView } = useReactFlow();
+    const { fitView, screenToFlowPosition } = useReactFlow();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node<SdlNodeData>>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -776,9 +782,53 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
         deleteSymbols(deletedNodes.map(node => node.id));
     }, [deleteSymbols, locked]);
 
+    const createSymbolOnCanvas = useCallback((kind: SdlInsertKind, clientX: number, clientY: number) => {
+        const flowPoint = screenToFlowPosition({ x: clientX, y: clientY });
+        const containerSymbol = levelPath.length > 0 ? levelPath[levelPath.length - 1] : undefined;
+        const containerKind = containerSymbol
+            ? (parentKind === null ? 'nestedChildren' : 'children')
+            : 'tree';
+
+        post({
+            type: 'sdlSymbolCreate',
+            kind,
+            mode: 'canvas',
+            x: Math.round(flowPoint.x),
+            y: Math.round(flowPoint.y),
+            containerId: containerSymbol?.id,
+            containerKind,
+        } satisfies SdlWebviewMessage);
+        setContextMenu(null);
+    }, [levelPath, parentKind, screenToFlowPosition]);
+
+    const createSymbolFollowing = useCallback((anchorId: string, kind: SdlInsertKind, x: number, y: number) => {
+        post({
+            type: 'sdlSymbolCreate',
+            kind,
+            mode: 'following',
+            anchorId,
+            x: Math.round(x),
+            y: Math.round(y),
+        } satisfies SdlWebviewMessage);
+        setContextMenu(null);
+    }, []);
+
     const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         const items: ContextMenuItem[] = [];
+        if (!locked) {
+            const canCreateProcedure = levelPath.length === 0;
+            const canvasInsertKinds = SDL_CANVAS_INSERT_TYPES.filter(kind => kind !== 'procedure' || canCreateProcedure);
+            if (canvasInsertKinds.length > 0) {
+                items.push({
+                    label: '+ Add Symbol',
+                    children: canvasInsertKinds.map(kind => ({
+                        label: SDL_INSERT_LABELS[kind],
+                        onClick: () => createSymbolOnCanvas(kind, e.clientX, e.clientY),
+                    })),
+                });
+            }
+        }
         if (levelPath.length > 0) {
             items.push({ label: 'Go Up', onClick: () => navigateTo(levelPath.length - 2) });
         }
@@ -788,7 +838,7 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
             { label: showOptions ? 'Hide Options' : 'Options', onClick: () => setShowOptions(v => !v) },
         );
         setContextMenu({ x: e.clientX, y: e.clientY, items });
-    }, [levelPath, navigateTo, fitView, handleExport, showOptions]);
+    }, [createSymbolOnCanvas, fitView, handleExport, levelPath, locked, navigateTo, showOptions]);
 
     const handleNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
         e.preventDefault();
@@ -798,12 +848,21 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
                 label: 'Open Properties',
                 onClick: () => { setSelectedId(node.id); setShowOptions(false); },
             },
-            {
-                label: 'Delete',
-                danger: true,
-                onClick: () => deleteSymbols([node.id]),
-            },
         ];
+        if (!locked) {
+            const followKinds = (SDL_FOLLOW_INSERT_TYPES_BY_SYMBOL[node.data.kind] ?? [])
+                .filter(kind => kind !== 'state' || parentKind === null)
+                .filter(kind => kind !== 'decisionAlternative' || node.data.kind === 'decision');
+            if (followKinds.length > 0) {
+                items.push({
+                    label: '+ Add Following',
+                    children: followKinds.map(kind => ({
+                        label: SDL_INSERT_LABELS[kind],
+                        onClick: () => createSymbolFollowing(node.id, kind, node.position.x, node.position.y),
+                    })),
+                });
+            }
+        }
         if (sym && hasNavigableChildren(sym)) {
             items.push({
                 label: 'Navigate Into',
@@ -813,8 +872,15 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
                 },
             });
         }
+        if (!locked) {
+            items.push({
+                label: 'Delete',
+                danger: true,
+                onClick: () => deleteSymbols([node.id]),
+            });
+        }
         setContextMenu({ x: e.clientX, y: e.clientY, items });
-    }, [deleteSymbols, sdl]);
+    }, [createSymbolFollowing, deleteSymbols, locked, parentKind, sdl]);
 
     const breadcrumbHeight = levelPath.length > 0 ? 28 : 0;
     const rightPanelWidth = showOptions || selectedId ? 300 : 0;

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import type { SdlModel, SdlSymbol } from '../model/types';
+import type { SdlInsertKind, SdlModel, SdlSymbol } from '../model/types';
 import { parsePr, findSymbolById } from '../parsers/SdlPrParser';
-import { applySymbolMove, applySymbolTextEdit, applySymbolsDelete } from '../serializers/SdlPrSerializer';
+import { applySymbolMove, applySymbolTextEdit, applySymbolInsert, applySymbolsDelete } from '../serializers/SdlPrSerializer';
 import { decodeUtf8, encodeUtf8 } from '../utils/platform';
 
 export class SdlEditorDocument implements vscode.CustomDocument {
@@ -52,6 +52,19 @@ export class SdlEditorDocument implements vscode.CustomDocument {
     /** Delete one or more symbols and refresh the parsed SDL tree. */
     deleteSymbols(ids: string[]): void {
         applySymbolsDelete(this.sdl, ids);
+    }
+
+    /** Create a new symbol either on canvas or following an anchor symbol. */
+    createSymbol(
+        kind: SdlInsertKind,
+        mode: 'canvas' | 'following',
+        x: number,
+        y: number,
+        anchorId?: string,
+        containerId?: string,
+        containerKind?: 'tree' | 'children' | 'nestedChildren',
+    ): void {
+        applySymbolInsert(this.sdl, { kind, mode, x, y, anchorId, containerId, containerKind });
     }
 
     /** Write the current model back to disk. */

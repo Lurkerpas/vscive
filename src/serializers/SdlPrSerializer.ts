@@ -5,7 +5,12 @@
  * save; everything else is preserved verbatim.
  */
 
-import type { SdlCifCoords, SdlModel, SdlSymbol } from '../model/types';
+import type { SdlCifCoords, SdlInsertKind, SdlModel, SdlSymbol } from '../model/types';
+import {
+    SDL_CANVAS_INSERT_TYPES,
+    SDL_DECISION_BRANCH_HORIZONTAL_DELTA,
+    SDL_FOLLOW_INSERT_TYPES_BY_SYMBOL,
+} from '../model/sdlInsertRules';
 import { flattenSymbols, parsePr } from '../parsers/SdlPrParser';
 
 // ── CIF comment formatting ──────────────────────────────────────────────────
@@ -308,6 +313,299 @@ function mergeRanges(ranges: DeleteRange[]): DeleteRange[] {
     }
 
     return merged;
+}
+
+export interface SdlInsertRequest {
+    kind: SdlInsertKind;
+    mode: 'canvas' | 'following';
+    x: number;
+    y: number;
+    anchorId?: string;
+    containerId?: string;
+    containerKind?: SymbolContainerKind;
+}
+
+interface SymbolSize {
+    w: number;
+    h: number;
+}
+
+const SDL_INSERT_VERTICAL_GAP = 20;
+
+function defaultSymbolSize(kind: SdlInsertKind): SymbolSize {
+    switch (kind) {
+        case 'start': return { w: 70, h: 35 };
+        case 'state': return { w: 100, h: 35 };
+        case 'input': return { w: 120, h: 35 };
+        case 'continuousSignal': return { w: 120, h: 35 };
+        case 'output': return { w: 120, h: 35 };
+        case 'task': return { w: 120, h: 35 };
+        case 'decision': return { w: 150, h: 50 };
+        case 'alternative': return { w: 130, h: 50 };
+        case 'nextstate': return { w: 90, h: 35 };
+        case 'procedure': return { w: 120, h: 35 };
+        case 'procedureCall': return { w: 140, h: 35 };
+        case 'return': return { w: 35, h: 35 };
+        case 'join': return { w: 35, h: 35 };
+        case 'label': return { w: 80, h: 35 };
+        case 'connect': return { w: 35, h: 35 };
+        case 'comment': return { w: 140, h: 60 };
+        case 'decisionAlternative': return { w: 95, h: 23 };
+        default: return { w: 150, h: 60 };
+    }
+}
+
+function insertionOffsetY(kind: SdlInsertKind): number {
+    return defaultSymbolSize(kind).h + SDL_INSERT_VERTICAL_GAP;
+}
+
+function cifKindForInsert(kind: SdlInsertKind): string {
+    switch (kind) {
+        case 'continuousSignal': return 'PROVIDED';
+        case 'procedureCall': return 'PROCEDURECALL';
+        case 'decisionAlternative': return 'ANSWER';
+        default: return kind.toUpperCase();
+    }
+}
+
+function symbolTextTemplate(kind: SdlInsertKind): string[] {
+    switch (kind) {
+        case 'start': return ['START;'];
+        case 'state': return ['state new_state;', 'endstate;'];
+        case 'input': return ['input signal_name;'];
+        case 'continuousSignal': return ['provided signal_name;'];
+        case 'output': return ['output signal_name;'];
+        case 'task': return ['task action;'];
+        case 'decision': return ['decision condition;', 'enddecision;'];
+        case 'alternative': return ['alternative condition;', 'endalternative;'];
+        case 'nextstate': return ['nextstate new_state;'];
+        case 'procedure': return ['procedure new_procedure;', 'endprocedure;'];
+        case 'procedureCall': return ['call procedure_name;'];
+        case 'return': return ['return;'];
+        case 'join': return ['join new_join;'];
+        case 'label': return ['connection new_label:'];
+        case 'connect': return ['connect new_connection;'];
+        case 'comment': return ["comment 'new comment';"];
+        case 'decisionAlternative': return ['(else):'];
+        default: return ['task action;'];
+    }
+}
+
+function inferTopLevelIndent(model: SdlModel, processEndLine: number): string {
+    for (const symbol of model.tree) {
+        const line = symbol.cifLine ?? symbol.textLineStart;
+        if (line >= 0 && line < model.lines.length) {
+            const indent = detectLineIndent(model.lines, line);
+            if (indent.length > 0) return indent;
+        }
+    }
+
+    for (let line = processEndLine - 1; line >= 0; line--) {
+        const text = model.lines[line] ?? '';
+        if (text.trim().length === 0) continue;
+        return /^\s*/.exec(text)?.[0] ?? '    ';
+    }
+    return '    ';
+}
+
+function findRootContainerEndLine(model: SdlModel): number {
+    const rootEnd = findFirstMatchingLineAfter(
+        model.lines,
+        -1,
+        [/^\s*endprocess\b/i, /^\s*endsystem\b/i, /^\s*endblock\b/i, /^\s*endchannel\b/i],
+    );
+    return rootEnd ?? model.lines.length;
+}
+
+function resolveCanvasContainer(
+    model: SdlModel,
+    request: SdlInsertRequest,
+): { endLine: number; indent: string } {
+    if (!request.containerId || request.containerKind === 'tree' || request.containerKind === undefined) {
+        const endLine = findRootContainerEndLine(model);
+        return {
+            endLine,
+            indent: inferTopLevelIndent(model, endLine),
+        };
+    }
+
+    const containerContext = findSymbolContext(model.tree, request.containerId, null, 'tree');
+    if (!containerContext) {
+        const endLine = findRootContainerEndLine(model);
+        return {
+            endLine,
+            indent: inferTopLevelIndent(model, endLine),
+        };
+    }
+
+    const containerSymbol = containerContext.symbol;
+    const childList = request.containerKind === 'nestedChildren'
+        ? containerSymbol.nestedChildren
+        : containerSymbol.children;
+    const endLine = findContainerEndLineExclusive(
+        model,
+        {
+            symbol: containerSymbol,
+            parent: containerSymbol,
+            siblings: childList,
+            indexInSiblings: Math.max(0, childList.length - 1),
+            containerKind: request.containerKind,
+        },
+        symbolStartLine(containerSymbol),
+    );
+
+    if (childList.length > 0) {
+        const tail = childList[childList.length - 1];
+        return {
+            endLine,
+            indent: detectLineIndent(model.lines, tail.cifLine ?? tail.textLineStart),
+        };
+    }
+
+    const containerIndent = detectLineIndent(model.lines, containerSymbol.cifLine ?? containerSymbol.textLineStart);
+    return {
+        endLine,
+        indent: `${containerIndent}    `,
+    };
+}
+
+function buildInsertedLines(kind: SdlInsertKind, x: number, y: number, indent: string): string[] {
+    const size = defaultSymbolSize(kind);
+    const cif = formatCifComment(cifKindForInsert(kind), {
+        x: Math.round(x),
+        y: Math.round(y),
+        w: size.w,
+        h: size.h,
+    }, indent);
+    const text = symbolTextTemplate(kind).map(line => `${indent}${line}`);
+    return [cif, ...text];
+}
+
+function insertLines(model: SdlModel, lineIndex: number, newLines: string[]): void {
+    const at = Math.max(0, Math.min(lineIndex, model.lines.length));
+    model.lines.splice(at, 0, ...newLines);
+}
+
+function shiftSymbolSubtreeByY(model: SdlModel, symbol: SdlSymbol, deltaY: number): void {
+    if (symbol.cif) {
+        applySymbolMove(
+            model,
+            symbol,
+            symbol.cif.x,
+            symbol.cif.y + deltaY,
+            symbol.cif.w,
+            symbol.cif.h,
+        );
+    }
+
+    for (const child of symbol.children) {
+        shiftSymbolSubtreeByY(model, child, deltaY);
+    }
+    for (const child of symbol.nestedChildren) {
+        shiftSymbolSubtreeByY(model, child, deltaY);
+    }
+}
+
+function reparseModel(model: SdlModel): void {
+    const reparsed = parsePr(model.lines.join('\n'));
+    model.lines = reparsed.lines;
+    model.tree = reparsed.tree;
+}
+
+function applyDecisionAlternativeInsert(model: SdlModel, request: SdlInsertRequest, context: SymbolContext): void {
+    const decision = context.symbol;
+    if (decision.kind !== 'decision' && decision.kind !== 'alternative') return;
+
+    const followers = SDL_FOLLOW_INSERT_TYPES_BY_SYMBOL[decision.kind];
+    if (!followers.includes('decisionAlternative')) return;
+
+    const answers = decision.children.filter(child => child.kind === 'answer' && child.cif !== null);
+    const answerIndent = answers.length > 0
+        ? detectLineIndent(model.lines, answers[0].cifLine ?? answers[0].textLineStart)
+        : `${detectLineIndent(model.lines, decision.cifLine ?? decision.textLineStart)}    `;
+    const baseAnswerX = answers.length > 0
+        ? Math.max(...answers.map(answer => answer.cif?.x ?? 0))
+        : (decision.cif?.x ?? request.x);
+    const answerY = answers.length > 0
+        ? (answers[0].cif?.y ?? (decision.cif?.y ?? request.y) + 70)
+        : ((decision.cif?.y ?? request.y) + 70);
+
+    const endLine = findFirstMatchingLineAfter(
+        model.lines,
+        symbolStartLine(decision),
+        decision.kind === 'decision'
+            ? [/^\s*enddecision\b/i]
+            : [/^\s*endalternative\b/i],
+    ) ?? model.lines.length;
+
+    const inserted = buildInsertedLines(
+        'decisionAlternative',
+        baseAnswerX + SDL_DECISION_BRANCH_HORIZONTAL_DELTA,
+        answerY,
+        answerIndent,
+    );
+    insertLines(model, endLine, inserted);
+}
+
+/**
+ * Insert a new SDL symbol either on the current canvas level or after an anchor symbol.
+ * The file is reparsed after insertion so symbol metadata remains consistent.
+ */
+export function applySymbolInsert(model: SdlModel, request: SdlInsertRequest): void {
+    if (request.mode === 'canvas') {
+        if (!SDL_CANVAS_INSERT_TYPES.includes(request.kind)) {
+            return;
+        }
+        const { endLine, indent } = resolveCanvasContainer(model, request);
+        const inserted = buildInsertedLines(request.kind, request.x, request.y, indent);
+        insertLines(model, endLine, inserted);
+        reparseModel(model);
+        return;
+    }
+
+    if (!request.anchorId) {
+        return;
+    }
+
+    const context = findSymbolContext(model.tree, request.anchorId, null, 'tree');
+    if (!context) {
+        return;
+    }
+
+    const allowedFollowers = SDL_FOLLOW_INSERT_TYPES_BY_SYMBOL[context.symbol.kind] ?? [];
+    if (!allowedFollowers.includes(request.kind)) {
+        return;
+    }
+
+    if (request.kind === 'decisionAlternative') {
+        applyDecisionAlternativeInsert(model, request, context);
+        reparseModel(model);
+        return;
+    }
+
+    if (request.kind === 'state' && context.containerKind === 'children') {
+        // State targets are valid in process/nested-state canvases, not inside child action lists.
+        return;
+    }
+
+    const nextSibling = context.siblings[context.indexInSiblings + 1];
+    const insertionLine = nextSibling
+        ? symbolStartLine(nextSibling)
+        : findContainerEndLineExclusive(model, context, symbolStartLine(context.symbol));
+    const offsetY = insertionOffsetY(request.kind);
+
+    if (nextSibling) {
+        for (let index = context.indexInSiblings + 1; index < context.siblings.length; index++) {
+            shiftSymbolSubtreeByY(model, context.siblings[index], offsetY);
+        }
+    }
+
+    const anchorX = context.symbol.cif?.x ?? request.x;
+    const anchorY = context.symbol.cif?.y ?? request.y;
+    const indent = detectLineIndent(model.lines, context.symbol.cifLine ?? context.symbol.textLineStart);
+    const inserted = buildInsertedLines(request.kind, anchorX, anchorY + offsetY, indent);
+    insertLines(model, insertionLine, inserted);
+    reparseModel(model);
 }
 
 /**

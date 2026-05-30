@@ -525,6 +525,25 @@ export type SdlSymbolKind =
     | 'nextstate' | 'procedure' | 'procedureCall' | 'return' | 'join' | 'label'
     | 'connect' | 'comment' | 'textArea';
 
+export type SdlInsertKind =
+    | 'start'
+    | 'state'
+    | 'input'
+    | 'continuousSignal'
+    | 'output'
+    | 'task'
+    | 'decision'
+    | 'alternative'
+    | 'nextstate'
+    | 'procedure'
+    | 'procedureCall'
+    | 'return'
+    | 'join'
+    | 'label'
+    | 'connect'
+    | 'comment'
+    | 'decisionAlternative';
+
 export interface SdlCifCoords { x: number; y: number; w: number; h: number; }
 
 export interface SdlSymbol {
@@ -567,6 +586,16 @@ export type SdlWebviewMessage =
     | { type: 'sdlSymbolMoved'; id: string; x: number; y: number; w: number; h: number }
     | { type: 'sdlTextEdited'; id: string; text: string }
     | { type: 'sdlSymbolsDeleted'; ids: string[] }
+    | {
+        type: 'sdlSymbolCreate';
+        kind: SdlInsertKind;
+        mode: 'canvas' | 'following';
+        x: number;
+        y: number;
+        anchorId?: string;
+        containerId?: string;
+        containerKind?: 'tree' | 'children' | 'nestedChildren';
+    }
     | { type: 'updateOptions'; options: EditorOptions }
     | { type: 'requestExport' }
     | { type: 'exportImage'; format: 'png' | 'svg'; dataUrl: string };

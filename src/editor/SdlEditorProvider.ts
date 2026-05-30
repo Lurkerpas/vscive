@@ -73,6 +73,22 @@ export class SdlEditorProvider implements vscode.CustomEditorProvider<SdlEditorD
                     return;
                 }
 
+                case 'sdlSymbolCreate': {
+                    const before = document.snapshot();
+                    document.createSymbol(
+                        message.kind,
+                        message.mode,
+                        message.x,
+                        message.y,
+                        message.anchorId,
+                        message.containerId,
+                        message.containerKind,
+                    );
+                    this.fireEdit(document, before);
+                    this.sendDiagram(webviewPanel.webview, document);
+                    return;
+                }
+
                 case 'updateOptions': {
                     await this.saveOptions(message.options);
                     // Propagate to all open SDL webviews
