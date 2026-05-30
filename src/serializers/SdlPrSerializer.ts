@@ -417,12 +417,41 @@ function findRootContainerEndLine(model: SdlModel): number {
     return rootEnd ?? model.lines.length;
 }
 
+function findProcessEndLine(model: SdlModel): number {
+    if (model.tree.length > 0) {
+        const lastSymbol = model.tree[model.tree.length - 1];
+        const lastSymbolLine = symbolStartLine(lastSymbol);
+        const endProcessAfterTree = findFirstMatchingLineAfter(
+            model.lines,
+            lastSymbolLine,
+            [/^\s*endprocess\b/i],
+        );
+        if (endProcessAfterTree !== null) {
+            return endProcessAfterTree;
+        }
+    }
+
+    const processLine = model.lines.findIndex(line => /^\s*process\b/i.test(line));
+    if (processLine >= 0) {
+        const endProcessAfterDeclaration = findFirstMatchingLineAfter(
+            model.lines,
+            processLine,
+            [/^\s*endprocess\b/i],
+        );
+        if (endProcessAfterDeclaration !== null) {
+            return endProcessAfterDeclaration;
+        }
+    }
+
+    return findRootContainerEndLine(model);
+}
+
 function resolveCanvasContainer(
     model: SdlModel,
     request: SdlInsertRequest,
 ): { endLine: number; indent: string } {
     if (!request.containerId || request.containerKind === 'tree' || request.containerKind === undefined) {
-        const endLine = findRootContainerEndLine(model);
+        const endLine = findProcessEndLine(model);
         return {
             endLine,
             indent: inferTopLevelIndent(model, endLine),
@@ -431,7 +460,7 @@ function resolveCanvasContainer(
 
     const containerContext = findSymbolContext(model.tree, request.containerId, null, 'tree');
     if (!containerContext) {
-        const endLine = findRootContainerEndLine(model);
+        const endLine = findProcessEndLine(model);
         return {
             endLine,
             indent: inferTopLevelIndent(model, endLine),
@@ -471,9 +500,11 @@ function resolveCanvasContainer(
 
 function buildInsertedLines(kind: SdlInsertKind, x: number, y: number, indent: string): string[] {
     const size = defaultSymbolSize(kind);
+    const safeX = Number.isFinite(x) ? Math.round(x) : 0;
+    const safeY = Number.isFinite(y) ? Math.round(y) : 0;
     const cif = formatCifComment(cifKindForInsert(kind), {
-        x: Math.round(x),
-        y: Math.round(y),
+        x: safeX,
+        y: safeY,
         w: size.w,
         h: size.h,
     }, indent);
@@ -510,6 +541,49 @@ function reparseModel(model: SdlModel): void {
     const reparsed = parsePr(model.lines.join('\n'));
     model.lines = reparsed.lines;
     model.tree = reparsed.tree;
+}
+
+function shouldInsertIntoAnchorChildren(anchorKind: SdlSymbol['kind'], kind: SdlInsertKind): boolean {
+    if ((anchorKind === 'state' || anchorKind === 'stateAggregation')
+        && (kind === 'input' || kind === 'continuousSignal' || kind === 'connect')) {
+        return true;
+    }
+
+    if ((anchorKind === 'input' || anchorKind === 'continuousSignal' || anchorKind === 'connect' || anchorKind === 'answer' || anchorKind === 'procedure')
+        && kind !== 'state') {
+        return true;
+    }
+
+    return false;
+}
+
+function applyInsertIntoAnchorChildren(model: SdlModel, request: SdlInsertRequest, context: SymbolContext): void {
+    const anchor = context.symbol;
+    const childList = anchor.children;
+    const syntheticContext: SymbolContext = {
+        symbol: anchor,
+        parent: anchor,
+        siblings: childList,
+        indexInSiblings: Math.max(0, childList.length - 1),
+        containerKind: 'children',
+    };
+
+    const insertionLine = findContainerEndLineExclusive(model, syntheticContext, symbolStartLine(anchor));
+    const offsetY = insertionOffsetY(request.kind);
+
+    let baseX = anchor.cif?.x ?? request.x;
+    let baseY = anchor.cif?.y ?? request.y;
+    let indent = `${detectLineIndent(model.lines, anchor.cifLine ?? anchor.textLineStart)}    `;
+
+    if (childList.length > 0) {
+        const tail = childList[childList.length - 1];
+        baseX = tail.cif?.x ?? baseX;
+        baseY = tail.cif?.y ?? baseY;
+        indent = detectLineIndent(model.lines, tail.cifLine ?? tail.textLineStart);
+    }
+
+    const inserted = buildInsertedLines(request.kind, baseX, baseY + offsetY, indent);
+    insertLines(model, insertionLine, inserted);
 }
 
 function applyDecisionAlternativeInsert(model: SdlModel, request: SdlInsertRequest, context: SymbolContext): void {
@@ -579,6 +653,12 @@ export function applySymbolInsert(model: SdlModel, request: SdlInsertRequest): v
 
     if (request.kind === 'decisionAlternative') {
         applyDecisionAlternativeInsert(model, request, context);
+        reparseModel(model);
+        return;
+    }
+
+    if (shouldInsertIntoAnchorChildren(context.symbol.kind, request.kind)) {
+        applyInsertIntoAnchorChildren(model, request, context);
         reparseModel(model);
         return;
     }

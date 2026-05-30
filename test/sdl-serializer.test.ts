@@ -166,6 +166,63 @@ describe('SDL serializer', () => {
         assert.ok(procedureIndex >= 0 && endprocessIndex >= 0 && procedureIndex < endprocessIndex);
     });
 
+    it('sanitizes non-finite canvas coordinates so inserted symbols remain parseable', () => {
+        const source = [
+            'process SafeInsert;',
+            'endprocess SafeInsert;',
+        ].join('\n');
+
+        const model = parsePr(source);
+        applySymbolInsert(model, {
+            kind: 'state',
+            mode: 'canvas',
+            x: Number.NaN,
+            y: Number.POSITIVE_INFINITY,
+            containerKind: 'tree',
+        });
+
+        const insertedState = findByText(flattenSymbols(model.tree), 'state new_state;');
+        assert.ok(insertedState);
+        assert.ok(model.lines.some(line => /\/\*\s*CIF\s+STATE\s+\(0,\s*0\),\s*\(100,\s*35\)/i.test(line)));
+    });
+
+    it('inserts canvas symbols inside PROCESS even when file has CHANNEL/BLOCK preamble', () => {
+        const source = [
+            'system demo;',
+            'channel c',
+            '    from env to titi with a;',
+            'endchannel;',
+            'block titi;',
+            'process p;',
+            '    /* CIF START (10, 10), (70, 35) */',
+            '    START;',
+            'endprocess p;',
+            'endblock;',
+            'endsystem;',
+        ].join('\n');
+
+        const model = parsePr(source);
+        applySymbolInsert(model, {
+            kind: 'state',
+            mode: 'canvas',
+            x: 962,
+            y: 417,
+            containerKind: 'tree',
+        });
+
+        const insertedState = findByText(flattenSymbols(model.tree), 'state new_state;');
+        assert.ok(insertedState);
+
+        const insertedStateIndex = model.lines.findIndex(line => /\bstate\s+new_state;/i.test(line));
+        const endChannelIndex = model.lines.findIndex(line => /^\s*endchannel\b/i.test(line));
+        const processIndex = model.lines.findIndex(line => /^\s*process\b/i.test(line));
+        const endProcessIndex = model.lines.findIndex(line => /^\s*endprocess\b/i.test(line));
+
+        assert.ok(insertedStateIndex > processIndex);
+        assert.ok(insertedStateIndex < endProcessIndex);
+        assert.ok(insertedStateIndex > endChannelIndex);
+    });
+
     it('inserts a following symbol between connected neighbors', () => {
         const source = [
             'process InsertFlow;',
@@ -200,6 +257,72 @@ describe('SDL serializer', () => {
         assert.ok(hasEdge(graph.edges, start.id, insertedTask.id));
         assert.ok(hasEdge(graph.edges, insertedTask.id, output.id));
         assert.ok(!hasEdge(graph.edges, start.id, output.id));
+    });
+
+    it('inserts input into state body and task into input body so both are connected', () => {
+        const source = [
+            'process NestedInsert;',
+            '    /* CIF STATE (947, 254), (70, 35) */',
+            '    state wait;',
+            '    endstate;',
+            'endprocess NestedInsert;',
+        ].join('\n');
+
+        const model = parsePr(source);
+
+        applySymbolInsert(model, {
+            kind: 'state',
+            mode: 'canvas',
+            x: 989,
+            y: 436,
+            containerKind: 'tree',
+        });
+
+        const insertedState = findByText(flattenSymbols(model.tree), 'state new_state;');
+        assert.ok(insertedState);
+
+        applySymbolInsert(model, {
+            kind: 'input',
+            mode: 'following',
+            anchorId: insertedState.id,
+            x: 987,
+            y: 510,
+        });
+
+        const stateAfterInput = flattenSymbols(model.tree).find(symbol => symbol.id === insertedState.id);
+        assert.ok(stateAfterInput);
+        assert.strictEqual(stateAfterInput.children.length, 1);
+        const insertedInput = stateAfterInput.children[0];
+        assert.strictEqual(insertedInput.kind, 'input');
+
+        applySymbolInsert(model, {
+            kind: 'task',
+            mode: 'following',
+            anchorId: insertedInput.id,
+            x: 987,
+            y: 565,
+        });
+
+        const stateAfterTask = flattenSymbols(model.tree).find(symbol => symbol.id === insertedState.id);
+        assert.ok(stateAfterTask);
+        assert.strictEqual(stateAfterTask.children.length, 1);
+        const inputAfterTask = stateAfterTask.children[0];
+        assert.strictEqual(inputAfterTask.kind, 'input');
+        assert.strictEqual(inputAfterTask.children.length, 1);
+        const taskAfterTask = inputAfterTask.children[0];
+        assert.strictEqual(taskAfterTask.kind, 'task');
+
+        const graph = buildSdlGraph(model.tree, null, DEFAULT_OPTIONS);
+        assert.ok(hasEdge(graph.edges, stateAfterTask.id, inputAfterTask.id));
+        assert.ok(hasEdge(graph.edges, inputAfterTask.id, taskAfterTask.id));
+        assert.ok(taskAfterTask.cif && inputAfterTask.cif && taskAfterTask.cif.y > inputAfterTask.cif.y);
+
+        const inputLine = model.lines.findIndex(line => /^\s*input\s+signal_name;/i.test(line));
+        const taskLine = model.lines.findIndex(line => /^\s*task\s+action;/i.test(line));
+        const stateLine = model.lines.findIndex(line => /^\s*state\s+new_state;/i.test(line));
+        const endStateLine = model.lines.findIndex((line, index) => index > stateLine && /^\s*endstate\b/i.test(line));
+        assert.ok(inputLine > stateLine && inputLine < endStateLine);
+        assert.ok(taskLine > inputLine && taskLine < endStateLine);
     });
 
     it('adds a decision alternative branch horizontally and reconnects to the post-decision symbol', () => {

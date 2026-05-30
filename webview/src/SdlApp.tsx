@@ -815,6 +815,8 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
 
     const handlePaneContextMenu = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
+        const clickX = e.clientX;
+        const clickY = e.clientY;
         const items: ContextMenuItem[] = [];
         if (!locked) {
             const canCreateProcedure = levelPath.length === 0;
@@ -824,7 +826,7 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
                     label: '+ Add Symbol',
                     children: canvasInsertKinds.map(kind => ({
                         label: SDL_INSERT_LABELS[kind],
-                        onClick: () => createSymbolOnCanvas(kind, e.clientX, e.clientY),
+                        onClick: () => createSymbolOnCanvas(kind, clickX, clickY),
                     })),
                 });
             }
@@ -837,7 +839,7 @@ function SdlEditor({ sdl, options, onOptionsChange, onSymbolGeometryChange, onSy
             { label: 'Export as Image', onClick: handleExport },
             { label: showOptions ? 'Hide Options' : 'Options', onClick: () => setShowOptions(v => !v) },
         );
-        setContextMenu({ x: e.clientX, y: e.clientY, items });
+        setContextMenu({ x: clickX, y: clickY, items });
     }, [createSymbolOnCanvas, fitView, handleExport, levelPath, locked, navigateTo, showOptions]);
 
     const handleNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
